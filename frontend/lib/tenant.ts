@@ -14,6 +14,12 @@ const DEFAULT_PUBLIC_HOSTS = [
     'www.manyaltech.com',
 ];
 
+// Tenant slug used whenever the host isn't an explicitly recognized other
+// tenant or configured public/marketing host — covers bare localhost, the
+// platform's managed default host (Railway/Vercel), and any other unbranded
+// domain. Override via NEXT_PUBLIC_DEFAULT_TENANT_SLUG for other deployments.
+const DEFAULT_TENANT_SLUG = process.env.NEXT_PUBLIC_DEFAULT_TENANT_SLUG || 'apividyaniketan';
+
 function normalizeHostname(hostname: string): string {
     return (hostname || '').trim().toLowerCase();
 }
@@ -34,7 +40,6 @@ export function isManagedHost(hostname: string): boolean {
 export function isPublicHost(hostname: string): boolean {
     const normalizedHost = normalizeHostname(hostname);
     if (!normalizedHost) return false;
-    if (normalizedHost === 'localhost' || normalizedHost === '127.0.0.1') return true;
     return getConfiguredPublicHosts().has(normalizedHost);
 }
 
@@ -44,46 +49,38 @@ export const getTenantFromSubdomain = (hostname: string): string | null => {
 
     if (!normalizedHost) return null;
 
+    // Explicitly configured public/marketing hosts never resolve to a tenant.
+    if (isPublicHost(normalizedHost)) return null;
+
     if (normalizedHost === 'localhost' || normalizedHost === '127.0.0.1') {
-        return 'localhost';
+        return DEFAULT_TENANT_SLUG;
     }
 
-    // Handle demo.localhost
+    // Handle demo.localhost, qa.localhost (explicit subdomain wins over default)
     if (parts.length > 1 && parts[parts.length - 1] === 'localhost') {
-        return parts[0] === 'localhost' ? 'localhost' : parts[0];
+        return parts[0] === 'localhost' ? DEFAULT_TENANT_SLUG : parts[0];
     }
 
-    // Ignore platform-managed hosts where first label is app name, not tenant.
+    // Platform-managed default host (Railway/Vercel) -> default tenant.
     if (isManagedHost(normalizedHost)) {
-        return null;
+        return DEFAULT_TENANT_SLUG;
     }
 
-    // tenant.example.com -> tenant (except reserved public labels)
+    // tenant.example.com -> tenant (except reserved 'www' label -> default tenant)
     if (parts.length > 2) {
         const label = parts[0];
-        if (label === 'www') return null;
-        return label;
+        return label === 'www' ? DEFAULT_TENANT_SLUG : label;
     }
 
-    return null;
+    // Bare custom domain (e.g. example.com) not explicitly configured as public.
+    return DEFAULT_TENANT_SLUG;
 };
 
 export function isTenantHost(hostname: string): boolean {
     const normalizedHost = normalizeHostname(hostname);
-    const parts = normalizedHost.split('.').filter(Boolean);
-
     if (!normalizedHost) return false;
     if (isPublicHost(normalizedHost)) return false;
-    if (isManagedHost(normalizedHost)) return false;
-
-    // demo.localhost or tenant.example.com
-    if (getTenantFromSubdomain(normalizedHost)) {
-        const tenantSlug = getTenantFromSubdomain(normalizedHost);
-        return Boolean(tenantSlug && tenantSlug !== 'localhost');
-    }
-
-    // Custom tenant domains like school.edu or demo-school.org.
-    return parts.length >= 2;
+    return Boolean(getTenantFromSubdomain(normalizedHost));
 }
 
 export const isLocalHost = (hostname: string): boolean => {
