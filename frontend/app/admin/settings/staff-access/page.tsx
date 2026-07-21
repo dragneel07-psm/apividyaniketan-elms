@@ -41,6 +41,19 @@ const STAFF_ROLE_OPTIONS: Array<{ value: StaffRole; label: string }> = [
     { value: 'transport_manager', label: 'Transport Manager' },
 ];
 
+// Radix Select reserves an empty string for clearing the selection, while the
+// API uses an empty staff_role to mean "no sub-role". Keep the domain value
+// unchanged and translate it only at the Select boundary.
+const NO_STAFF_ROLE_SELECT_VALUE = '__no_staff_role__';
+
+function toStaffRoleSelectValue(role: StaffRole): string {
+    return role || NO_STAFF_ROLE_SELECT_VALUE;
+}
+
+function fromStaffRoleSelectValue(value: string): StaffRole {
+    return value === NO_STAFF_ROLE_SELECT_VALUE ? '' : value as StaffRole;
+}
+
 const ROLE_MODULE_SUMMARY: Record<StaffRole, string> = {
     '': 'Dashboard, Calendar',
     accountant: 'Finance, Fee Collection, Inventory, Reports',
@@ -307,7 +320,7 @@ export default function StaffAccessPage() {
                             ) : filtered.length === 0 ? (
                                 <TableRow>
                                     <TableCell colSpan={6} className="text-center py-10 text-slate-400">
-                                        No staff accounts found. Use "Add Staff User" to create one.
+                                        No staff accounts found. Use &quot;Add Staff User&quot; to create one.
                                     </TableCell>
                                 </TableRow>
                             ) : (
@@ -338,9 +351,9 @@ export default function StaffAccessPage() {
                                                 ) : (
                                                     <div className="flex items-center gap-2">
                                                         <Select
-                                                            value={staffRole}
+                                                            value={toStaffRoleSelectValue(staffRole)}
                                                             onValueChange={(val) =>
-                                                                handleStaffRoleChange(u.user_id, val as StaffRole)
+                                                                handleStaffRoleChange(u.user_id, fromStaffRoleSelectValue(val))
                                                             }
                                                             disabled={saving === u.user_id}
                                                         >
@@ -349,7 +362,11 @@ export default function StaffAccessPage() {
                                                             </SelectTrigger>
                                                             <SelectContent>
                                                                 {STAFF_ROLE_OPTIONS.map((opt) => (
-                                                                    <SelectItem key={opt.value} value={opt.value} className="text-xs">
+                                                                    <SelectItem
+                                                                        key={toStaffRoleSelectValue(opt.value)}
+                                                                        value={toStaffRoleSelectValue(opt.value)}
+                                                                        className="text-xs"
+                                                                    >
                                                                         {opt.label}
                                                                     </SelectItem>
                                                                 ))}
@@ -451,15 +468,21 @@ export default function StaffAccessPage() {
                         <div className="grid gap-2">
                             <Label>Staff Role</Label>
                             <Select
-                                value={createForm.staff_role}
-                                onValueChange={(val) => setCreateForm((p) => ({ ...p, staff_role: val as StaffRole }))}
+                                value={toStaffRoleSelectValue(createForm.staff_role)}
+                                onValueChange={(val) => setCreateForm((p) => ({
+                                    ...p,
+                                    staff_role: fromStaffRoleSelectValue(val),
+                                }))}
                             >
                                 <SelectTrigger>
                                     <SelectValue placeholder="Select role…" />
                                 </SelectTrigger>
                                 <SelectContent>
                                     {STAFF_ROLE_OPTIONS.map((opt) => (
-                                        <SelectItem key={opt.value} value={opt.value}>
+                                        <SelectItem
+                                            key={toStaffRoleSelectValue(opt.value)}
+                                            value={toStaffRoleSelectValue(opt.value)}
+                                        >
                                             {opt.label}
                                         </SelectItem>
                                     ))}
@@ -646,7 +669,7 @@ export default function StaffAccessPage() {
                                     </Button>
                                 </div>
                                 <p className="text-[11px] text-slate-500">
-                                    Use at least 8 characters. The "Generate" button creates a strong random
+                                    Use at least 8 characters. The &quot;Generate&quot; button creates a strong random
                                     password you can copy from the field above.
                                 </p>
                             </div>

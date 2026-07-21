@@ -12,7 +12,7 @@ import { notificationsAPI, Notification } from '@/lib/api';
 import { toast } from 'sonner';
 import { formatDistanceToNow } from 'date-fns';
 
-export default function NotificationCenter() {
+export default function NotificationCenter({ enabled = false }: { enabled?: boolean }) {
     const [notifications, setNotifications] = useState<Notification[]>([]);
     const [unreadCount, setUnreadCount] = useState(0);
     const [isOpen, setIsOpen] = useState(false);
@@ -30,6 +30,8 @@ export default function NotificationCenter() {
     }, []);
 
     useEffect(() => {
+        if (!enabled) return;
+
         // Defer first fetch to avoid synchronous state updates in effect body.
         const firstFetchTimer = setTimeout(() => {
             void fetchNotifications();
@@ -41,7 +43,7 @@ export default function NotificationCenter() {
             clearTimeout(firstFetchTimer);
             clearInterval(interval);
         };
-    }, [fetchNotifications]);
+    }, [enabled, fetchNotifications]);
 
     const markAsRead = async (id: number) => {
         try {

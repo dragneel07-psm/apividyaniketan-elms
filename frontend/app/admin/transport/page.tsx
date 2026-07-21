@@ -28,6 +28,7 @@ import {
     TransportVehicle,
     TransportAssignment,
     TransportSummary,
+    normalizeArrayPayload,
 } from '@/lib/api';
 import { toast } from 'sonner';
 
@@ -123,9 +124,10 @@ export default function TransportManagementPage() {
                 transportAPI.getAssignments(),
             ]);
             setSummary(summaryData);
-            setRoutes(routesData);
-            setVehicles(vehiclesData);
-            setAssignments(assignmentsData);
+            // Defensive page-level guard in addition to API normalization.
+            setRoutes(normalizeArrayPayload(routesData));
+            setVehicles(normalizeArrayPayload(vehiclesData));
+            setAssignments(normalizeArrayPayload(assignmentsData));
         } catch {
             toast.error('Failed to load transport data');
         } finally {

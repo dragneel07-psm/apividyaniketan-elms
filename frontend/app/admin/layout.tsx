@@ -21,10 +21,25 @@ export default function AdminLayout({
 }) {
     const [user, setUser] = useState<UserType | null>(null);
     const [jwtUser, setJwtUser] = useState<ReturnType<typeof getUser>>(null);
+    const [sessionVerified, setSessionVerified] = useState(false);
 
     useEffect(() => {
-        setJwtUser(getUser());
-        usersAPI.getMe().then(setUser).catch(console.error);
+        let active = true;
+        queueMicrotask(() => {
+            if (active) setJwtUser(getUser());
+        });
+        usersAPI.getMe()
+            .then((currentUser) => {
+                if (!active) return;
+                setUser(currentUser);
+                setSessionVerified(true);
+            })
+            .catch(() => {
+                if (active) setSessionVerified(false);
+            });
+        return () => {
+            active = false;
+        };
     }, []);
 
     const roleLabel = getRoleLabel(
@@ -54,7 +69,7 @@ export default function AdminLayout({
                     </div>
 
                     <div className="flex items-center gap-4">
-                        <NotificationCenter />
+                        <NotificationCenter enabled={sessionVerified} />
                         <DashboardProfileMenu
                             firstName={user?.first_name ?? jwtUser?.first_name}
                             lastName={user?.last_name ?? jwtUser?.last_name}

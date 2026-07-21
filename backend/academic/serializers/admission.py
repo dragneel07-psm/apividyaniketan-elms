@@ -50,3 +50,31 @@ class AdmissionEnquirySerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
+
+    def validate(self, attrs):
+        """Only the conversion action may mark an enquiry as converted.
+
+        A plain create/update previously allowed ``status=converted`` without
+        creating a UserAccount or Student profile. That produced admissions
+        which looked converted in the pipeline but could never appear in the
+        student directory.
+        """
+        attrs = super().validate(attrs)
+        target_status = attrs.get(
+            "status", getattr(self.instance, "status", None)
+        )
+        linked_student_id = (
+            getattr(self.instance, "converted_student_id", None)
+            if self.instance is not None
+            else None
+        )
+        if target_status == "converted" and not linked_student_id:
+            raise serializers.ValidationError(
+                {
+                    "status": (
+                        "Use the Convert to Student action. It creates the student "
+                        "account and links it to this admission."
+                    )
+                }
+            )
+        return attrs

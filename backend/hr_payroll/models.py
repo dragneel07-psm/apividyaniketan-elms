@@ -94,6 +94,26 @@ class Employee(SchemaScopedBillingModel, models.Model):
         max_digits=12, decimal_places=2, default=Decimal("0")
     )
     salary_grade = models.CharField(max_length=20, blank=True)
+    pan_number = models.CharField(max_length=20, blank=True)
+    marital_status = models.CharField(
+        max_length=10,
+        choices=(("single", "Single"), ("couple", "Couple")),
+        default="single",
+    )
+    social_security_scheme = models.CharField(
+        max_length=10,
+        choices=(("none", "None"), ("pf", "Employees Provident Fund"), ("ssf", "Social Security Fund")),
+        default="pf",
+    )
+    pf_number = models.CharField(max_length=30, blank=True)
+    ssf_number = models.CharField(max_length=30, blank=True)
+    cit_number = models.CharField(max_length=30, blank=True)
+    recurring_cit_monthly = models.DecimalField(
+        max_digits=12, decimal_places=2, default=Decimal("0")
+    )
+    insurance_monthly = models.DecimalField(
+        max_digits=12, decimal_places=2, default=Decimal("0")
+    )
 
     # Bank details
     bank_account_number = models.CharField(max_length=30, blank=True)
@@ -443,6 +463,18 @@ class SalarySlip(SchemaScopedBillingModel, models.Model):
     esi_employee = models.DecimalField(
         max_digits=10, decimal_places=2, default=Decimal("0")
     )
+    ssf_employee = models.DecimalField(
+        max_digits=10, decimal_places=2, default=Decimal("0")
+    )
+    ssf_employer = models.DecimalField(
+        max_digits=10, decimal_places=2, default=Decimal("0")
+    )
+    cit_deduction = models.DecimalField(
+        max_digits=10, decimal_places=2, default=Decimal("0")
+    )
+    insurance_deduction = models.DecimalField(
+        max_digits=10, decimal_places=2, default=Decimal("0")
+    )
     tds = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0"))
     professional_tax = models.DecimalField(
         max_digits=10, decimal_places=2, default=Decimal("0")
@@ -457,6 +489,17 @@ class SalarySlip(SchemaScopedBillingModel, models.Model):
     net_salary = models.DecimalField(
         max_digits=12, decimal_places=2, default=Decimal("0")
     )
+    taxable_income_annual = models.DecimalField(
+        max_digits=14, decimal_places=2, default=Decimal("0")
+    )
+    annual_tax_liability = models.DecimalField(
+        max_digits=14, decimal_places=2, default=Decimal("0")
+    )
+    employer_cost = models.DecimalField(
+        max_digits=14, decimal_places=2, default=Decimal("0")
+    )
+    fiscal_year_bs = models.CharField(max_length=9, blank=True)
+    calculation_snapshot = models.JSONField(default=dict, blank=True)
 
     # Payment info
     status = models.CharField(
@@ -498,12 +541,15 @@ class SalarySlip(SchemaScopedBillingModel, models.Model):
         )
         self.total_deductions = (
             self.pf_employee
-            + self.esi_employee
+            + self.ssf_employee
+            + self.cit_deduction
+            + self.insurance_deduction
             + self.tds
             + self.professional_tax
             + self.other_deduction
         )
         self.net_salary = self.gross_salary - self.total_deductions
+        self.employer_cost = self.gross_salary + self.pf_employer + self.ssf_employer
 
     def save(self, *args, **kwargs):
         self.compute_totals()

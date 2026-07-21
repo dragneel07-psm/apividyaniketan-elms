@@ -203,12 +203,18 @@
                 {% if employee_code %}<div class="info-row"><span class="info-label">Code: </span><span class="info-value">{{ employee_code }}</span></div>{% endif %}
                 {% if department %}<div class="info-row"><span class="info-label">Department: </span><span class="info-value">{{ department }}</span></div>{% endif %}
                 {% if designation %}<div class="info-row"><span class="info-label">Designation: </span><span class="info-value">{{ designation }}</span></div>{% endif %}
+                {% if pan_number %}<div class="info-row"><span class="info-label">PAN: </span><span class="info-value">{{ pan_number }}</span></div>{% endif %}
+                {% if social_security_scheme %}<div class="info-row"><span class="info-label">Scheme: </span><span class="info-value">{{ social_security_scheme }}</span></div>{% endif %}
+                {% if pf_number %}<div class="info-row"><span class="info-label">PF No.: </span><span class="info-value">{{ pf_number }}</span></div>{% endif %}
+                {% if ssf_number %}<div class="info-row"><span class="info-label">SSF No.: </span><span class="info-value">{{ ssf_number }}</span></div>{% endif %}
+                {% if cit_number %}<div class="info-row"><span class="info-label">CIT No.: </span><span class="info-value">{{ cit_number }}</span></div>{% endif %}
             </div>
         </div>
         <div class="info-col">
             <div class="info-block">
                 <h4>Payment Details</h4>
                 <div class="info-row"><span class="info-label">Period: </span><span class="info-value">{{ period_name }}</span></div>
+                {% if fiscal_year_bs %}<div class="info-row"><span class="info-label">Fiscal Year: </span><span class="info-value">{{ fiscal_year_bs }} B.S.</span></div>{% endif %}
                 <div class="info-row"><span class="info-label">Status: </span><span class="info-value" style="text-transform:capitalize;">{{ status }}</span></div>
                 {% if payment_method %}<div class="info-row"><span class="info-label">Method: </span><span class="info-value" style="text-transform:capitalize;">{{ payment_method }}</span></div>{% endif %}
                 {% if transaction_reference %}<div class="info-row"><span class="info-label">Ref: </span><span class="info-value" style="font-size:9px;">{{ transaction_reference }}</span></div>{% endif %}
@@ -255,9 +261,10 @@
                 </thead>
                 <tbody>
                     {% if pf_employee > 0 %}<tr><td>PF (Employee)</td><td class="amount deductions-amount">{{ pf_employee }}</td></tr>{% endif %}
-                    {% if pf_employer > 0 %}<tr><td>PF (Employer)</td><td class="amount deductions-amount">{{ pf_employer }}</td></tr>{% endif %}
-                    {% if esi_employee > 0 %}<tr><td>ESI</td><td class="amount deductions-amount">{{ esi_employee }}</td></tr>{% endif %}
-                    {% if tds > 0 %}<tr><td>TDS</td><td class="amount deductions-amount">{{ tds }}</td></tr>{% endif %}
+                    {% if ssf_employee > 0 %}<tr><td>SSF (Employee)</td><td class="amount deductions-amount">{{ ssf_employee }}</td></tr>{% endif %}
+                    {% if cit_deduction > 0 %}<tr><td>CIT</td><td class="amount deductions-amount">{{ cit_deduction }}</td></tr>{% endif %}
+                    {% if insurance_deduction > 0 %}<tr><td>Insurance</td><td class="amount deductions-amount">{{ insurance_deduction }}</td></tr>{% endif %}
+                    {% if tds > 0 %}<tr><td>Employment TDS</td><td class="amount deductions-amount">{{ tds }}</td></tr>{% endif %}
                     {% if professional_tax > 0 %}<tr><td>Professional Tax</td><td class="amount deductions-amount">{{ professional_tax }}</td></tr>{% endif %}
                     {% if other_deduction > 0 %}<tr><td>Other Deduction</td><td class="amount deductions-amount">{{ other_deduction }}</td></tr>{% endif %}
                     <tr class="total-row">
@@ -274,6 +281,17 @@
         <div class="net-label">Net Salary Payable</div>
         <div class="net-amount">{{ currency }}{{ net_salary }}</div>
     </div>
+
+    <table class="pay-table" style="margin-top:12px;">
+        <thead class="earnings-header"><tr><th>Employer Contributions / Tax Record</th><th style="text-align:right;">Amount ({{ currency }})</th></tr></thead>
+        <tbody>
+            {% if pf_employer > 0 %}<tr><td>PF (Employer)</td><td class="amount">{{ pf_employer }}</td></tr>{% endif %}
+            {% if ssf_employer > 0 %}<tr><td>SSF (Employer)</td><td class="amount">{{ ssf_employer }}</td></tr>{% endif %}
+            <tr><td>Annual Taxable Employment Income</td><td class="amount">{{ taxable_income_annual }}</td></tr>
+            <tr><td>Estimated Annual Employment Tax</td><td class="amount">{{ annual_tax_liability }}</td></tr>
+            <tr class="total-row"><td>Total Employer Cost</td><td class="amount">{{ employer_cost }}</td></tr>
+        </tbody>
+    </table>
 
     <!-- Signatures -->
     <div class="sig-row">

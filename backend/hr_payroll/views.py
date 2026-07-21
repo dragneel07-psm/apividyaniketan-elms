@@ -52,7 +52,7 @@ class _HRBase(
 
 
 class DepartmentViewSet(_HRBase):
-    queryset = Department.objects.select_related("head__user").all()
+    queryset = Department.objects.select_related("head__user").order_by("name")
     serializer_class = DepartmentSerializer
     permission_classes = [IsHRManager]
 
@@ -85,7 +85,9 @@ class DepartmentViewSet(_HRBase):
 
 
 class EmployeeViewSet(_HRBase):
-    queryset = Employee.objects.select_related("user", "department").all()
+    queryset = Employee.objects.select_related("user", "department").order_by(
+        "employee_code", "user__first_name", "user__last_name"
+    )
     permission_classes = [IsHRManager]
 
     def get_serializer_class(self):
@@ -169,7 +171,7 @@ class EmployeeViewSet(_HRBase):
 
 
 class LeaveTypeViewSet(_HRBase):
-    queryset = LeaveType.objects.all()
+    queryset = LeaveType.objects.order_by("code")
     serializer_class = LeaveTypeSerializer
     permission_classes = [IsHRManager]
 
@@ -447,6 +449,7 @@ class PayrollPeriodViewSet(_HRBase):
     @action(detail=True, methods=["post"], url_path="generate-slips")
     def generate_slips(self, request, pk=None):
         """Auto-generate salary slips for all active employees in this period."""
+        from .payroll_nepal import calculate_monthly_payroll
         period = self.get_object()
         if period.status != PayrollPeriod.STATUS_DRAFT:
             return Response(
@@ -470,9 +473,7 @@ class PayrollPeriodViewSet(_HRBase):
                     payroll_period=period,
                     working_days=period.working_days,
                     paid_days=period.working_days,
-                    basic_salary=emp.basic_salary,
-                    # Default HRA = 40% of basic
-                    hra=round(emp.basic_salary * 4 / 10, 2),
+                    **calculate_monthly_payroll(emp),
                 )
                 slip.save()
                 created_count += 1
@@ -559,6 +560,11 @@ class SalarySlipViewSet(_HRBase):
                 else ""
             ),
             "employee_code": slip.employee.employee_code if slip.employee else "",
+            "pan_number": slip.employee.pan_number if slip.employee else "",
+            "social_security_scheme": slip.employee.get_social_security_scheme_display() if slip.employee else "",
+            "pf_number": slip.employee.pf_number if slip.employee else "",
+            "ssf_number": slip.employee.ssf_number if slip.employee else "",
+            "cit_number": slip.employee.cit_number if slip.employee else "",
             "department": (
                 slip.employee.department.name
                 if slip.employee and slip.employee.department
@@ -578,12 +584,19 @@ class SalarySlipViewSet(_HRBase):
             "gross_salary": fmt(slip.gross_salary),
             "pf_employee": fmt(slip.pf_employee),
             "pf_employer": fmt(slip.pf_employer),
-            "esi_employee": fmt(slip.esi_employee),
+            "ssf_employee": fmt(slip.ssf_employee),
+            "ssf_employer": fmt(slip.ssf_employer),
+            "cit_deduction": fmt(slip.cit_deduction),
+            "insurance_deduction": fmt(slip.insurance_deduction),
             "tds": fmt(slip.tds),
             "professional_tax": fmt(slip.professional_tax),
             "other_deduction": fmt(slip.other_deduction),
             "total_deductions": fmt(slip.total_deductions),
             "net_salary": fmt(slip.net_salary),
+            "taxable_income_annual": fmt(slip.taxable_income_annual),
+            "annual_tax_liability": fmt(slip.annual_tax_liability),
+            "employer_cost": fmt(slip.employer_cost),
+            "fiscal_year_bs": slip.fiscal_year_bs,
             "payment_date": str(slip.payment_date) if slip.payment_date else "",
             "payment_method": (
                 slip.payment_method.replace("_", " ").title()
@@ -591,7 +604,7 @@ class SalarySlipViewSet(_HRBase):
                 else ""
             ),
             "transaction_reference": slip.transaction_reference or "",
-            "currency": "$",
+            "currency": "Rs.",
             "generated_on": localtime(timezone.now()).strftime("%d %b %Y, %I:%M %p"),
         }
 

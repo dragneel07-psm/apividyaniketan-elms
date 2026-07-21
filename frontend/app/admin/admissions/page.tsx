@@ -63,7 +63,6 @@ const STATUS_OPTIONS: Array<{ value: AdmissionEnquiryStatus; label: string }> = 
     { value: 'contacted', label: 'Contacted' },
     { value: 'interested', label: 'Interested' },
     { value: 'application_started', label: 'Application Started' },
-    { value: 'converted', label: 'Converted' },
     { value: 'closed', label: 'Closed' },
 ];
 
@@ -208,7 +207,12 @@ export default function AdmissionsPage() {
             phone_number: enquiry.phone_number || '',
             desired_class: enquiry.desired_class ? String(enquiry.desired_class) : '',
             desired_section_name: enquiry.desired_section_name || '',
-            status: enquiry.status,
+            // Legacy records could be labelled converted without a linked
+            // student. Keep those records editable and let the dedicated
+            // conversion action repair them.
+            status: enquiry.status === 'converted' && !enquiry.converted_student
+                ? 'application_started'
+                : enquiry.status,
             source: enquiry.source,
             notes: enquiry.notes || '',
             follow_up_date: enquiry.follow_up_date || '',
@@ -479,7 +483,14 @@ export default function AdmissionsPage() {
                                             <div className="text-xs text-slate-500">{enquiry.desired_section_name || '-'}</div>
                                         </TableCell>
                                         <TableCell>
-                                            <Badge className={statusBadgeClass(enquiry.status)}>{prettyLabel(enquiry.status)}</Badge>
+                                            <div className="flex flex-col items-start gap-1">
+                                                <Badge className={statusBadgeClass(enquiry.status)}>{prettyLabel(enquiry.status)}</Badge>
+                                                {enquiry.status === 'converted' && !enquiry.converted_student ? (
+                                                    <Badge className="border-red-200 bg-red-50 text-[10px] text-red-700">
+                                                        Conversion incomplete
+                                                    </Badge>
+                                                ) : null}
+                                            </div>
                                         </TableCell>
                                         <TableCell>{prettyLabel(enquiry.source)}</TableCell>
                                         <TableCell>{enquiry.follow_up_date || '-'}</TableCell>
@@ -491,8 +502,11 @@ export default function AdmissionsPage() {
                                                 <Button
                                                     variant="ghost"
                                                     size="icon"
-                                                    disabled={enquiry.status === 'converted'}
+                                                    disabled={Boolean(enquiry.converted_student)}
                                                     onClick={() => openConvertDialog(enquiry)}
+                                                    title={enquiry.converted_student
+                                                        ? 'Student account already created'
+                                                        : 'Convert to student'}
                                                 >
                                                     <UserRoundPlus className="h-4 w-4 text-emerald-600" />
                                                 </Button>
@@ -616,6 +630,9 @@ export default function AdmissionsPage() {
                                         <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
+                                        {activeEnquiry?.converted_student ? (
+                                            <SelectItem value="converted">Converted</SelectItem>
+                                        ) : null}
                                         {STATUS_OPTIONS.map((statusOption) => (
                                             <SelectItem key={statusOption.value} value={statusOption.value}>
                                                 {statusOption.label}

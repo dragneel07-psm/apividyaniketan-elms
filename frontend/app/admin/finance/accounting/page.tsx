@@ -36,7 +36,16 @@ type InventoryItem = { item_id: string; name: string; category: string; form_typ
 type DepSchedule = { items: InventoryItem[]; total_annual_dep: number };
 type IncomeExpenditure = {
     income: { fee_income: number; government_grant: number; donations: number; other_income: number; total: number };
-    expenditure: { staff_salary: number; maintenance: number; utilities: number; supplies: number; events: number; transport: number; bank_charges_msf: number; other: number; total: number };
+    expenditure: {
+        staff_salary: number;
+        programme: number;
+        administration: number;
+        bank_charges_msf: number;
+        depreciation: number;
+        tax_expense: number;
+        other: number;
+        total: number;
+    };
     surplus_deficit: number; label_surplus: string;
 };
 type BalanceSheet = {
@@ -234,12 +243,11 @@ export default function NASAccountingPage() {
                                     <div className="border-t border-slate-100 pt-3 mt-3">
                                         <SectionLabel>EXPENDITURE (खर्च)</SectionLabel>
                                         <LineItem label="Staff Salary & Benefits" value={ie.expenditure.staff_salary} color="rose" />
-                                        <LineItem label="Academic / Programme" value={ie.expenditure.supplies} color="orange" />
-                                        <LineItem label="Repairs & Maintenance" value={ie.expenditure.maintenance} color="amber" />
-                                        <LineItem label="Utilities (Power/Water)" value={ie.expenditure.utilities} color="yellow" />
-                                        <LineItem label="Events & Activities" value={ie.expenditure.events} color="purple" />
-                                        <LineItem label="Transport" value={ie.expenditure.transport} color="slate" />
+                                        <LineItem label="Academic / Programme" value={ie.expenditure.programme} color="orange" />
+                                        <LineItem label="Administration" value={ie.expenditure.administration} color="amber" />
                                         <LineItem label="Bank Charges / Gateway MSF" value={ie.expenditure.bank_charges_msf} color="red" />
+                                        <LineItem label="Depreciation" value={ie.expenditure.depreciation} color="violet" />
+                                        <LineItem label="Tax Expense" value={ie.expenditure.tax_expense} color="yellow" />
                                         <LineItem label="Other Expenditure" value={ie.expenditure.other} color="slate" />
                                         <TotalLine label="Total Expenditure" value={ie.expenditure.total} />
                                     </div>
@@ -266,12 +274,11 @@ export default function NASAccountingPage() {
                                 <CardContent className="pt-4 space-y-3">
                                     {[
                                         { label: 'Staff Salary', value: ie.expenditure.staff_salary, color: 'bg-rose-500' },
-                                        { label: 'Supplies / Academic', value: ie.expenditure.supplies, color: 'bg-orange-500' },
-                                        { label: 'Maintenance', value: ie.expenditure.maintenance, color: 'bg-amber-500' },
-                                        { label: 'Utilities', value: ie.expenditure.utilities, color: 'bg-yellow-500' },
-                                        { label: 'Events', value: ie.expenditure.events, color: 'bg-purple-500' },
-                                        { label: 'Transport', value: ie.expenditure.transport, color: 'bg-blue-500' },
+                                        { label: 'Programme', value: ie.expenditure.programme, color: 'bg-orange-500' },
+                                        { label: 'Administration', value: ie.expenditure.administration, color: 'bg-amber-500' },
                                         { label: 'Gateway MSF', value: ie.expenditure.bank_charges_msf, color: 'bg-indigo-500' },
+                                        { label: 'Depreciation', value: ie.expenditure.depreciation, color: 'bg-violet-500' },
+                                        { label: 'Tax Expense', value: ie.expenditure.tax_expense, color: 'bg-yellow-500' },
                                         { label: 'Other', value: ie.expenditure.other, color: 'bg-slate-400' },
                                     ].filter(r => r.value > 0).map(({ label, value, color }) => {
                                         const pct = ie.expenditure.total > 0 ? (value / ie.expenditure.total * 100) : 0;
@@ -650,31 +657,44 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
     return <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">{children}</p>;
 }
 
-function LineItem({ label, value, color }: { label: string; value: number; color: string }) {
+const LINE_ITEM_COLORS: Record<string, string> = {
+    emerald: 'text-emerald-700', blue: 'text-blue-700', violet: 'text-violet-700',
+    slate: 'text-slate-700', rose: 'text-rose-700', orange: 'text-orange-700',
+    amber: 'text-amber-700', yellow: 'text-yellow-700', red: 'text-red-700',
+};
+
+function money(value: number | null | undefined): string {
+    const amount = Number(value ?? 0);
+    return Number.isFinite(amount)
+        ? amount.toLocaleString('en-NP', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+        : '0.00';
+}
+
+function LineItem({ label, value, color }: { label: string; value?: number | null; color: string }) {
     return (
         <div className="flex items-center justify-between py-1.5 border-b border-slate-50">
             <span className="text-sm text-slate-600">{label}</span>
-            <span className={`text-sm font-semibold text-${color}-700`}>
-                Rs. {value.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+            <span className={`text-sm font-semibold ${LINE_ITEM_COLORS[color] ?? 'text-slate-700'}`}>
+                Rs. {money(value)}
             </span>
         </div>
     );
 }
 
-function SubTotalLine({ label, value }: { label: string; value: number }) {
+function SubTotalLine({ label, value }: { label: string; value?: number | null }) {
     return (
         <div className="flex items-center justify-between py-1.5 bg-slate-50 rounded-lg px-2 mt-1">
             <span className="text-xs font-bold text-slate-600">{label}</span>
-            <span className="text-sm font-bold text-slate-800">Rs. {value.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+            <span className="text-sm font-bold text-slate-800">Rs. {money(value)}</span>
         </div>
     );
 }
 
-function TotalLine({ label, value }: { label: string; value: number }) {
+function TotalLine({ label, value }: { label: string; value?: number | null }) {
     return (
         <div className="flex items-center justify-between py-2 border-t-2 border-slate-200 mt-1">
             <span className="text-sm font-black text-slate-800">{label}</span>
-            <span className="text-base font-black text-slate-900">Rs. {value.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+            <span className="text-base font-black text-slate-900">Rs. {money(value)}</span>
         </div>
     );
 }

@@ -77,6 +77,14 @@ class EmployeeListSerializer(serializers.ModelSerializer):
             "contract_type",
             "join_date",
             "basic_salary",
+            "pan_number",
+            "marital_status",
+            "social_security_scheme",
+            "pf_number",
+            "ssf_number",
+            "cit_number",
+            "recurring_cit_monthly",
+            "insurance_monthly",
             "is_active",
         ]
 

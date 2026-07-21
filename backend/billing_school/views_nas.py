@@ -1057,7 +1057,12 @@ class NASFinancialStatementsView(APIView):
         long_term_lib = _sub(("liability", "long_term_liability"))
         total_liab = total_curr_lib + long_term_lib
 
-        total_equity = sum(v for (atype, _), v in balances.items() if atype == "equity")
+        # Python's sum() returns the integer 0 for an empty sequence. Keep this
+        # value Decimal so an empty/new ledger can still be quantized safely.
+        total_equity = sum(
+            (v for (atype, _), v in balances.items() if atype == "equity"),
+            Decimal("0"),
+        )
         total_fund = total_equity
         check_sum = total_liab + total_fund
 

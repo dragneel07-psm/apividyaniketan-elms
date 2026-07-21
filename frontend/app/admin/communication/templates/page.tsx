@@ -4,7 +4,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -12,9 +12,9 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
-import { apiRequest } from '@/lib/api'; // Using generic apiRequest as billingAPI/academicAPI might not cover this
+import { communicationAPI } from '@/lib/api';
 import { toast } from 'sonner';
-import { Plus, Trash2, Edit, Save, X, Mail, MessageSquare, Bell } from 'lucide-react';
+import { Plus, Trash2, Edit, Save, Mail, MessageSquare, Bell } from 'lucide-react';
 
 interface NotificationTemplate {
     id: number;
@@ -46,9 +46,9 @@ export default function NotificationTemplates() {
 
     const loadData = async () => {
         try {
-            const data = await apiRequest<NotificationTemplate[]>('/notifications/templates/');
-            setTemplates(data);
-        } catch (error) {
+            const data = await communicationAPI.getTemplates();
+            setTemplates(Array.isArray(data) ? data : []);
+        } catch {
             toast.error('Failed to load templates');
         } finally {
             setLoading(false);
@@ -80,21 +80,15 @@ export default function NotificationTemplates() {
 
         try {
             if (editingId) {
-                await apiRequest(`/notifications/templates/${editingId}/`, {
-                    method: 'PUT',
-                    body: JSON.stringify(formData)
-                });
+                await communicationAPI.updateTemplate(editingId, formData);
                 toast.success('Template updated');
             } else {
-                await apiRequest('/notifications/templates/', {
-                    method: 'POST',
-                    body: JSON.stringify(formData)
-                });
+                await communicationAPI.createTemplate(formData);
                 toast.success('Template created');
             }
             setIsDialogOpen(false);
             loadData();
-        } catch (error) {
+        } catch {
             toast.error('Failed to save template');
         }
     };
@@ -102,10 +96,10 @@ export default function NotificationTemplates() {
     const handleDelete = async (id: number) => {
         if (!confirm('Are you sure you want to delete this template?')) return;
         try {
-            await apiRequest(`/notifications/templates/${id}/`, { method: 'DELETE' });
+            await communicationAPI.deleteTemplate(id);
             toast.success('Template deleted');
             loadData();
-        } catch (error) {
+        } catch {
             toast.error('Failed to delete template');
         }
     };

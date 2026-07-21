@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input';
 import { hrAPI, HREmployee, normalizeArrayPayload } from '@/lib/api';
 import {
     Search, UserPlus, UserCheck, UserX,
-    ChevronRight, Building2, Briefcase
+    ChevronRight, Building2, Briefcase, Settings, Save, X
 } from 'lucide-react';
 
 const CONTRACT_COLORS: Record<string, string> = {
@@ -34,6 +34,8 @@ export function EmployeeList() {
     const [search, setSearch] = useState('');
     const [filterActive, setFilterActive] = useState<boolean | undefined>(true);
     const [actionLoading, setActionLoading] = useState<string | null>(null);
+    const [payrollEmployee, setPayrollEmployee] = useState<HREmployee | null>(null);
+    const [payrollDraft, setPayrollDraft] = useState<Partial<HREmployee>>({});
 
     const load = async () => {
         setLoading(true);
@@ -72,6 +74,32 @@ export function EmployeeList() {
         }
     };
 
+    const openPayrollSetup = (emp: HREmployee) => {
+        setPayrollEmployee(emp);
+        setPayrollDraft({
+            pan_number: emp.pan_number || '',
+            marital_status: emp.marital_status || 'single',
+            social_security_scheme: emp.social_security_scheme || 'pf',
+            pf_number: emp.pf_number || '',
+            ssf_number: emp.ssf_number || '',
+            cit_number: emp.cit_number || '',
+            recurring_cit_monthly: Number(emp.recurring_cit_monthly || 0),
+            insurance_monthly: Number(emp.insurance_monthly || 0),
+        });
+    };
+
+    const savePayrollSetup = async () => {
+        if (!payrollEmployee) return;
+        setActionLoading(payrollEmployee.employee_id);
+        try {
+            await hrAPI.updateEmployee(payrollEmployee.employee_id, payrollDraft);
+            setPayrollEmployee(null);
+            await load();
+        } finally {
+            setActionLoading(null);
+        }
+    };
+
     return (
         <div className="space-y-4">
             <div className="flex flex-col md:flex-row gap-3 items-start md:items-center justify-between">
@@ -105,6 +133,32 @@ export function EmployeeList() {
                     </Button>
                 </div>
             </div>
+
+            {payrollEmployee && (
+                <Card className="border-indigo-200 bg-indigo-50/30">
+                    <CardHeader className="py-3 px-4 flex-row items-center justify-between">
+                        <CardTitle className="text-sm">Nepal Payroll Setup — {payrollEmployee.full_name}</CardTitle>
+                        <Button variant="ghost" size="sm" onClick={() => setPayrollEmployee(null)}><X className="h-4 w-4" /></Button>
+                    </CardHeader>
+                    <CardContent className="grid grid-cols-1 md:grid-cols-4 gap-3 px-4 pb-4">
+                        <Input placeholder="PAN number" value={payrollDraft.pan_number || ''} onChange={e => setPayrollDraft({ ...payrollDraft, pan_number: e.target.value })} />
+                        <select className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm" value={payrollDraft.marital_status} onChange={e => setPayrollDraft({ ...payrollDraft, marital_status: e.target.value as 'single' | 'couple' })}>
+                            <option value="single">Single tax band</option><option value="couple">Couple tax band</option>
+                        </select>
+                        <select className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm" value={payrollDraft.social_security_scheme} onChange={e => setPayrollDraft({ ...payrollDraft, social_security_scheme: e.target.value as 'none' | 'pf' | 'ssf' })}>
+                            <option value="pf">Provident Fund (PF)</option><option value="ssf">Social Security Fund (SSF)</option><option value="none">No scheme</option>
+                        </select>
+                        <Input placeholder="PF membership number" value={payrollDraft.pf_number || ''} onChange={e => setPayrollDraft({ ...payrollDraft, pf_number: e.target.value })} />
+                        <Input placeholder="SSF membership number" value={payrollDraft.ssf_number || ''} onChange={e => setPayrollDraft({ ...payrollDraft, ssf_number: e.target.value })} />
+                        <Input placeholder="CIT account number" value={payrollDraft.cit_number || ''} onChange={e => setPayrollDraft({ ...payrollDraft, cit_number: e.target.value })} />
+                        <Input type="number" min="0" placeholder="Monthly CIT deduction" value={payrollDraft.recurring_cit_monthly ?? 0} onChange={e => setPayrollDraft({ ...payrollDraft, recurring_cit_monthly: Number(e.target.value) })} />
+                        <Input type="number" min="0" placeholder="Monthly insurance deduction" value={payrollDraft.insurance_monthly ?? 0} onChange={e => setPayrollDraft({ ...payrollDraft, insurance_monthly: Number(e.target.value) })} />
+                        <div className="md:col-span-4 flex justify-end">
+                            <Button onClick={savePayrollSetup} disabled={actionLoading === payrollEmployee.employee_id} className="bg-indigo-600 text-white gap-2"><Save className="h-4 w-4" /> Save Payroll Setup</Button>
+                        </div>
+                    </CardContent>
+                </Card>
+            )}
 
             {loading ? (
                 <div className="space-y-3 animate-pulse">
@@ -157,9 +211,12 @@ export function EmployeeList() {
                                         <div className="text-right hidden sm:block">
                                             <p className="text-xs text-slate-400 font-medium">Basic Salary</p>
                                             <p className="text-sm font-black text-slate-800">
-                                                {Number(emp.basic_salary).toLocaleString()}
+                                                Rs. {Number(emp.basic_salary).toLocaleString()}
                                             </p>
                                         </div>
+                                        <Button variant="outline" size="sm" onClick={() => openPayrollSetup(emp)} className="h-8 px-3 rounded-lg text-xs font-bold text-indigo-700 border-indigo-200">
+                                            <Settings className="h-3.5 w-3.5 mr-1" /> Payroll
+                                        </Button>
                                         <Button
                                             variant="outline"
                                             size="sm"

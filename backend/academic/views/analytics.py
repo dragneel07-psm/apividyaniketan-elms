@@ -9,8 +9,8 @@ and assessment activity for the admin analytics dashboard.
 
 from datetime import date, timedelta
 
-from django.db.models import Avg, Case, Count, F, FloatField, IntegerField, Q, Sum, When
-from django.db.models.functions import TruncMonth
+from django.db.models import Avg, Case, Count, F, FloatField, IntegerField, Q, When
+from django.db.models.functions import Cast, Coalesce, TruncMonth
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -53,10 +53,10 @@ class SchoolAnalyticsDashboardView(APIView):
         daily_att = (
             att_qs.values("date")
             .annotate(
-                present=Count("id", filter=Q(status="present")),
-                absent=Count("id", filter=Q(status="absent")),
-                late=Count("id", filter=Q(status="late")),
-                total=Count("id"),
+                present=Count("attendance_id", filter=Q(status="present")),
+                absent=Count("attendance_id", filter=Q(status="absent")),
+                late=Count("attendance_id", filter=Q(status="late")),
+                total=Count("attendance_id"),
             )
             .order_by("date")
         )
@@ -76,8 +76,8 @@ class SchoolAnalyticsDashboardView(APIView):
 
         # ── Overall attendance rate ───────────────────────────────────────────
         totals = att_qs.aggregate(
-            present=Count("id", filter=Q(status="present")),
-            total=Count("id"),
+            present=Count("attendance_id", filter=Q(status="present")),
+            total=Count("attendance_id"),
         )
         overall_attendance_rate = (
             round(totals["present"] / totals["total"] * 100, 1)
@@ -86,25 +86,31 @@ class SchoolAnalyticsDashboardView(APIView):
         )
 
         # ── Grade / score distribution (DB-level bucketing) ──────────────────
-        result_qs = Result.objects.filter(is_published=True)
+        # Publication belongs to Assessment; Result has no ``is_published`` field.
+        result_qs = Result.objects.filter(assessment__results_published=True)
         if tenant:
             result_qs = result_qs.filter(student__user__tenant=tenant)
         if class_id:
             result_qs = result_qs.filter(student__academic_class_id=class_id)
 
-        # Compute percentage in DB and bucket with Case/When — avoids Python loop.
-        grade_counts = result_qs.filter(assessment__total_marks__gt=0).aggregate(
+        # Cast before division so PostgreSQL does not perform integer division.
+        scored_results = result_qs.filter(assessment__total_marks__gt=0).annotate(
+            score_pct=100.0
+            * Cast(F("score"), FloatField())
+            / Cast(F("assessment__total_marks"), FloatField())
+        )
+        grade_counts = scored_results.aggregate(
             grade_a=Count(
                 Case(
-                    When(score__gte=F("assessment__total_marks") * 0.90, then=1),
+                    When(score_pct__gte=90, then=1),
                     output_field=IntegerField(),
                 )
             ),
             grade_b=Count(
                 Case(
                     When(
-                        score__gte=F("assessment__total_marks") * 0.75,
-                        score__lt=F("assessment__total_marks") * 0.90,
+                        score_pct__gte=75,
+                        score_pct__lt=90,
                         then=1,
                     ),
                     output_field=IntegerField(),
@@ -113,8 +119,8 @@ class SchoolAnalyticsDashboardView(APIView):
             grade_c=Count(
                 Case(
                     When(
-                        score__gte=F("assessment__total_marks") * 0.60,
-                        score__lt=F("assessment__total_marks") * 0.75,
+                        score_pct__gte=60,
+                        score_pct__lt=75,
                         then=1,
                     ),
                     output_field=IntegerField(),
@@ -123,8 +129,8 @@ class SchoolAnalyticsDashboardView(APIView):
             grade_d=Count(
                 Case(
                     When(
-                        score__gte=F("assessment__total_marks") * 0.40,
-                        score__lt=F("assessment__total_marks") * 0.60,
+                        score_pct__gte=40,
+                        score_pct__lt=60,
                         then=1,
                     ),
                     output_field=IntegerField(),
@@ -132,7 +138,7 @@ class SchoolAnalyticsDashboardView(APIView):
             ),
             grade_f=Count(
                 Case(
-                    When(score__lt=F("assessment__total_marks") * 0.40, then=1),
+                    When(score_pct__lt=40, then=1),
                     output_field=IntegerField(),
                 )
             ),
@@ -146,11 +152,11 @@ class SchoolAnalyticsDashboardView(APIView):
         ]
 
         # ── Pass / fail rate (single DB query) ───────────────────────────────
-        pf = result_qs.filter(assessment__total_marks__gt=0).aggregate(
+        pf = scored_results.aggregate(
             total=Count("result_id"),
             passed=Count(
                 Case(
-                    When(score__gte=F("assessment__total_marks") * 0.40, then=1),
+                    When(score_pct__gte=40, then=1),
                     output_field=IntegerField(),
                 )
             ),
@@ -160,22 +166,19 @@ class SchoolAnalyticsDashboardView(APIView):
 
         # ── Subject performance (avg score %) ────────────────────────────────
         subject_perf_qs = (
-            result_qs.filter(assessment__subject__isnull=False)
+            scored_results.filter(assessment__subject__isnull=False)
             .values(subject_name=F("assessment__subject__name"))
             .annotate(
-                avg_score=Avg("score"),
-                avg_total=Avg("assessment__total_marks"),
+                avg_pct=Avg("score_pct"),
                 result_count=Count("result_id"),
             )
-            .order_by("-avg_score")[:10]
+            .order_by("-avg_pct")[:10]
         )
         subject_performance = [
             {
                 "subject": row["subject_name"],
                 "avg_pct": (
-                    round((row["avg_score"] / row["avg_total"]) * 100, 1)
-                    if row["avg_total"]
-                    else 0
+                    round(row["avg_pct"], 1) if row["avg_pct"] is not None else 0
                 ),
                 "count": row["result_count"],
             }
@@ -184,22 +187,19 @@ class SchoolAnalyticsDashboardView(APIView):
 
         # ── Class performance (avg score %) ──────────────────────────────────
         class_perf_qs = (
-            result_qs.filter(student__academic_class__isnull=False)
+            scored_results.filter(student__academic_class__isnull=False)
             .values(class_name=F("student__academic_class__name"))
             .annotate(
-                avg_score=Avg("score"),
-                avg_total=Avg("assessment__total_marks"),
+                avg_pct=Avg("score_pct"),
                 student_count=Count("student_id", distinct=True),
             )
-            .order_by("-avg_score")[:10]
+            .order_by("-avg_pct")[:10]
         )
         class_performance = [
             {
                 "class": row["class_name"],
                 "avg_pct": (
-                    round((row["avg_score"] / row["avg_total"]) * 100, 1)
-                    if row["avg_total"]
-                    else 0
+                    round(row["avg_pct"], 1) if row["avg_pct"] is not None else 0
                 ),
                 "students": row["student_count"],
             }
@@ -207,15 +207,21 @@ class SchoolAnalyticsDashboardView(APIView):
         ]
 
         # ── Assessment activity (assessments published per month) ─────────────
-        assess_qs = Assessment.objects.filter(is_published=True)
+        assess_qs = Assessment.objects.filter(results_published=True)
         if tenant:
             # Filter by tenant through the subject → class chain
             assess_qs = assess_qs.filter(
                 Q(subject__academic_class__students__user__tenant=tenant)
                 | Q(section__students__user__tenant=tenant)
             ).distinct()
+        # Assessment has no created_at field. Use its scheduled/due date as the
+        # activity date and omit unscheduled assessments from this time series.
         monthly_assess = (
-            assess_qs.annotate(month=TruncMonth("created_at"))
+            assess_qs.annotate(
+                activity_at=Coalesce("scheduled_at", "due_date"),
+                month=TruncMonth("activity_at"),
+            )
+            .filter(month__isnull=False)
             .values("month")
             .annotate(count=Count("assessment_id"))
             .order_by("month")
@@ -231,26 +237,24 @@ class SchoolAnalyticsDashboardView(APIView):
 
         # ── Top performing students ───────────────────────────────────────────
         top_students_qs = (
-            result_qs.values(
-                student_id=F("student__student_id"),
+            scored_results.values(
+                # Avoid colliding with Result.student_id (the FK attname).
+                student_uuid=F("student__student_id"),
                 student_name=F("student__user__first_name"),
             )
             .annotate(
-                avg_score=Avg("score"),
-                avg_total=Avg("assessment__total_marks"),
+                avg_pct=Avg("score_pct"),
                 result_count=Count("result_id"),
             )
             .filter(result_count__gte=2)
-            .order_by("-avg_score")[:5]
+            .order_by("-avg_pct")[:5]
         )
         top_students = [
             {
-                "student_id": str(row["student_id"]),
+                "student_id": str(row["student_uuid"]),
                 "name": row["student_name"] or "Student",
                 "avg_pct": (
-                    round((row["avg_score"] / row["avg_total"]) * 100, 1)
-                    if row["avg_total"]
-                    else 0
+                    round(row["avg_pct"], 1) if row["avg_pct"] is not None else 0
                 ),
                 "assessments": row["result_count"],
             }

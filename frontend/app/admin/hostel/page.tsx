@@ -30,6 +30,7 @@ import {
 import {
     hostelAPI,
     HostelBlock, HostelRoom, HostelAllotment, HostelDashboard,
+    normalizeArrayPayload,
 } from '@/lib/api';
 import { toast } from 'sonner';
 
@@ -115,9 +116,11 @@ export default function HostelManagementPage() {
                 hostelAPI.getAllotments(),
             ]);
             setDashboard(dash);
-            setBlocks(blks);
-            setRooms(rms);
-            setAllotments(allots);
+            // Keep the page safe even if a proxy/backend unexpectedly returns
+            // a paginated wrapper instead of the API client's normalized list.
+            setBlocks(normalizeArrayPayload(blks));
+            setRooms(normalizeArrayPayload(rms));
+            setAllotments(normalizeArrayPayload(allots));
         } catch {
             toast.error('Failed to load hostel data');
         } finally {

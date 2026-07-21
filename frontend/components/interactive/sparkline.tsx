@@ -3,9 +3,9 @@
 // via any medium, is strictly prohibited. Proprietary and confidential.
 'use client';
 
-import { useId } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { useReducedMotion } from 'framer-motion';
-import { Area, AreaChart, ResponsiveContainer, Tooltip } from 'recharts';
+import { Area, AreaChart, Tooltip } from 'recharts';
 import type { ChartPoint } from '@/components/interactive/trend-chart';
 
 type SparklineProps = {
@@ -20,6 +20,18 @@ type SparklineProps = {
 export function Sparkline({ data, height = 40, className, color = '#4f46e5', valueFormatter }: SparklineProps) {
     const gradientId = useId();
     const reduced = useReducedMotion();
+    const containerRef = useRef<HTMLDivElement>(null);
+    const [width, setWidth] = useState(0);
+
+    useEffect(() => {
+        const element = containerRef.current;
+        if (!element) return;
+        const updateWidth = () => setWidth(Math.max(0, element.getBoundingClientRect().width));
+        updateWidth();
+        const observer = new ResizeObserver(updateWidth);
+        observer.observe(element);
+        return () => observer.disconnect();
+    }, []);
     if (!data.length) {
         return (
             <div
@@ -30,9 +42,14 @@ export function Sparkline({ data, height = 40, className, color = '#4f46e5', val
         );
     }
     return (
-        <div data-testid="sparkline" className={className} style={{ height }}>
-            <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={data} margin={{ top: 2, right: 0, bottom: 0, left: 0 }}>
+        <div
+            ref={containerRef}
+            data-testid="sparkline"
+            className={`w-full min-w-0 overflow-hidden ${className ?? ''}`}
+            style={{ height, minHeight: height }}
+        >
+            {width > 0 && (
+                <AreaChart width={width} height={height} data={data} margin={{ top: 2, right: 0, bottom: 0, left: 0 }}>
                     <defs>
                         <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
                             <stop offset="0%" stopColor={color} stopOpacity={0.35} />
@@ -51,7 +68,7 @@ export function Sparkline({ data, height = 40, className, color = '#4f46e5', val
                         isAnimationActive={!reduced}
                     />
                 </AreaChart>
-            </ResponsiveContainer>
+            )}
         </div>
     );
 }

@@ -3835,6 +3835,14 @@ export interface HREmployee {
     user?: string;
     department?: string;
     salary_grade?: string;
+    pan_number?: string;
+    marital_status?: 'single' | 'couple';
+    social_security_scheme?: 'none' | 'pf' | 'ssf';
+    pf_number?: string;
+    ssf_number?: string;
+    cit_number?: string;
+    recurring_cit_monthly?: number;
+    insurance_monthly?: number;
     bank_account_number?: string;
     bank_name?: string;
     bank_ifsc?: string;
@@ -3919,12 +3927,20 @@ export interface HRSalarySlip {
     gross_salary: number;
     pf_employee: number;
     pf_employer: number;
+    ssf_employee: number;
+    ssf_employer: number;
+    cit_deduction: number;
+    insurance_deduction: number;
     esi_employee: number;
     tds: number;
     professional_tax: number;
     other_deduction: number;
     total_deductions: number;
     net_salary: number;
+    taxable_income_annual: number;
+    annual_tax_liability: number;
+    employer_cost: number;
+    fiscal_year_bs: string;
     status: 'draft' | 'finalized' | 'paid';
     payment_date: string | null;
     payment_method: string;
@@ -4405,7 +4421,11 @@ export const communicationAPI = {
         }),
 
     // Notification templates
-    getTemplates: () => apiRequest<NotificationTemplate[]>('/notifications/templates/'),
+    getTemplates: async () => normalizeArrayPayload(
+        await apiRequest<NotificationTemplate[] | PaginatedResponse<NotificationTemplate>>(
+            '/notifications/templates/'
+        )
+    ),
     createTemplate: (data: Partial<NotificationTemplate>) =>
         apiRequest<NotificationTemplate>('/notifications/templates/', { method: 'POST', body: JSON.stringify(data) }),
     updateTemplate: (id: number, data: Partial<NotificationTemplate>) =>
@@ -4470,7 +4490,10 @@ export const hostelAPI = {
     getDashboard: () => apiRequest<HostelDashboard>('/hostel/blocks/dashboard/'),
 
     // Blocks
-    getBlocks: () => apiRequest<HostelBlock[]>('/hostel/blocks/'),
+    getBlocks: async () => {
+        const payload = await apiRequest<HostelBlock[] | PaginatedResponse<HostelBlock>>('/hostel/blocks/');
+        return normalizeArrayPayload(payload);
+    },
     createBlock: (data: Partial<HostelBlock>) =>
         apiRequest<HostelBlock>('/hostel/blocks/', { method: 'POST', body: JSON.stringify(data) }),
     updateBlock: (id: string, data: Partial<HostelBlock>) =>
@@ -4478,11 +4501,12 @@ export const hostelAPI = {
     deleteBlock: (id: string) => apiRequest<void>(`/hostel/blocks/${id}/`, { method: 'DELETE' }),
 
     // Rooms
-    getRooms: (params?: { block?: string; is_active?: boolean }) => {
+    getRooms: async (params?: { block?: string; is_active?: boolean }) => {
         const q = params ? '?' + new URLSearchParams(
             Object.entries(params).filter(([, v]) => v !== undefined).map(([k, v]) => [k, String(v)])
         ).toString() : '';
-        return apiRequest<HostelRoom[]>(`/hostel/rooms/${q}`);
+        const payload = await apiRequest<HostelRoom[] | PaginatedResponse<HostelRoom>>(`/hostel/rooms/${q}`);
+        return normalizeArrayPayload(payload);
     },
     createRoom: (data: Partial<HostelRoom>) =>
         apiRequest<HostelRoom>('/hostel/rooms/', { method: 'POST', body: JSON.stringify(data) }),
@@ -4491,11 +4515,12 @@ export const hostelAPI = {
     deleteRoom: (id: string) => apiRequest<void>(`/hostel/rooms/${id}/`, { method: 'DELETE' }),
 
     // Allotments
-    getAllotments: (params?: { is_active?: boolean }) => {
+    getAllotments: async (params?: { is_active?: boolean }) => {
         const q = params ? '?' + new URLSearchParams(
             Object.entries(params).filter(([, v]) => v !== undefined).map(([k, v]) => [k, String(v)])
         ).toString() : '';
-        return apiRequest<HostelAllotment[]>(`/hostel/allotments/${q}`);
+        const payload = await apiRequest<HostelAllotment[] | PaginatedResponse<HostelAllotment>>(`/hostel/allotments/${q}`);
+        return normalizeArrayPayload(payload);
     },
     createAllotment: (data: Partial<HostelAllotment>) =>
         apiRequest<HostelAllotment>('/hostel/allotments/', { method: 'POST', body: JSON.stringify(data) }),
@@ -4551,7 +4576,10 @@ export const transportAPI = {
     getSummary: () => apiRequest<TransportSummary>('/transport/routes/summary/'),
 
     // Routes
-    getRoutes: () => apiRequest<TransportRoute[]>('/transport/routes/'),
+    getRoutes: async () => {
+        const payload = await apiRequest<TransportRoute[] | PaginatedResponse<TransportRoute>>('/transport/routes/');
+        return normalizeArrayPayload(payload);
+    },
     createRoute: (data: Partial<TransportRoute>) =>
         apiRequest<TransportRoute>('/transport/routes/', { method: 'POST', body: JSON.stringify(data) }),
     updateRoute: (id: string, data: Partial<TransportRoute>) =>
@@ -4559,7 +4587,10 @@ export const transportAPI = {
     deleteRoute: (id: string) => apiRequest<void>(`/transport/routes/${id}/`, { method: 'DELETE' }),
 
     // Vehicles
-    getVehicles: () => apiRequest<TransportVehicle[]>('/transport/vehicles/'),
+    getVehicles: async () => {
+        const payload = await apiRequest<TransportVehicle[] | PaginatedResponse<TransportVehicle>>('/transport/vehicles/');
+        return normalizeArrayPayload(payload);
+    },
     createVehicle: (data: Partial<TransportVehicle>) =>
         apiRequest<TransportVehicle>('/transport/vehicles/', { method: 'POST', body: JSON.stringify(data) }),
     updateVehicle: (id: string, data: Partial<TransportVehicle>) =>
@@ -4567,11 +4598,12 @@ export const transportAPI = {
     deleteVehicle: (id: string) => apiRequest<void>(`/transport/vehicles/${id}/`, { method: 'DELETE' }),
 
     // Assignments
-    getAssignments: (params?: { is_active?: boolean }) => {
+    getAssignments: async (params?: { is_active?: boolean }) => {
         const q = params ? '?' + new URLSearchParams(
             Object.entries(params).filter(([, v]) => v !== undefined).map(([k, v]) => [k, String(v)])
         ).toString() : '';
-        return apiRequest<TransportAssignment[]>(`/transport/assignments/${q}`);
+        const payload = await apiRequest<TransportAssignment[] | PaginatedResponse<TransportAssignment>>(`/transport/assignments/${q}`);
+        return normalizeArrayPayload(payload);
     },
     createAssignment: (data: Partial<TransportAssignment>) =>
         apiRequest<TransportAssignment>('/transport/assignments/', { method: 'POST', body: JSON.stringify(data) }),

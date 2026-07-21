@@ -166,6 +166,21 @@ export function PayrollManager() {
     };
 
     const totalNetSalary = slips.reduce((s, slip) => s + Number(slip.net_salary), 0);
+    const totalTds = slips.reduce((s, slip) => s + Number(slip.tds || 0), 0);
+    const totalRetirement = slips.reduce((s, slip) => s + Number(slip.pf_employee || 0) + Number(slip.ssf_employee || 0), 0);
+    const totalEmployerCost = slips.reduce((s, slip) => s + Number(slip.employer_cost || slip.gross_salary), 0);
+
+    const downloadPayrollRegister = () => {
+        const headers = ['Employee', 'Code', 'Basic (Rs.)', 'Gross (Rs.)', 'PF Employee (Rs.)', 'PF Employer (Rs.)', 'SSF Employee (Rs.)', 'SSF Employer (Rs.)', 'CIT (Rs.)', 'Insurance (Rs.)', 'TDS (Rs.)', 'Other Deductions (Rs.)', 'Net Salary (Rs.)', 'Employer Cost (Rs.)', 'Status'];
+        const rows = slips.map(s => [s.employee_name, s.employee_code || '', s.basic_salary, s.gross_salary, s.pf_employee, s.pf_employer, s.ssf_employee, s.ssf_employer, s.cit_deduction, s.insurance_deduction, s.tds, s.other_deduction, s.net_salary, s.employer_cost, s.status]);
+        const csv = [headers, ...rows].map(row => row.map(value => `"${String(value ?? '').replaceAll('"', '""')}"`).join(',')).join('\n');
+        const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `payroll_register_${selectedPeriod?.year}_${selectedPeriod?.month}.csv`;
+        link.click();
+        URL.revokeObjectURL(url);
+    };
 
     // Slip Detail View
     if (selectedPeriod) {
@@ -192,12 +207,13 @@ export function PayrollManager() {
                 </div>
 
                 {/* Summary row */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
                     {[
                         { icon: <Users className="h-5 w-5 text-indigo-600" />, label: 'Total Slips', value: slips.length, color: 'bg-indigo-50' },
-                        { icon: <DollarSign className="h-5 w-5 text-emerald-600" />, label: 'Total Net Payout', value: totalNetSalary.toLocaleString(), color: 'bg-emerald-50' },
-                        { icon: <CheckCheck className="h-5 w-5 text-blue-600" />, label: 'Paid', value: slips.filter(s => s.status === 'paid').length, color: 'bg-blue-50' },
-                        { icon: <FileText className="h-5 w-5 text-amber-600" />, label: 'Draft / Finalized', value: slips.filter(s => s.status !== 'paid').length, color: 'bg-amber-50' },
+                        { icon: <DollarSign className="h-5 w-5 text-emerald-600" />, label: 'Total Net Payout', value: `Rs. ${totalNetSalary.toLocaleString()}`, color: 'bg-emerald-50' },
+                        { icon: <FileText className="h-5 w-5 text-rose-600" />, label: 'TDS Payable', value: `Rs. ${totalTds.toLocaleString()}`, color: 'bg-rose-50' },
+                        { icon: <FileText className="h-5 w-5 text-blue-600" />, label: 'Employee PF / SSF', value: `Rs. ${totalRetirement.toLocaleString()}`, color: 'bg-blue-50' },
+                        { icon: <CheckCheck className="h-5 w-5 text-amber-600" />, label: 'Employer Cost', value: `Rs. ${totalEmployerCost.toLocaleString()}`, color: 'bg-amber-50' },
                     ].map((s, i) => (
                         <Card key={i} className="border-slate-200 shadow-sm">
                             <CardContent className="p-4 flex items-center gap-3">
@@ -233,6 +249,11 @@ export function PayrollManager() {
                         </Button>
                     </div>
                 )}
+                <div className="flex justify-end">
+                    <Button variant="outline" onClick={downloadPayrollRegister} disabled={!slips.length} className="gap-2 text-xs font-bold">
+                        <Download className="h-4 w-4" /> Download Standard Payroll Register
+                    </Button>
+                </div>
 
                 {/* Salary Slips Table */}
                 {slipsLoading ? (
@@ -256,7 +277,7 @@ export function PayrollManager() {
                             <table className="w-full text-sm">
                                 <thead className="bg-slate-50 border-b border-slate-100">
                                     <tr>
-                                        {['Employee', 'Department', 'Basic', 'Gross', 'Deductions', 'Net Salary', 'Status', ''].map(h => (
+                                        {['Employee', 'Department', 'Basic', 'Gross', 'PF / SSF', 'TDS', 'Deductions', 'Net Salary', 'Employer Cost', 'Status', ''].map(h => (
                                             <th key={h} className="px-4 py-2.5 text-left text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">
                                                 {h}
                                             </th>
@@ -275,10 +296,13 @@ export function PayrollManager() {
                                                 </div>
                                             </td>
                                             <td className="px-4 py-3 text-xs text-slate-500">{slip.department_name ?? '—'}</td>
-                                            <td className="px-4 py-3 text-xs font-medium text-slate-700">{Number(slip.basic_salary).toLocaleString()}</td>
-                                            <td className="px-4 py-3 text-xs font-medium text-slate-700">{Number(slip.gross_salary).toLocaleString()}</td>
-                                            <td className="px-4 py-3 text-xs font-medium text-red-600">{Number(slip.total_deductions).toLocaleString()}</td>
-                                            <td className="px-4 py-3 text-sm font-black text-emerald-700">{Number(slip.net_salary).toLocaleString()}</td>
+                                            <td className="px-4 py-3 text-xs font-medium text-slate-700">Rs. {Number(slip.basic_salary).toLocaleString()}</td>
+                                            <td className="px-4 py-3 text-xs font-medium text-slate-700">Rs. {Number(slip.gross_salary).toLocaleString()}</td>
+                                            <td className="px-4 py-3 text-xs font-medium text-blue-700">Rs. {(Number(slip.pf_employee || 0) + Number(slip.ssf_employee || 0)).toLocaleString()}</td>
+                                            <td className="px-4 py-3 text-xs font-medium text-rose-700">Rs. {Number(slip.tds || 0).toLocaleString()}</td>
+                                            <td className="px-4 py-3 text-xs font-medium text-red-600">Rs. {Number(slip.total_deductions).toLocaleString()}</td>
+                                            <td className="px-4 py-3 text-sm font-black text-emerald-700">Rs. {Number(slip.net_salary).toLocaleString()}</td>
+                                            <td className="px-4 py-3 text-xs font-bold text-amber-700">Rs. {Number(slip.employer_cost || slip.gross_salary).toLocaleString()}</td>
                                             <td className="px-4 py-3">
                                                 <Badge className={`text-[10px] font-bold px-2 py-0.5 ${SLIP_STATUS_COLOR[slip.status]}`}>
                                                     {slip.status.toUpperCase()}
