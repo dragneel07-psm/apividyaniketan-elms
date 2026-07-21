@@ -2045,8 +2045,7 @@ export const academicAPI = {
 
     // Subjects
     getSubjects: async () => {
-        const payload = await apiRequest<Subject[] | PaginatedResponse<Subject>>('/academic/subjects/');
-        return normalizeArrayPayload(payload);
+        return fetchAllPages<Subject>('/academic/subjects/');
     },
     getSubject: (id: number) => apiRequest<Subject>(`/academic/subjects/${id}/`),
     createSubject: (data: Partial<Subject> & { academic_class: number }) => apiRequest<Subject>('/academic/subjects/', {
@@ -2331,8 +2330,7 @@ export const academicAPI = {
 
     // Teachers
     getTeachers: async () => {
-        const payload = await apiRequest<Teacher[] | PaginatedResponse<Teacher>>('/academic/teachers/');
-        return normalizeArrayPayload(payload);
+        return fetchAllPages<Teacher>('/academic/teachers/');
     },
     getTeacher: (id: string) => apiRequest<Teacher>(`/academic/teachers/${id}/`),
     getMyTeacherProfile: () => apiRequest<Teacher>('/academic/teachers/me/'),
@@ -2364,8 +2362,7 @@ export const academicAPI = {
     // Students
     getStudents: async (params?: { section_id?: string }) => {
         const query = params?.section_id ? `?section=${params.section_id}` : '';
-        const payload = await apiRequest<Student[] | PaginatedResponse<Student>>(`/academic/students/${query}`);
-        return normalizeArrayPayload(payload);
+        return fetchAllPages<Student>(`/academic/students/${query}`);
     },
     getStudent: (id: string) => apiRequest<Student>(`/academic/students/${id}/`),
     getStudentProfileOverview: (id: string) => apiRequest<StudentProfileOverview>(`/academic/students/${id}/profile-overview/`),
