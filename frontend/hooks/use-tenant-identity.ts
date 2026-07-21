@@ -3,7 +3,7 @@
 // via any medium, is strictly prohibited. Proprietary and confidential.
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { getTenantFromSubdomain, isTenantHost } from '@/lib/tenant';
 
 type TenantIdentity = {
@@ -36,14 +36,16 @@ export function useTenantIdentity(): TenantIdentity {
     const [isLoading, setIsLoading] = useState(false);
     const [tenantExists, setTenantExists] = useState<boolean | null>(null);
 
-    const tenantSubdomain = useMemo(() => {
-        if (typeof window === 'undefined') return null;
-        return getTenantFromSubdomain(window.location.hostname);
-    }, []);
+    // Computed via effect (not useMemo) so the first client render matches
+    // the SSR-ed HTML (always `null`/`false`, since `window` isn't available
+    // server-side) — flipping to the real value in an effect avoids a
+    // hydration mismatch instead of causing one.
+    const [tenantSubdomain, setTenantSubdomain] = useState<string | null>(null);
+    const [isTenantContext, setIsTenantContext] = useState(false);
 
-    const isTenantContext = useMemo(() => {
-        if (typeof window === 'undefined') return false;
-        return isTenantHost(window.location.hostname);
+    useEffect(() => {
+        setTenantSubdomain(getTenantFromSubdomain(window.location.hostname));
+        setIsTenantContext(isTenantHost(window.location.hostname));
     }, []);
 
     useEffect(() => {
@@ -58,12 +60,15 @@ export function useTenantIdentity(): TenantIdentity {
         }
 
         const controller = new AbortController();
-        const fetchTenant = async () => {
+        const staleFallbackSchema = (tenantSubdomain || '').trim().toLowerCase();
+        const usedCachedSchema = Boolean(cachedSchema && initialSchema === cachedSchema.trim().toLowerCase());
+
+        const fetchTenant = async (schemaToCheck: string, isStaleCacheRetry: boolean) => {
             setIsLoading(true);
             try {
                 const headers: HeadersInit = {};
-                if (initialSchema) {
-                    headers['x-tenant-id'] = initialSchema;
+                if (schemaToCheck) {
+                    headers['x-tenant-id'] = schemaToCheck;
                 }
                 const response = await fetch('/api/core/tenant-check/', {
                     method: 'GET',
@@ -73,8 +78,19 @@ export function useTenantIdentity(): TenantIdentity {
                 });
 
                 if (!response.ok) {
-                    // 404 means the school subdomain is not provisioned in the DB
-                    if (response.status === 404) setTenantExists(false);
+                    if (response.status === 404) {
+                        // The cached tenant no longer resolves (e.g. re-provisioned under
+                        // a different/same schema after the cache was written) — clear the
+                        // stale cache and retry once against the live subdomain detection
+                        // before concluding the school truly isn't registered.
+                        if (!isStaleCacheRetry && usedCachedSchema && staleFallbackSchema && staleFallbackSchema !== schemaToCheck) {
+                            localStorage.removeItem('tenant_id');
+                            localStorage.removeItem('tenant_name');
+                            await fetchTenant(staleFallbackSchema, true);
+                            return;
+                        }
+                        setTenantExists(false);
+                    }
                     return;
                 }
 
@@ -107,7 +123,7 @@ export function useTenantIdentity(): TenantIdentity {
             }
         };
 
-        fetchTenant();
+        fetchTenant(initialSchema, false);
 
         return () => controller.abort();
     }, [isTenantContext, tenantSubdomain]);

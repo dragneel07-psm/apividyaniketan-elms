@@ -7,6 +7,13 @@ import { withSentryConfig } from "@sentry/nextjs";
 const nextConfig: NextConfig = {
   output: 'standalone',
 
+  // Pin the workspace root explicitly — without this, Turbopack's auto-detection
+  // can pick up an unrelated lockfile elsewhere on the machine (e.g. in the
+  // user's home directory) and serve the wrong project entirely.
+  turbopack: {
+    root: __dirname,
+  },
+
   // Prevent Next.js from stripping trailing slashes on proxied /api/ requests.
   // Django REST Framework requires trailing slashes; without this, Vercel sends
   // a 308 redirect which DRF answers with another redirect → infinite loop.
