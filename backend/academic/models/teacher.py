@@ -31,5 +31,12 @@ class Teacher(models.Model):
         "academic.AcademicClass", blank=True, related_name="assigned_teachers"
     )
 
+    class Meta:
+        # teacher_id tiebreaker: without a unique key in the ordering,
+        # paginating this queryset across multiple requests can return the
+        # same row twice or skip one, since Postgres doesn't guarantee
+        # stable ordering for an unordered SELECT across separate queries.
+        ordering = ["user__first_name", "user__last_name", "teacher_id"]
+
     def __str__(self):
         return f"{self.user.username} ({self.get_designation_display()})"

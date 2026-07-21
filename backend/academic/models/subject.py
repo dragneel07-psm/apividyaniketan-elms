@@ -40,7 +40,10 @@ class Subject(models.Model):
 
     class Meta:
         unique_together = ("name", "academic_class", "academic_year")
-        ordering = ["name"]
+        # `id` tiebreaker: "name" alone ties heavily (the same subject name
+        # repeats across every class), which breaks stable pagination across
+        # multiple requests the same way an unordered queryset would.
+        ordering = ["name", "id"]
 
     def __str__(self):
         year_label = self.academic_year.name if self.academic_year else "No Year"

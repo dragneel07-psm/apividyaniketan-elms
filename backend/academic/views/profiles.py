@@ -333,7 +333,12 @@ class StudentViewSet(TenantScopedQuerysetMixin, viewsets.ModelViewSet):
         "user__username",
     ]
     ordering_fields = ["user__first_name", "user__last_name", "academic_class__name"]
-    ordering = ["user__first_name"]
+    # student_id tiebreaker: DRF's OrderingFilter uses this view attribute
+    # over the model's Meta.ordering, so it needs the same unique tiebreaker
+    # — otherwise pagination across multiple requests can return the same
+    # row twice or skip one (Postgres doesn't guarantee stable ordering for
+    # ties across separate query executions).
+    ordering = ["user__first_name", "user__last_name", "student_id"]
     tenant_field = "user__tenant"  # Student is related to tenant through user
 
     def get_permissions(self):

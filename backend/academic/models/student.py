@@ -65,6 +65,12 @@ class Student(models.Model):
     )
 
     class Meta:
+        # A unique tiebreaker (student_id) is required, not optional — without
+        # one, paginating this queryset across multiple requests (e.g. a
+        # client walking all pages) can return the same row twice or skip one
+        # entirely, since Postgres doesn't guarantee stable ordering for an
+        # unordered SELECT across separate query executions.
+        ordering = ["user__first_name", "user__last_name", "student_id"]
         indexes = [
             models.Index(
                 fields=["academic_class", "section"], name="acad_stu_class_sec_idx"
