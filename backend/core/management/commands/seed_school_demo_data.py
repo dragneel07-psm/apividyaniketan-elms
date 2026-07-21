@@ -13,11 +13,12 @@ Usage:
 """
 
 import random
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 
 from django.core.management.base import BaseCommand, CommandError
 from django.db.models.signals import post_save, pre_save
+from django.utils import timezone
 from django_tenants.utils import schema_context
 
 from academic.models import AcademicClass, Section, Student, Teacher
@@ -43,6 +44,33 @@ CORE_SUBJECTS = [
     "Social Studies", "Computer Science", "Health & Physical Education",
 ]
 N_CLASS_TEACHERS = 11  # one per grade, Nursery -> Grade 8
+
+# (name, frequency, coa_income_code) tiered by grade level below
+FEE_TYPES = [
+    ("Tuition Fee", "monthly", "4100"),
+    ("Admission Fee", "one_time", "4110"),
+    ("Examination Fee", "term", "4120"),
+    ("Transport Fee", "monthly", "4130"),
+]
+FEE_TIERS = {
+    # class name set -> {fee name: amount}
+    "early_years": {"Tuition Fee": Decimal("3000"), "Admission Fee": Decimal("4000"), "Examination Fee": Decimal("500"), "Transport Fee": Decimal("1200")},
+    "primary": {"Tuition Fee": Decimal("4000"), "Admission Fee": Decimal("5000"), "Examination Fee": Decimal("800"), "Transport Fee": Decimal("1500")},
+    "middle": {"Tuition Fee": Decimal("5000"), "Admission Fee": Decimal("6000"), "Examination Fee": Decimal("1000"), "Transport Fee": Decimal("1800")},
+}
+PAYMENT_METHOD_ACCOUNT = {"cash": "1010", "bank_transfer": "1020", "cheque": "1020", "card": "1020", "online": "1030"}
+EXPENSE_CATEGORY_ACCOUNT = {
+    "salary": "5100", "maintenance": "5340", "utilities": "5320",
+    "supplies": "5310", "transport": "5350", "events": "5230", "other": "5900",
+}
+EXPENSE_ROWS = [
+    ("Teaching Staff Salary - Monthly", "salary", Decimal("450000")),
+    ("Electricity & Water Bill", "utilities", Decimal("18000")),
+    ("Building & Furniture Repairs", "maintenance", Decimal("12500")),
+    ("Classroom & Office Supplies", "supplies", Decimal("8500")),
+    ("School Bus Fuel & Maintenance", "transport", Decimal("22000")),
+    ("Annual Sports Day Expenses", "events", Decimal("15000")),
+]
 
 GRADE_LEVELS = [
     "Nursery", "LKG", "UKG",
@@ -112,6 +140,7 @@ class Command(BaseCommand):
             self._seed_students(tenant, n_students, classes, rng)
             self._seed_hr_records(tenant)
             self._seed_academic_assignments(classes)
+            self._seed_finance_records(tenant, classes, rng)
 
         self.stdout.write(self.style.SUCCESS(f"\nDemo data seeded into schema={schema}."))
         self.stdout.write("Credentials (shared per role tier):")
@@ -320,5 +349,175 @@ class Command(BaseCommand):
             self.style.SUCCESS(
                 f"Academic: {subjects_created} subject assignments created, "
                 f"{class_teacher_count} class teachers assigned (Nursery -> Grade 8)."
+            )
+        )
+
+    def _seed_finance_records(self, tenant: Tenant, classes: list[Section], rng: random.Random) -> None:
+        # Fee structures/payments/expenses are the simple layer; Trial Balance
+        # and the NAS Financial Statements read ONLY from posted
+        # JournalEntry/JournalLine rows (not Payment/Expense directly), so a
+        # matching double-entry journal entry is created for every payment
+        # and expense below — otherwise those two reports stay empty.
+        from billing.bill_numbering import allocate_bill_number
+        from billing.models_school import Expense, FeeStructure, Payment, StudentFee
+        from billing_school.models_nas import ChartOfAccount, FundAccount, JournalEntry, JournalLine
+        from billing_school.views_nas import _seed_default_coa
+
+        tenant_fields_changed = []
+        if not tenant.fiscal_year_bs:
+            tenant.fiscal_year_bs = "2082/83"
+            tenant_fields_changed.append("fiscal_year_bs")
+        if not tenant.pan_number:
+            tenant.pan_number = "301234567"
+            tenant_fields_changed.append("pan_number")
+        if not tenant.vat_number:
+            tenant.vat_number = "600987654"
+            tenant_fields_changed.append("vat_number")
+        if tenant_fields_changed:
+            tenant.save(update_fields=tenant_fields_changed)
+
+        coa_created = _seed_default_coa(tenant)
+        accounts = {a.account_code: a for a in ChartOfAccount.objects.filter(tenant=tenant)}
+        admin_user = UserAccount.objects.filter(tenant=tenant, role="admin").order_by("email").first()
+
+        def tier_for(cls_name: str) -> str:
+            if cls_name in {"Nursery", "LKG", "UKG"}:
+                return "early_years"
+            if cls_name in {"Grade 6", "Grade 7", "Grade 8"}:
+                return "middle"
+            return "primary"
+
+        fee_structures_created = 0
+        class_fee_structures: dict = {}
+        for section in classes:
+            cls = section.academic_class
+            amounts = FEE_TIERS[tier_for(cls.name)]
+            class_fee_structures[cls.id] = {}
+            for name, frequency, _coa_code in FEE_TYPES:
+                fs, created = FeeStructure.objects.get_or_create(
+                    tenant=tenant, name=name, academic_class=cls,
+                    defaults={"amount": amounts[name], "frequency": frequency},
+                )
+                class_fee_structures[cls.id][name] = fs
+                if created:
+                    fee_structures_created += 1
+
+        today = timezone.localdate()
+        status_cycle = ["paid"] * 6 + ["partial"] * 2 + ["overdue"] * 1 + ["pending"] * 1  # 60/20/10/10
+        student_fees_created = 0
+        payments_created = 0
+        payment_rows_for_journal = []
+
+        students = list(
+            Student.objects.select_related("user", "academic_class")
+            .filter(user__tenant=tenant, academic_class__isnull=False)
+        )
+        for idx, student in enumerate(students):
+            cls_fees = class_fee_structures.get(student.academic_class_id)
+            if not cls_fees:
+                continue
+            for fee_idx, (name, frequency, coa_code) in enumerate(FEE_TYPES):
+                fs = cls_fees[name]
+                status = status_cycle[(idx + fee_idx) % len(status_cycle)]
+                due_date = today - timedelta(days=15) if status == "overdue" else today + timedelta(days=15)
+                amount_due = fs.amount
+                if status == "paid":
+                    amount_paid = amount_due
+                elif status == "partial":
+                    amount_paid = (amount_due / 2).quantize(Decimal("1"))
+                else:
+                    amount_paid = Decimal("0")
+
+                student_fee, created = StudentFee.objects.get_or_create(
+                    tenant=tenant, student=student, fee_structure=fs,
+                    defaults={
+                        "amount_due": amount_due, "amount_paid": amount_paid,
+                        "due_date": due_date, "status": status,
+                    },
+                )
+                if created:
+                    student_fees_created += 1
+                if not created or amount_paid <= 0:
+                    continue
+
+                method = rng.choice(["cash", "bank_transfer", "online"])
+                payment = Payment.objects.create(
+                    tenant=tenant, student=student, student_fee=student_fee,
+                    amount=amount_paid, method=method, recorded_by=admin_user,
+                )
+                payment.bill_number = allocate_bill_number(tenant)
+                backdated = timezone.now() - timedelta(days=rng.randint(0, 90))
+                Payment.objects.filter(pk=payment.pk).update(
+                    bill_number=payment.bill_number, payment_date=backdated
+                )
+                payment.payment_date = backdated
+                payments_created += 1
+                payment_rows_for_journal.append((payment, coa_code, method))
+
+        expenses_created = 0
+        expense_rows_for_journal = []
+        for title, category, amount in EXPENSE_ROWS:
+            expense, created = Expense.objects.get_or_create(
+                tenant=tenant, title=title, category=category,
+                defaults={
+                    "amount": amount,
+                    "date": today - timedelta(days=rng.randint(1, 90)),
+                    "recorded_by": admin_user,
+                },
+            )
+            if created:
+                expenses_created += 1
+                expense_rows_for_journal.append(expense)
+
+        entries_created = 0
+        for payment, income_code, method in payment_rows_for_journal:
+            debit_account = accounts.get(PAYMENT_METHOD_ACCOUNT[method])
+            credit_account = accounts.get(income_code)
+            if not debit_account or not credit_account:
+                continue
+            entry = JournalEntry.objects.create(
+                tenant=tenant,
+                date_ad=payment.payment_date.date(),
+                description=f"Fee receipt - {payment.student.user.get_full_name()}",
+                entry_type="fee_receipt",
+                reference=payment.bill_number,
+            )
+            JournalLine.objects.create(entry=entry, account=debit_account, debit=payment.amount, credit=Decimal("0"))
+            JournalLine.objects.create(entry=entry, account=credit_account, debit=Decimal("0"), credit=payment.amount)
+            entry.post()
+            entries_created += 1
+
+        for expense in expense_rows_for_journal:
+            debit_account = accounts.get(EXPENSE_CATEGORY_ACCOUNT.get(expense.category, "5900"))
+            credit_account = accounts.get("1020")
+            if not debit_account or not credit_account:
+                continue
+            entry = JournalEntry.objects.create(
+                tenant=tenant, date_ad=expense.date, description=expense.title, entry_type="expense",
+            )
+            JournalLine.objects.create(entry=entry, account=debit_account, debit=expense.amount, credit=Decimal("0"))
+            JournalLine.objects.create(entry=entry, account=credit_account, debit=Decimal("0"), credit=expense.amount)
+            entry.post()
+            entries_created += 1
+
+        fund_created = 0
+        for name, fund_type, coa_code, opening in (
+            ("General Fund", "unrestricted", "3100", Decimal("500000")),
+            ("Scholarship Fund", "restricted", "3200", Decimal("100000")),
+        ):
+            coa = accounts.get(coa_code)
+            if not coa:
+                continue
+            _, created = FundAccount.objects.get_or_create(
+                tenant=tenant, name=name,
+                defaults={"fund_type": fund_type, "linked_account": coa, "opening_balance": opening},
+            )
+            fund_created += int(created)
+
+        self.stdout.write(
+            self.style.SUCCESS(
+                f"Finance: {fee_structures_created} fee structures, {student_fees_created} student fees, "
+                f"{payments_created} payments, {expenses_created} expenses, {coa_created} COA accounts, "
+                f"{entries_created} posted journal entries, {fund_created} fund accounts."
             )
         )

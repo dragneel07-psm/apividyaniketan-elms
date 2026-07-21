@@ -52,9 +52,15 @@ class LeaderboardViewSet(viewsets.ViewSet):
         try:
             current_student = Student.objects.get(user=request.user)
         except Student.DoesNotExist:
-            return Response(
-                {"error": "Leaderboard only available for students"}, status=403
-            )
+            # Admins/staff can view the school-wide leaderboard (read-only,
+            # no "my rank" personalization) — they just don't have a class
+            # of their own, so class-scoped requests still don't make sense
+            # for them.
+            current_student = None
+            if not _is_admin(request.user):
+                return Response(
+                    {"error": "Leaderboard only available for students"}, status=403
+                )
 
         scope = request.query_params.get("scope", "class")
         limit = min(int(request.query_params.get("limit", 20) or 20), 50)
@@ -70,6 +76,11 @@ class LeaderboardViewSet(viewsets.ViewSet):
                 else Student.objects.none()
             )
         else:
+            if not current_student:
+                return Response(
+                    {"error": "Class-scoped leaderboard requires a student profile; use scope=school"},
+                    status=400,
+                )
             if not current_student.academic_class:
                 return Response(
                     {"error": "Student not assigned to a class"}, status=400
@@ -127,7 +138,7 @@ class LeaderboardViewSet(viewsets.ViewSet):
                 "current_level": profile.current_level,
                 "current_streak": profile.current_streak,
                 "badges_count": badge_counts.get(sid, 0),
-                "is_me": sid == str(current_student.student_id),
+                "is_me": bool(current_student) and sid == str(current_student.student_id),
             }
             if entry["is_me"]:
                 my_rank = rank
