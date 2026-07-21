@@ -1,0 +1,13 @@
+User-agent: *
+Allow: /
+Allow: /school/
+
+# Block internal dashboards from indexing
+Disallow: /admin/
+Disallow: /teacher/
+Disallow: /student/
+Disallow: /parent/
+Disallow: /saas/
+Disallow: /api/
+
+Sitemap: https://manyaltech.com/sitemap.xml

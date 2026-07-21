@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+  <!-- Rounded square background -->
+  <rect width="32" height="32" rx="7" fill="#4f46e5"/>
+
+  <!-- Open book - left page -->
+  <path d="M16 9 C16 9 11 8.5 7.5 10 L7.5 23 C11 21.5 16 22 16 22 Z" fill="white" opacity="0.9"/>
+
+  <!-- Open book - right page -->
+  <path d="M16 9 C16 9 21 8.5 24.5 10 L24.5 23 C21 21.5 16 22 16 22 Z" fill="white" opacity="0.75"/>
+
+  <!-- Book spine / center line -->
+  <line x1="16" y1="9" x2="16" y2="22" stroke="#c7d2fe" stroke-width="0.75"/>
+
+  <!-- AI sparkle dots - top right -->
+  <circle cx="23" cy="7.5" r="1.5" fill="#f59e0b"/>
+  <circle cx="26" cy="5.5" r="1" fill="#f59e0b" opacity="0.7"/>
+  <circle cx="25.5" cy="9.5" r="0.75" fill="#f59e0b" opacity="0.5"/>
+</svg>

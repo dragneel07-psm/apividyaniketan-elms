@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Scholarship Register</title>
+    <style>
+        @page { size: A4; margin: 1.5cm; }
+        body { font-family: 'Helvetica', 'Arial', sans-serif; color: #111827; font-size: 10px; line-height: 1.4; margin: 0; }
+
+        .header { border-bottom: 1.5px solid #111827; padding-bottom: 10px; margin-bottom: 14px; }
+        .header-row { display: table; width: 100%; }
+        .header-cell { display: table-cell; vertical-align: top; }
+        .header-cell.logo { width: 60px; }
+        .header-cell.logo img { max-width: 50px; max-height: 50px; }
+        .header-cell.center { text-align: center; }
+        .header-cell.right { text-align: right; width: 140px; font-size: 9px; }
+
+        .school-name { font-size: 17px; font-weight: 700; text-transform: uppercase; margin: 0; }
+        .school-line { font-size: 9px; color: #4b5563; }
+        .pan-line { font-size: 9px; font-weight: 700; margin-top: 3px; }
+
+        h1.title { font-size: 14px; text-transform: uppercase; letter-spacing: 1.5px; color: #1e3a8a; margin: 4px 0 0; }
+        .fy { color: #6b7280; font-size: 10px; }
+
+        .summary { display: table; width: 100%; margin: 12px 0 18px; border: 1px solid #d1d5db; border-radius: 6px; overflow: hidden; }
+        .summary-cell { display: table-cell; padding: 10px 14px; width: 50%; background: #f9fafb; }
+        .summary-cell + .summary-cell { border-left: 1px solid #d1d5db; }
+        .summary-label { text-transform: uppercase; font-size: 9px; color: #6b7280; letter-spacing: 0.5px; }
+        .summary-value { font-size: 20px; font-weight: 700; color: #111827; }
+
+        .group { margin-bottom: 14px; page-break-inside: avoid; }
+        .group-header {
+            background: #1e3a8a; color: #fff; padding: 6px 10px;
+            font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;
+            display: table; width: 100%;
+        }
+        .group-header .cat { display: table-cell; }
+        .group-header .src { display: table-cell; text-align: right; font-weight: 400; opacity: 0.9; font-size: 9.5px; }
+        .group-meta {
+            background: #eff6ff; padding: 5px 10px; font-size: 9.5px; color: #1e40af;
+            border-bottom: 1px solid #bfdbfe;
+        }
+        table.awards { width: 100%; border-collapse: collapse; }
+        .awards th {
+            background: #f3f4f6; font-size: 8.5px; text-transform: uppercase;
+            color: #374151; padding: 5px 8px; text-align: left; border-bottom: 1px solid #d1d5db;
+        }
+        .awards th.num, .awards td.num { text-align: right; font-variant-numeric: tabular-nums; }
+        .awards td { padding: 5px 8px; border-bottom: 1px solid #e5e7eb; font-size: 9.5px; }
+        .awards tfoot td { font-weight: 700; background: #f9fafb; border-top: 1.5px solid #111827; }
+
+        .sig { display: table; width: 100%; margin-top: 36px; page-break-inside: avoid; }
+        .sig .cell { display: table-cell; width: 50%; text-align: center; font-size: 9px; color: #4b5563; }
+        .sig .line { border-top: 1px solid #6b7280; width: 75%; margin: 30px auto 4px; }
+        .sig .name { font-weight: 700; color: #111827; font-size: 10px; }
+        .sig .role { font-size: 8.5px; }
+
+        .footer { text-align: center; font-size: 8.5px; color: #6b7280; margin-top: 16px; border-top: 1px solid #e5e7eb; padding-top: 6px; }
+        .note { font-size: 8.5px; color: #6b7280; font-style: italic; margin-bottom: 10px; }
+        .empty { text-align: center; padding: 40px; color: #94a3b8; font-style: italic; }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <div class="header-row">
+        <div class="header-cell logo">
+            {% if school_logo %}<img src="{{ school_logo }}" alt="logo" />{% endif %}
+        </div>
+        <div class="header-cell center">
+            <div class="school-name">{{ school_name }}</div>
+            {% if school_address %}<div class="school-line">{{ school_address }}</div>{% endif %}
+            {% if school_pan %}<div class="pan-line">PAN: {{ school_pan }}</div>{% endif %}
+            <h1 class="title">Scholarship Register</h1>
+            {% if fiscal_year_bs %}<div class="fy">Fiscal Year BS: {{ fiscal_year_bs }}</div>{% endif %}
+        </div>
+        <div class="header-cell right">
+            <div>Generated</div>
+            <div style="font-weight:700;">{{ generated_on }}</div>
+        </div>
+    </div>
+</div>
+
+<div class="summary">
+    <div class="summary-cell">
+        <div class="summary-label">Total Awards</div>
+        <div class="summary-value">{{ grand_count }}</div>
+    </div>
+    <div class="summary-cell">
+        <div class="summary-label">Total Amount Awarded</div>
+        <div class="summary-value">{{ currency }} {{ grand_amount }}</div>
+    </div>
+</div>
+
+<div class="note">
+    Aggregates every fee record linked to a scholarship-tagged discount,
+    grouped by category and funding source.
+</div>
+
+{% if groups %}
+    {% for g in groups %}
+        <div class="group">
+            <div class="group-header">
+                <span class="cat">{{ g.category_label }}</span>
+                <span class="src">Source: {{ g.source_label }}</span>
+            </div>
+            <div class="group-meta">
+                {{ g.count }} award{{ g.count|pluralize }} &nbsp;·&nbsp;
+                Total: {{ currency }} {{ g.amount }}
+            </div>
+            <table class="awards">
+                <thead>
+                    <tr>
+                        <th>Student</th>
+                        <th>Class</th>
+                        <th>Fee Item</th>
+                        <th>Scholarship</th>
+                        <th>Due Date</th>
+                        <th class="num">Amount</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for a in g.awards %}
+                        <tr>
+                            <td>{{ a.student_name }}</td>
+                            <td>{{ a.class }}</td>
+                            <td>{{ a.fee_name }}</td>
+                            <td>{{ a.discount_name }}</td>
+                            <td>{{ a.due_date }}</td>
+                            <td class="num">{{ currency }} {{ a.amount }}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <td colspan="5">Subtotal</td>
+                        <td class="num">{{ currency }} {{ g.amount }}</td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    {% endfor %}
+{% else %}
+    <div class="empty">
+        No scholarship awards recorded for this period.
+    </div>
+{% endif %}
+
+<div class="sig">
+    <div class="cell">
+        <div class="line"></div>
+        <div class="name">{{ accountant_name|default:"—" }}</div>
+        <div class="role">Prepared by — Accountant</div>
+    </div>
+    <div class="cell">
+        <div class="line"></div>
+        <div class="name">{{ principal_name|default:"—" }}</div>
+        <div class="role">Verified by — Principal</div>
+    </div>
+</div>
+
+<div class="footer">
+    Computer-generated register. {{ school_name }} &nbsp;·&nbsp; PAN {{ school_pan|default:"—" }}
+</div>
+
+</body>
+</html>

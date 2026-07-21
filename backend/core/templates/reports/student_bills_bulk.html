@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Fee Bills — {{ school_name }}</title>
+    <style>
+        @page { size: A5; margin: 1.2cm; }
+        body { font-family: 'Helvetica', 'Arial', sans-serif; color: #111827; font-size: 10.5px; line-height: 1.45; margin: 0; }
+
+        .bill { border: 1.5px solid #111827; padding: 0; page-break-after: always; }
+        .bill:last-of-type { page-break-after: auto; }
+
+        .head { border-bottom: 1.5px solid #111827; padding: 12px 14px 10px; }
+        .head-row { display: table; width: 100%; }
+        .head-cell { display: table-cell; vertical-align: top; }
+        .head-cell.logo { width: 56px; }
+        .head-cell.logo img { max-width: 50px; max-height: 50px; }
+        .head-cell.center { text-align: center; }
+        .head-cell.right { text-align: right; width: 120px; font-size: 9.5px; }
+        .school-name { font-size: 17px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; margin: 0 0 2px; }
+        .school-line { font-size: 9.5px; color: #4b5563; margin: 1px 0; }
+        .pan-line { margin-top: 4px; font-size: 9.5px; font-weight: 700; }
+
+        .title-bar { background: #b91c1c; color: #ffffff; text-align: center; padding: 5px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 2px; }
+
+        .meta { display: table; width: 100%; border-bottom: 1px solid #d1d5db; }
+        .meta .cell { display: table-cell; padding: 7px 14px; width: 50%; font-size: 10px; vertical-align: top; }
+        .meta .cell.right { border-left: 1px solid #d1d5db; }
+        .meta .label { color: #6b7280; text-transform: uppercase; font-size: 8.5px; letter-spacing: 0.5px; display: inline-block; min-width: 70px; }
+        .meta .value { font-weight: 700; }
+
+        .customer { padding: 9px 14px; border-bottom: 1px solid #d1d5db; }
+        .customer .row { margin: 2px 0; }
+        .customer .label { color: #6b7280; text-transform: uppercase; font-size: 8.5px; letter-spacing: 0.5px; display: inline-block; min-width: 70px; }
+        .customer .value { font-weight: 700; }
+
+        .items { width: 100%; border-collapse: collapse; font-size: 10px; }
+        .items th { background: #f3f4f6; border-bottom: 1.5px solid #111827; padding: 6px 8px; text-align: left; font-size: 9px; text-transform: uppercase; letter-spacing: 0.5px; color: #374151; }
+        .items th.num, .items td.num { text-align: right; font-variant-numeric: tabular-nums; }
+        .items td { padding: 7px 8px; border-bottom: 1px solid #e5e7eb; }
+        .items tr.subtotal td { font-weight: 600; background: #f9fafb; }
+        .items tr.balance td { font-weight: 700; background: #fee2e2; color: #991b1b; font-size: 12.5px; border-top: 2px solid #b91c1c; }
+
+        .words { padding: 9px 14px; border-bottom: 1px solid #d1d5db; font-size: 9.5px; }
+        .words .label { color: #6b7280; text-transform: uppercase; font-size: 8.5px; letter-spacing: 0.5px; display: block; margin-bottom: 2px; }
+        .words .value { font-weight: 700; font-style: italic; }
+
+        .sig { display: table; width: 100%; padding: 14px; }
+        .sig .cell { display: table-cell; width: 50%; text-align: center; font-size: 9px; color: #4b5563; vertical-align: bottom; }
+        .sig .line { border-top: 1px solid #6b7280; width: 75%; margin: 30px auto 4px; }
+        .sig .name { font-weight: 700; color: #111827; font-size: 10px; }
+        .sig .role { font-size: 8.5px; }
+
+        .footer { text-align: center; font-size: 8.5px; color: #6b7280; padding: 6px 14px 9px; border-top: 1px solid #e5e7eb; }
+    </style>
+</head>
+<body>
+{% for b in bills %}
+<div class="bill">
+
+    <div class="head">
+        <div class="head-row">
+            <div class="head-cell logo">
+                {% if school_logo %}<img src="{{ school_logo }}" alt="logo" />{% endif %}
+            </div>
+            <div class="head-cell center">
+                <div class="school-name">{{ school_name }}</div>
+                {% if school_address %}<div class="school-line">{{ school_address }}</div>{% endif %}
+                {% if school_phone %}<div class="school-line">Tel: {{ school_phone }}</div>{% endif %}
+                {% if school_pan %}<div class="pan-line">PAN: {{ school_pan }}</div>{% endif %}
+            </div>
+            <div class="head-cell right">
+                {% if fiscal_year_bs %}<div>FY: {{ fiscal_year_bs }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="title-bar">FEE BILL — PAYMENT DUE</div>
+
+    <div class="meta">
+        <div class="cell">
+            <div><span class="label">Bill No.</span> <span class="value">{{ b.bill_number }}</span></div>
+            <div><span class="label">Status</span> <span class="value">{{ b.status }}</span></div>
+        </div>
+        <div class="cell right">
+            <div><span class="label">Due Date</span> <span class="value">{{ b.due_date }}</span></div>
+            {% if b.due_date_bs %}<div><span class="label">Due (BS)</span> <span class="value">{{ b.due_date_bs }}</span></div>{% endif %}
+        </div>
+    </div>
+
+    <div class="customer">
+        <div class="row"><span class="label">Bill To</span> <span class="value">{{ b.student_name|default:"—" }}</span></div>
+        {% if b.student_id %}<div class="row"><span class="label">Student ID</span> <span class="value">{{ b.student_id }}</span></div>{% endif %}
+        {% if b.class_name %}<div class="row"><span class="label">Class</span> <span class="value">{{ b.class_name }}</span></div>{% endif %}
+    </div>
+
+    <table class="items">
+        <thead>
+            <tr><th>S.N.</th><th>Particulars</th><th class="num">Amount</th></tr>
+        </thead>
+        <tbody>
+            {% if b.fee_heads %}
+                {% for h in b.fee_heads %}
+                    <tr><td>{{ forloop.counter }}</td><td>{{ h.name }}</td><td class="num">{{ currency }} {{ h.amount }}</td></tr>
+                {% endfor %}
+            {% else %}
+                <tr><td>1</td><td>{{ b.fee_title }}</td><td class="num">{{ currency }} {{ b.amount_due }}</td></tr>
+            {% endif %}
+            {% if b.late_fee and b.late_fee != "0.00" %}
+                <tr><td>{% if b.fee_heads %}{{ b.fee_heads|length|add:"1" }}{% else %}2{% endif %}</td><td>Late Fee Surcharge</td><td class="num">{{ currency }} {{ b.late_fee }}</td></tr>
+            {% endif %}
+            <tr class="subtotal"><td colspan="2">Total Charged</td><td class="num">{{ currency }} {{ b.amount_due }}</td></tr>
+            {% if b.amount_paid and b.amount_paid != "0.00" %}
+                <tr class="subtotal"><td colspan="2">Less: Amount Paid</td><td class="num">– {{ currency }} {{ b.amount_paid }}</td></tr>
+            {% endif %}
+            <tr class="balance"><td colspan="2">Balance Due</td><td class="num">{{ currency }} {{ b.balance }}</td></tr>
+        </tbody>
+    </table>
+
+    {% if b.amount_words %}
+    <div class="words">
+        <span class="label">Balance in Words</span>
+        <span class="value">{{ currency }} {{ b.amount_words }}</span>
+    </div>
+    {% endif %}
+
+    <div class="sig">
+        <div class="cell">
+            <div class="line"></div>
+            <div class="name">{{ accountant_name|default:"—" }}</div>
+            <div class="role">Accountant</div>
+        </div>
+        <div class="cell">
+            <div class="line"></div>
+            <div class="name">{{ principal_name|default:"—" }}</div>
+            <div class="role">Principal</div>
+        </div>
+    </div>
+
+    <div class="footer">
+        Generated on {{ generated_on }}.
+    </div>
+
+</div>
+{% endfor %}
+</body>
+</html>

@@ -1,0 +1,26 @@
+[phases.setup]
+aptPkgs = [
+    "...",
+    "build-essential",
+    "libcairo2-dev",
+    "pkg-config",
+    "python3-dev",
+    "python3-pip",
+    "python3-venv",
+    "libpango1.0-dev",
+    "libpangoft2-1.0-0",
+    "libharfbuzz-dev",
+    "libffi-dev",
+    "shared-mime-info",
+    "fonts-dejavu-core",
+]
+
+[variables]
+C_INCLUDE_PATH = "/usr/include"
+CPLUS_INCLUDE_PATH = "/usr/include"
+
+[phases.install]
+cmds = ["python3 -m venv --copies /opt/venv && /opt/venv/bin/pip install setuptools && /opt/venv/bin/pip install -r backend/requirements.txt"]
+
+[start]
+cmd = "bash scripts/railway-start-web.sh"

@@ -1,0 +1,18 @@
+# Copyright (c) 2024-2026 Pramod Singh Manyal. All rights reserved.
+# Formatting/linting configuration shared by developers and CI.
+
+[tool.black]
+# Black's default excludes don't cover non-standard venv names.
+extend-exclude = '''
+/(
+    \.venv_py311_backup
+)/
+'''
+
+[tool.isort]
+profile = "black"
+extend_skip = [".venv", ".venv_py311_backup"]
+
+[tool.flake8]
+# flake8 doesn't read pyproject natively; kept here for documentation.
+# CI uses: flake8 --select=E9,F63,F7,F82

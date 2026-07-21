@@ -1,0 +1,17 @@
+__pycache__
+*.py[cod]
+*$py.class
+.venv
+venv
+ENV
+env
+.env
+.env.example
+db.sqlite3
+school_demo.sqlite3
+.git
+.gitignore
+Dockerfile
+.dockerignore
+/media
+/static

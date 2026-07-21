@@ -1,0 +1,101 @@
+{
+  "description": "Golden grading cases. Bands are deliberately generous: they catch a broken or wildly miscalibrated grader, not single-point disagreements. Extend with real anonymized submissions over time.",
+  "cases": [
+    {
+      "id": "photosynthesis-perfect",
+      "question": "Explain the process of photosynthesis and where it takes place.",
+      "student_answer": "Photosynthesis is the process by which green plants convert sunlight, water and carbon dioxide into glucose and oxygen. It takes place in the chloroplasts of plant cells, specifically using the chlorophyll pigment which absorbs light energy. The light-dependent reactions occur in the thylakoid membranes, while the Calvin cycle occurs in the stroma.",
+      "correct_answer": "Plants convert light energy, water and CO2 into glucose and oxygen in the chloroplasts.",
+      "total_points": 10,
+      "expected": { "min_score": 8, "max_score": 10 }
+    },
+    {
+      "id": "photosynthesis-empty",
+      "question": "Explain the process of photosynthesis and where it takes place.",
+      "student_answer": "I don't know.",
+      "correct_answer": "Plants convert light energy, water and CO2 into glucose and oxygen in the chloroplasts.",
+      "total_points": 10,
+      "expected": { "min_score": 0, "max_score": 2 }
+    },
+    {
+      "id": "photosynthesis-wrong",
+      "question": "Explain the process of photosynthesis and where it takes place.",
+      "student_answer": "Photosynthesis is when animals breathe in oxygen and breathe out carbon dioxide during the night in their lungs.",
+      "correct_answer": "Plants convert light energy, water and CO2 into glucose and oxygen in the chloroplasts.",
+      "total_points": 10,
+      "expected": { "min_score": 0, "max_score": 3 }
+    },
+    {
+      "id": "photosynthesis-partial",
+      "question": "Explain the process of photosynthesis and where it takes place.",
+      "student_answer": "Plants use sunlight to make their food. It happens in the leaves.",
+      "correct_answer": "Plants convert light energy, water and CO2 into glucose and oxygen in the chloroplasts.",
+      "total_points": 10,
+      "expected": { "min_score": 3, "max_score": 8 }
+    },
+    {
+      "id": "fractions-perfect",
+      "question": "Add the fractions 1/4 + 2/3 and show your working.",
+      "student_answer": "To add 1/4 and 2/3 I need a common denominator, which is 12. 1/4 = 3/12 and 2/3 = 8/12. So 3/12 + 8/12 = 11/12.",
+      "correct_answer": "11/12, using common denominator 12.",
+      "total_points": 5,
+      "expected": { "min_score": 4, "max_score": 5 }
+    },
+    {
+      "id": "fractions-wrong-method",
+      "question": "Add the fractions 1/4 + 2/3 and show your working.",
+      "student_answer": "1/4 + 2/3 = 3/7 because you add the tops and add the bottoms.",
+      "correct_answer": "11/12, using common denominator 12.",
+      "total_points": 5,
+      "expected": { "min_score": 0, "max_score": 2 }
+    },
+    {
+      "id": "ww2-causes-good",
+      "question": "Describe two major causes of the Second World War.",
+      "student_answer": "One major cause was the Treaty of Versailles, which imposed harsh reparations on Germany and created resentment that helped the Nazi party rise to power. Another was the policy of appeasement, where Britain and France allowed Hitler to annex territory like the Sudetenland without consequences, encouraging further aggression.",
+      "correct_answer": "Acceptable causes include: Treaty of Versailles, rise of fascism, appeasement, expansionism, the Great Depression.",
+      "total_points": 10,
+      "expected": { "min_score": 8, "max_score": 10 }
+    },
+    {
+      "id": "ww2-causes-off-topic",
+      "question": "Describe two major causes of the Second World War.",
+      "student_answer": "The Second World War was fought between 1939 and 1945 and many countries participated in it. It ended when Japan surrendered.",
+      "correct_answer": "Acceptable causes include: Treaty of Versailles, rise of fascism, appeasement, expansionism, the Great Depression.",
+      "total_points": 10,
+      "expected": { "min_score": 0, "max_score": 4 }
+    },
+    {
+      "id": "water-cycle-keyword",
+      "question": "Name and briefly describe the three main stages of the water cycle.",
+      "student_answer": "Evaporation is when the sun heats water and it turns into vapour. Condensation is when the vapour cools into clouds. Precipitation is when water falls as rain or snow.",
+      "correct_answer": "Evaporation, condensation, precipitation.",
+      "total_points": 6,
+      "expected": { "min_score": 5, "max_score": 6 }
+    },
+    {
+      "id": "water-cycle-one-stage",
+      "question": "Name and briefly describe the three main stages of the water cycle.",
+      "student_answer": "Rain falls from clouds.",
+      "correct_answer": "Evaporation, condensation, precipitation.",
+      "total_points": 6,
+      "expected": { "min_score": 0, "max_score": 3 }
+    },
+    {
+      "id": "newton-second-law",
+      "question": "State Newton's second law of motion and give its formula.",
+      "student_answer": "Newton's second law says the acceleration of an object depends on the net force applied and its mass. The formula is F = ma, force equals mass times acceleration.",
+      "correct_answer": "F = ma; acceleration is proportional to net force and inversely proportional to mass.",
+      "total_points": 5,
+      "expected": { "min_score": 4, "max_score": 5 }
+    },
+    {
+      "id": "newton-confused-with-third",
+      "question": "State Newton's second law of motion and give its formula.",
+      "student_answer": "Newton's second law is that every action has an equal and opposite reaction.",
+      "correct_answer": "F = ma; acceleration is proportional to net force and inversely proportional to mass.",
+      "total_points": 5,
+      "expected": { "min_score": 0, "max_score": 2 }
+    }
+  ]
+}

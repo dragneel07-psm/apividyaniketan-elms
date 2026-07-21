@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        @page { size: A4; margin: 1.8cm 1.5cm; }
+
+        body {
+            font-family: 'Helvetica', 'Arial', sans-serif;
+            color: #1a202c;
+            font-size: 11px;
+            line-height: 1.5;
+        }
+
+        /* ── Header ────────────────────────────────────────────────── */
+        .header {
+            background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+            color: #ffffff;
+            padding: 20px 24px 16px;
+            border-radius: 6px 6px 0 0;
+        }
+        .header-top { display: table; width: 100%; }
+        .header-left { display: table-cell; vertical-align: middle; }
+        .header-right { display: table-cell; vertical-align: middle; text-align: right; }
+        .school-name { font-size: 20px; font-weight: bold; letter-spacing: 0.5px; margin: 0 0 2px; text-transform: uppercase; }
+        .slip-label { font-size: 10px; letter-spacing: 2px; text-transform: uppercase; opacity: 0.8; }
+        .slip-period {
+            display: inline-block;
+            background: rgba(255,255,255,0.2);
+            padding: 4px 14px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: bold;
+            letter-spacing: 0.5px;
+            margin-top: 6px;
+        }
+        .slip-no {
+            font-size: 11px;
+            opacity: 0.75;
+            margin-top: 4px;
+        }
+
+        /* ── Status bar ─────────────────────────────────────────────── */
+        .status-bar {
+            background: {% if status == 'paid' %}#f0fdf4{% elif status == 'finalized' %}#eff6ff{% else %}#f8fafc{% endif %};
+            border: 1px solid {% if status == 'paid' %}#bbf7d0{% elif status == 'finalized' %}#bfdbfe{% else %}#e2e8f0{% endif %};
+            text-align: center;
+            padding: 6px;
+            font-size: 10px;
+            font-weight: bold;
+            color: {% if status == 'paid' %}#166534{% elif status == 'finalized' %}#1e40af{% else %}#475569{% endif %};
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+
+        /* ── Employee + Period info grid ────────────────────────────── */
+        .info-grid { display: table; width: 100%; border-collapse: collapse; margin: 14px 0; }
+        .info-col { display: table-cell; width: 50%; vertical-align: top; padding-right: 10px; }
+        .info-col:last-child { padding-right: 0; padding-left: 10px; }
+        .info-block { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 4px; padding: 10px 12px; }
+        .info-block h4 {
+            margin: 0 0 8px;
+            font-size: 8px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #6b7280;
+            font-weight: bold;
+            border-bottom: 1px solid #e2e8f0;
+            padding-bottom: 4px;
+        }
+        .info-row { margin: 4px 0; }
+        .info-label { color: #6b7280; }
+        .info-value { font-weight: bold; color: #1a202c; }
+
+        /* ── Earnings / Deductions table ────────────────────────────── */
+        .split-table { display: table; width: 100%; border-collapse: collapse; margin-bottom: 14px; }
+        .split-col { display: table-cell; width: 50%; vertical-align: top; padding-right: 8px; }
+        .split-col:last-child { padding-right: 0; padding-left: 8px; }
+
+        .pay-table { width: 100%; border-collapse: collapse; font-size: 10px; }
+        .pay-table thead th {
+            padding: 6px 8px;
+            text-align: left;
+            font-size: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            color: #64748b;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        .pay-table tbody td { padding: 6px 8px; border-bottom: 1px solid #f1f5f9; }
+        .pay-table .amount { text-align: right; font-weight: bold; }
+        .pay-table .total-row td {
+            font-weight: bold;
+            background: #f1f5f9;
+            font-size: 11px;
+            border-top: 2px solid #e2e8f0;
+        }
+        .earnings-header { background: #f0fdf4; border-radius: 4px 4px 0 0; }
+        .deductions-header { background: #fef2f2; border-radius: 4px 4px 0 0; }
+        .earnings-amount { color: #059669; }
+        .deductions-amount { color: #dc2626; }
+
+        /* ── Net salary box ─────────────────────────────────────────── */
+        .net-box {
+            background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+            border-radius: 4px;
+            padding: 16px;
+            text-align: center;
+            color: #ffffff;
+            margin-bottom: 14px;
+        }
+        .net-label { font-size: 9px; letter-spacing: 2px; text-transform: uppercase; opacity: 0.8; margin-bottom: 4px; }
+        .net-amount { font-size: 30px; font-weight: bold; letter-spacing: -0.5px; }
+        .net-words { font-size: 9px; opacity: 0.7; margin-top: 4px; font-style: italic; }
+
+        /* ── Attendance summary ─────────────────────────────────────── */
+        .att-grid { display: table; width: 100%; margin-bottom: 14px; border-collapse: collapse; }
+        .att-cell { display: table-cell; text-align: center; border: 1px solid #e2e8f0; padding: 8px 4px; border-radius: 0; }
+        .att-cell:first-child { border-radius: 4px 0 0 4px; }
+        .att-cell:last-child { border-radius: 0 4px 4px 0; }
+        .att-num { font-size: 16px; font-weight: bold; color: #1a202c; }
+        .att-lbl { font-size: 8px; text-transform: uppercase; letter-spacing: 0.8px; color: #6b7280; margin-top: 2px; }
+
+        /* ── Signature row ──────────────────────────────────────────── */
+        .sig-row { display: table; width: 100%; margin-bottom: 14px; }
+        .sig-cell { display: table-cell; width: 50%; text-align: center; font-size: 9px; color: #6b7280; }
+        .sig-line { border-top: 1px solid #cbd5e1; width: 70%; margin: 26px auto 4px; }
+
+        /* ── Footer ─────────────────────────────────────────────────── */
+        .footer {
+            text-align: center;
+            color: #9ca3af;
+            font-size: 8px;
+            border-top: 1px solid #e2e8f0;
+            padding-top: 8px;
+        }
+
+        .section-title {
+            font-size: 9px;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #6b7280;
+            margin-bottom: 6px;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Header -->
+    <div class="header">
+        <div class="header-top">
+            <div class="header-left">
+                <div class="school-name">{{ school_name }}</div>
+                <div class="slip-label">Salary Slip</div>
+                <div class="slip-period">{{ period_name }}</div>
+            </div>
+            <div class="header-right">
+                <div class="slip-no">Slip ID: {{ slip_id }}</div>
+                {% if payment_date %}
+                <div class="slip-no">Paid on: {{ payment_date }}</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Status bar -->
+    <div class="status-bar">
+        {% if status == 'paid' %}&#10003; Salary Paid
+        {% elif status == 'finalized' %}&#9679; Finalized — Awaiting Payment
+        {% else %}&#9679; Draft
+        {% endif %}
+    </div>
+
+    <!-- Attendance summary -->
+    <div style="margin: 14px 0;">
+        <div class="section-title">Attendance Summary</div>
+        <div class="att-grid">
+            <div class="att-cell">
+                <div class="att-num">{{ working_days }}</div>
+                <div class="att-lbl">Working Days</div>
+            </div>
+            <div class="att-cell">
+                <div class="att-num" style="color:#059669;">{{ paid_days }}</div>
+                <div class="att-lbl">Paid Days</div>
+            </div>
+            <div class="att-cell">
+                <div class="att-num" style="color:#dc2626;">{{ absent_days }}</div>
+                <div class="att-lbl">Absent Days</div>
+            </div>
+            <div class="att-cell">
+                <div class="att-num" style="color:#f59e0b;">{{ lop_days }}</div>
+                <div class="att-lbl">LOP Days</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Employee + Period info -->
+    <div class="info-grid">
+        <div class="info-col">
+            <div class="info-block">
+                <h4>Employee Details</h4>
+                <div class="info-row"><span class="info-label">Name: </span><span class="info-value">{{ employee_name }}</span></div>
+                {% if employee_code %}<div class="info-row"><span class="info-label">Code: </span><span class="info-value">{{ employee_code }}</span></div>{% endif %}
+                {% if department %}<div class="info-row"><span class="info-label">Department: </span><span class="info-value">{{ department }}</span></div>{% endif %}
+                {% if designation %}<div class="info-row"><span class="info-label">Designation: </span><span class="info-value">{{ designation }}</span></div>{% endif %}
+            </div>
+        </div>
+        <div class="info-col">
+            <div class="info-block">
+                <h4>Payment Details</h4>
+                <div class="info-row"><span class="info-label">Period: </span><span class="info-value">{{ period_name }}</span></div>
+                <div class="info-row"><span class="info-label">Status: </span><span class="info-value" style="text-transform:capitalize;">{{ status }}</span></div>
+                {% if payment_method %}<div class="info-row"><span class="info-label">Method: </span><span class="info-value" style="text-transform:capitalize;">{{ payment_method }}</span></div>{% endif %}
+                {% if transaction_reference %}<div class="info-row"><span class="info-label">Ref: </span><span class="info-value" style="font-size:9px;">{{ transaction_reference }}</span></div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Earnings & Deductions -->
+    <div class="split-table">
+        <!-- Earnings -->
+        <div class="split-col">
+            <div class="section-title">Earnings</div>
+            <table class="pay-table">
+                <thead class="earnings-header">
+                    <tr>
+                        <th>Component</th>
+                        <th style="text-align:right;">Amount ({{ currency }})</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr><td>Basic Salary</td><td class="amount earnings-amount">{{ basic_salary }}</td></tr>
+                    {% if hra > 0 %}<tr><td>HRA</td><td class="amount earnings-amount">{{ hra }}</td></tr>{% endif %}
+                    {% if da > 0 %}<tr><td>Dearness Allowance</td><td class="amount earnings-amount">{{ da }}</td></tr>{% endif %}
+                    {% if transport_allowance > 0 %}<tr><td>Transport Allowance</td><td class="amount earnings-amount">{{ transport_allowance }}</td></tr>{% endif %}
+                    {% if medical_allowance > 0 %}<tr><td>Medical Allowance</td><td class="amount earnings-amount">{{ medical_allowance }}</td></tr>{% endif %}
+                    {% if other_allowance > 0 %}<tr><td>Other Allowance</td><td class="amount earnings-amount">{{ other_allowance }}</td></tr>{% endif %}
+                    <tr class="total-row">
+                        <td>Gross Salary</td>
+                        <td class="amount earnings-amount">{{ gross_salary }}</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Deductions -->
+        <div class="split-col">
+            <div class="section-title">Deductions</div>
+            <table class="pay-table">
+                <thead class="deductions-header">
+                    <tr>
+                        <th>Component</th>
+                        <th style="text-align:right;">Amount ({{ currency }})</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% if pf_employee > 0 %}<tr><td>PF (Employee)</td><td class="amount deductions-amount">{{ pf_employee }}</td></tr>{% endif %}
+                    {% if pf_employer > 0 %}<tr><td>PF (Employer)</td><td class="amount deductions-amount">{{ pf_employer }}</td></tr>{% endif %}
+                    {% if esi_employee > 0 %}<tr><td>ESI</td><td class="amount deductions-amount">{{ esi_employee }}</td></tr>{% endif %}
+                    {% if tds > 0 %}<tr><td>TDS</td><td class="amount deductions-amount">{{ tds }}</td></tr>{% endif %}
+                    {% if professional_tax > 0 %}<tr><td>Professional Tax</td><td class="amount deductions-amount">{{ professional_tax }}</td></tr>{% endif %}
+                    {% if other_deduction > 0 %}<tr><td>Other Deduction</td><td class="amount deductions-amount">{{ other_deduction }}</td></tr>{% endif %}
+                    <tr class="total-row">
+                        <td>Total Deductions</td>
+                        <td class="amount deductions-amount">{{ total_deductions }}</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Net Salary -->
+    <div class="net-box">
+        <div class="net-label">Net Salary Payable</div>
+        <div class="net-amount">{{ currency }}{{ net_salary }}</div>
+    </div>
+
+    <!-- Signatures -->
+    <div class="sig-row">
+        <div class="sig-cell">
+            <div class="sig-line"></div>
+            Employee Signature
+        </div>
+        <div class="sig-cell">
+            <div class="sig-line"></div>
+            HR / Accounts Officer
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="footer">
+        Generated on {{ generated_on }} &nbsp;·&nbsp; {{ school_name }}<br>
+        This is a computer-generated payslip and does not require a physical signature.
+    </div>
+
+</body>
+</html>

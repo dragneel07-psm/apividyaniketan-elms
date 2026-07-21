@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <style>
+        @page {
+            size: A4;
+            margin: 1.5cm;
+        }
+
+        body {
+            font-family: 'Helvetica', 'Arial', sans-serif;
+            color: #1a202c;
+            line-height: 1.5;
+        }
+
+        .ticket-container {
+            border: 3px solid #2d3748;
+            padding: 25px;
+            position: relative;
+            background: linear-gradient(to bottom, #ffffff 0%, #f7fafc 100%);
+        }
+
+        .header {
+            text-align: center;
+            border-bottom: 3px double #2d3748;
+            margin-bottom: 25px;
+            padding-bottom: 15px;
+        }
+
+        .school-name {
+            font-size: 26px;
+            font-weight: bold;
+            color: #1a365d;
+            text-transform: uppercase;
+            margin: 0 0 5px 0;
+            letter-spacing: 1px;
+        }
+
+        .ticket-title {
+            font-size: 22px;
+            color: #2d3748;
+            font-weight: bold;
+            margin: 10px 0;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        .hall-ticket-number {
+            font-size: 16px;
+            color: #4a5568;
+            font-weight: bold;
+            margin-top: 8px;
+            padding: 8px 15px;
+            background-color: #edf2f7;
+            display: inline-block;
+            border: 1px dashed #4a5568;
+        }
+
+        .content-grid {
+            display: table;
+            width: 100%;
+            margin: 25px 0;
+        }
+
+        .content-row {
+            display: table-row;
+        }
+
+        .label-cell {
+            display: table-cell;
+            font-weight: bold;
+            width: 35%;
+            padding: 10px 15px;
+            background-color: #edf2f7;
+            border: 1px solid #cbd5e0;
+        }
+
+        .value-cell {
+            display: table-cell;
+            padding: 10px 15px;
+            border: 1px solid #cbd5e0;
+            background-color: #ffffff;
+        }
+
+        .exam-details {
+            background-color: #f7fafc;
+            border: 2px solid #4299e1;
+            padding: 20px;
+            margin: 25px 0;
+        }
+
+        .exam-details h3 {
+            margin: 0 0 15px 0;
+            color: #2b6cb0;
+            font-size: 18px;
+            border-bottom: 2px solid #4299e1;
+            padding-bottom: 8px;
+        }
+
+        .exam-info-row {
+            margin: 10px 0;
+            padding: 8px;
+            background-color: #ffffff;
+            border-left: 3px solid #4299e1;
+            padding-left: 12px;
+        }
+
+        .exam-info-label {
+            font-weight: bold;
+            color: #2d3748;
+            display: inline-block;
+            width: 150px;
+        }
+
+        .instructions {
+            margin-top: 30px;
+            border: 2px solid #e53e3e;
+            padding: 15px;
+            background-color: #fff5f5;
+        }
+
+        .instructions h3 {
+            margin: 0 0 10px 0;
+            color: #c53030;
+            font-size: 16px;
+        }
+
+        .instructions ul {
+            margin: 5px 0;
+            padding-left: 20px;
+        }
+
+        .instructions li {
+            margin: 5px 0;
+            font-size: 13px;
+            color: #2d3748;
+        }
+
+        .signature-section {
+            margin-top: 40px;
+            display: table;
+            width: 100%;
+        }
+
+        .signature-box {
+            display: table-cell;
+            text-align: center;
+            width: 50%;
+            padding: 10px;
+        }
+
+        .signature-line {
+            border-top: 2px solid #2d3748;
+            width: 70%;
+            margin: 40px auto 8px auto;
+        }
+
+        .signature-label {
+            font-weight: bold;
+            font-size: 12px;
+            color: #4a5568;
+        }
+
+        .footer {
+            margin-top: 30px;
+            text-align: center;
+            font-size: 10px;
+            color: #718096;
+            border-top: 1px solid #e2e8f0;
+            padding-top: 15px;
+        }
+
+        .watermark {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) rotate(-45deg);
+            font-size: 80px;
+            color: rgba(0, 0, 0, 0.03);
+            font-weight: bold;
+            z-index: -1;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="ticket-container">
+        <div class="watermark">ADMIT CARD</div>
+
+        <div class="header">
+            <h1 class="school-name">{{ school_name }}</h1>
+            <div class="ticket-title">Examination Hall Ticket</div>
+            <div class="hall-ticket-number">Hall Ticket No: {{ hall_ticket_number }}</div>
+        </div>
+
+        <div class="content-grid">
+            <div class="content-row">
+                <div class="label-cell">Student Name</div>
+                <div class="value-cell">{{ student_name }}</div>
+            </div>
+            <div class="content-row">
+                <div class="label-cell">Student ID</div>
+                <div class="value-cell">{{ student_id }}</div>
+            </div>
+            <div class="content-row">
+                <div class="label-cell">Class - Section</div>
+                <div class="value-cell">{{ class_section }}</div>
+            </div>
+            <div class="content-row">
+                <div class="label-cell">Seat Number</div>
+                <div class="value-cell" style="font-size: 18px; font-weight: bold; color: #2b6cb0;">{{ seat_number }}
+                </div>
+            </div>
+        </div>
+
+        <div class="exam-details">
+            <h3>Examination Details</h3>
+            <div class="exam-info-row">
+                <span class="exam-info-label">Exam Title:</span>
+                <span>{{ exam_title }}</span>
+            </div>
+            <div class="exam-info-row">
+                <span class="exam-info-label">Subject:</span>
+                <span>{{ subject_name }}</span>
+            </div>
+            <div class="exam-info-row">
+                <span class="exam-info-label">Exam Date:</span>
+                <span>{{ exam_date }}</span>
+            </div>
+            <div class="exam-info-row">
+                <span class="exam-info-label">Exam Center:</span>
+                <span>{{ exam_center }}</span>
+            </div>
+            <div class="exam-info-row">
+                <span class="exam-info-label">Room Number:</span>
+                <span>{{ room_number }}</span>
+            </div>
+        </div>
+
+        <div class="instructions">
+            <h3>⚠️ IMPORTANT INSTRUCTIONS</h3>
+            <ul>
+                <li>Bring this hall ticket to the examination center. Entry will not be permitted without it.</li>
+                <li>Report to the exam center at least 30 minutes before the scheduled time.</li>
+                <li>Carry a valid photo ID (Student ID Card) along with this hall ticket.</li>
+                <li>Mobile phones and electronic devices are strictly prohibited in the exam hall.</li>
+                <li>Follow all instructions given by the invigilator during the examination.</li>
+                <li>Occupy only the seat number mentioned on this hall ticket.</li>
+            </ul>
+        </div>
+
+        <div class="signature-section">
+            <div class="signature-box">
+                <div class="signature-line"></div>
+                <div class="signature-label">Student Signature</div>
+            </div>
+            <div class="signature-box">
+                <div class="signature-line"></div>
+                <div class="signature-label">Controller of Examinations</div>
+            </div>
+        </div>
+
+        <div class="footer">
+            Generated on {{ generation_date }}<br>
+            © {{ school_name }} - Secure Examination System
+        </div>
+    </div>
+</body>
+
+</html>

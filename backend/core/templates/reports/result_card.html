@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <style>
+        @page {
+            size: A4;
+            margin: 2cm;
+        }
+
+        body {
+            font-family: 'Helvetica', 'Arial', sans-serif;
+            color: #333;
+            line-height: 1.6;
+        }
+
+        .container {
+            border: 2px solid #1a365d;
+            padding: 30px;
+            position: relative;
+        }
+
+        .header {
+            text-align: center;
+            border-bottom: 2px solid #1a365d;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+        }
+
+        .school-name {
+            font-size: 28px;
+            font-weight: bold;
+            color: #1a365d;
+            text-transform: uppercase;
+            margin: 0;
+        }
+
+        .report-title {
+            font-size: 20px;
+            color: #4a5568;
+            margin-top: 10px;
+        }
+
+        .info-grid {
+            display: table;
+            width: 100%;
+            margin-bottom: 40px;
+        }
+
+        .info-row {
+            display: table-row;
+        }
+
+        .info-label {
+            display: table-cell;
+            font-weight: bold;
+            width: 20%;
+            padding: 5px 0;
+        }
+
+        .info-value {
+            display: table-cell;
+            border-bottom: 1px dotted #cbd5e0;
+            padding: 5px 0;
+        }
+
+        .result-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 40px 0;
+        }
+
+        .result-table th {
+            background-color: #1a365d;
+            color: white;
+            padding: 12px;
+            text-align: left;
+        }
+
+        .result-table td {
+            padding: 15px;
+            border: 1px solid #e2e8f0;
+            font-size: 16px;
+        }
+
+        .score-box {
+            text-align: center;
+            padding: 20px;
+            background-color: #f7fafc;
+            border: 1px solid #e2e8f0;
+            margin: 30px 0;
+        }
+
+        .large-score {
+            font-size: 36px;
+            font-weight: bold;
+            color: #2b6cb0;
+        }
+
+        .remarks-section {
+            margin-top: 40px;
+            border: 1px solid #e2e8f0;
+            padding: 15px;
+            min-height: 100px;
+        }
+
+        .signatures {
+            margin-top: 60px;
+            display: table;
+            width: 100%;
+        }
+
+        .sig-box {
+            display: table-cell;
+            text-align: center;
+            width: 33%;
+        }
+
+        .sig-line {
+            border-top: 1px solid #333;
+            width: 80%;
+            margin: 0 auto 5px auto;
+        }
+
+        .footer {
+            margin-top: 50px;
+            text-align: center;
+            font-size: 10px;
+            color: #718096;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="header">
+            <h1 class="school-name">{{ school_name }}</h1>
+            <div class="report-title">OFFICIAL RESULT CARD</div>
+        </div>
+
+        <div class="info-grid">
+            <div class="info-row">
+                <div class="info-label">Student Name:</div>
+                <div class="info-value">{{ student.user.first_name }} {{ student.user.last_name }}</div>
+            </div>
+            <div class="info-row">
+                <div class="info-label">Roll Number:</div>
+                <div class="info-value">{{ student.student_id|default:"N/A" }}</div>
+            </div>
+            <div class="info-row">
+                <div class="info-label">Class-Section:</div>
+                <div class="info-value">{{ student.section.academic_class.name }} - {{ student.section.name }}</div>
+            </div>
+        </div>
+
+        <table class="result-table">
+            <thead>
+                <tr>
+                    <th>Subject</th>
+                    <th>Assessment Title</th>
+                    <th>Bloom's Level</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>{{ subject.name }}</td>
+                    <td>{{ assessment.title }}</td>
+                    <td>{{ assessment.blooms_level|upper }}</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div class="score-box">
+            <div style="font-size: 14px; color: #718096; margin-bottom: 10px;">TOTAL OBTAINED PERCENTAGE</div>
+            <div class="large-score">{{ percentage }}%</div>
+            <div style="margin-top: 10px; font-weight: bold;">
+                Marks: {{ result.score }} / {{ assessment.total_marks }}
+            </div>
+        </div>
+
+        <div class="remarks-section">
+            <strong style="color: #4a5568;">TEACHER REMARKS:</strong>
+            <p>{{ result.feedback|default:"Satisfactory performance. Keep up the hard work." }}</p>
+        </div>
+
+        <div class="signatures">
+            <div class="sig-box">
+                <div class="sig-line"></div>
+                Class Teacher
+            </div>
+            <div class="sig-box">
+                <div class="sig-line"></div>
+                Controller of Exams
+            </div>
+            <div class="sig-box">
+                <div class="sig-line"></div>
+                Principal
+            </div>
+        </div>
+
+        <div class="footer">
+            Generated on {{ date }} | Student ID: {{ student.id }}
+            <br>
+            © {{ school_name }} - Secure Academic Management
+        </div>
+    </div>
+</body>
+
+</html>

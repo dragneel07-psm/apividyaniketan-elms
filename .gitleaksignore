@@ -1,0 +1,5 @@
+# False positives: HTTP_IDEMPOTENCY_KEY test fixtures ("idem-pay-002" style)
+# in billing security tests matched the generic-api-key rule. Not credentials.
+b74929e45157604faa34d4dd6c1d2eecb1d3211d:backend/billing/tests_security.py:generic-api-key:327
+b74929e45157604faa34d4dd6c1d2eecb1d3211d:backend/billing/tests_security.py:generic-api-key:333
+b74929e45157604faa34d4dd6c1d2eecb1d3211d:backend/billing/tests_security.py:generic-api-key:343

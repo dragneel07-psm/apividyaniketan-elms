@@ -1,0 +1,6 @@
+[build]
+builder = "NIXPACKS"
+buildCommand = "/opt/venv/bin/pip install setuptools && if [ -f backend/requirements.txt ]; then /opt/venv/bin/pip install -r backend/requirements.txt; else /opt/venv/bin/pip install -r requirements.txt; fi"
+
+[deploy]
+startCommand = "bash -lc 'if [ -f backend/scripts/railway-start-worker.sh ]; then exec bash backend/scripts/railway-start-worker.sh; elif [ -f scripts/railway-start-worker.sh ]; then exec bash scripts/railway-start-worker.sh; else echo \"Unable to locate railway-start-worker.sh\"; exit 1; fi'"
