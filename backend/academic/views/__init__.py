@@ -23,6 +23,13 @@ from .inventory import AssetViewSet, ConsumableStockViewSet, MaintenanceRequestV
 from .lesson import ChapterViewSet, LessonMaterialViewSet, LessonViewSet
 from .live_session import LiveSessionViewSet
 from .notice import NoticeViewSet
+from .nepal_result import (
+    ExamSubjectViewSet,
+    ExamTermViewSet,
+    GradingProfileViewSet,
+    PaperCodeViewSet,
+    StudentTermResultViewSet,
+)
 from .profiles import (
     ParentTeacherMeetingViewSet,
     ParentViewSet,

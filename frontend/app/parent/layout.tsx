@@ -31,6 +31,7 @@ export default function ParentLayout({ children }: { children: ReactNode }) {
         { href: '/parent/children', label: t('parent.nav.myChildren'), icon: Users },
         { href: '/parent/attendance', label: t('parent.nav.attendance'), icon: CalendarDays },
         { href: '/parent/grades', label: t('parent.nav.grades'), icon: GraduationCap },
+        { href: '/parent/term-results', label: 'Official Results', icon: GraduationCap },
         { href: '/parent/projects', label: t('parent.nav.projects'), icon: FolderKanban },
         { href: '/parent/fees', label: t('parent.nav.fees'), icon: Wallet },
         { href: '/parent/leaves', label: t('parent.nav.leaveRequests'), icon: CalendarClock },

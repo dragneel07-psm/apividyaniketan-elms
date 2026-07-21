@@ -20,6 +20,10 @@ from .views import (
     LessonMaterialViewSet,
     LessonViewSet,
     LiveSessionViewSet,
+    ExamSubjectViewSet,
+    ExamTermViewSet,
+    GradingProfileViewSet,
+    PaperCodeViewSet,
     MaintenanceRequestViewSet,
     NoticeViewSet,
     ParentTeacherMeetingViewSet,
@@ -35,6 +39,7 @@ from .views import (
     StudentHealthRecordViewSet,
     StudentLeaveViewSet,
     StudentViewSet,
+    StudentTermResultViewSet,
     SubjectViewSet,
     SubmissionViewSet,
     TeacherViewSet,
@@ -64,6 +69,11 @@ router.register(r"assessments", AssessmentViewSet)
 router.register(r"questions", QuestionViewSet)
 router.register(r"submissions", SubmissionViewSet)
 router.register(r"results", ResultViewSet)
+router.register(r"grading-profiles", GradingProfileViewSet, basename="grading-profile")
+router.register(r"exam-terms", ExamTermViewSet, basename="exam-term")
+router.register(r"exam-subjects", ExamSubjectViewSet, basename="exam-subject")
+router.register(r"answer-papers", PaperCodeViewSet, basename="answer-paper")
+router.register(r"term-results", StudentTermResultViewSet, basename="term-result")
 router.register(r"parents", ParentViewSet)
 router.register(r"attendance", AttendanceViewSet)
 router.register(r"timetable", TimetableViewSet)

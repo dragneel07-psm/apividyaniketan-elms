@@ -29,6 +29,7 @@ export type AdminModule =
     | '/admin/academic/subjects'
     | '/admin/academic/assessments'
     | '/admin/academic/promotion-exceptions'
+    | '/admin/academic/results'
     | '/admin/exams'
     | '/admin/academic/students'
     | '/admin/academic/teachers'
@@ -70,6 +71,7 @@ const ADMIN_FULL: AdminModule[] = [
     '/admin/academic/subjects',
     '/admin/academic/assessments',
     '/admin/academic/promotion-exceptions',
+    '/admin/academic/results',
     '/admin/exams',
     '/admin/academic/students',
     '/admin/academic/teachers',

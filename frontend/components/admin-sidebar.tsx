@@ -10,7 +10,7 @@ import {
     LayoutDashboard, Users, GraduationCap, School, CreditCard, BarChart3,
     Settings, LogOut, Bell, BookOpen, Calendar, Library, Wallet, DollarSign,
     ClipboardList, FileText, MessageSquare, UserRoundPlus, ShieldAlert,
-    Sparkles, Bus, Building2, UserCog, ChevronDown, Trophy, Receipt, type LucideIcon,
+    Sparkles, Bus, Building2, UserCog, ChevronDown, Trophy, Receipt, Award, type LucideIcon,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -57,6 +57,7 @@ const NAV: NavItem[] = [
             { kind: 'leaf', name: 'Subjects',             href: '/admin/academic/subjects',             icon: BookOpen },
             { kind: 'leaf', name: 'Assessments',          href: '/admin/academic/assessments',          icon: ClipboardList },
             { kind: 'leaf', name: 'Promotion Exceptions', href: '/admin/academic/promotion-exceptions', icon: ShieldAlert },
+            { kind: 'leaf', name: 'Result Processing',     href: '/admin/academic/results',              icon: Award },
             { kind: 'leaf', name: 'Exams',                href: '/admin/exams',                         icon: ClipboardList },
             { kind: 'leaf', name: 'Students',             href: '/admin/academic/students',             icon: GraduationCap },
             { kind: 'leaf', name: 'Teachers',             href: '/admin/academic/teachers',             icon: Users },

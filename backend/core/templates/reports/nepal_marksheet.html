@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <style>
+    @page { size: A4 portrait; margin: 14mm; }
+    body { font-family: Arial, sans-serif; color: #172033; font-size: 11px; }
+    .header { text-align: center; border-bottom: 2px solid #183b67; padding-bottom: 10px; }
+    .header h1 { margin: 0; font-size: 23px; color: #183b67; }
+    .header p { margin: 3px 0; }
+    .title { margin: 14px 0 9px; text-align: center; font-size: 17px; font-weight: bold; letter-spacing: 1px; }
+    .meta { width: 100%; margin-bottom: 12px; }
+    .meta td { padding: 3px; }
+    table.marks { width: 100%; border-collapse: collapse; }
+    .marks th, .marks td { border: 1px solid #667085; padding: 6px 4px; text-align: center; }
+    .marks th { background: #eaf0f8; font-weight: bold; }
+    .marks td.subject { text-align: left; }
+    .summary { margin-top: 12px; width: 100%; border-collapse: collapse; }
+    .summary td { border: 1px solid #9aa4b2; padding: 7px; }
+    .note { margin-top: 12px; font-size: 9px; color: #475467; }
+    .signatures { margin-top: 55px; width: 100%; text-align: center; }
+    .signatures td { width: 33%; }
+    .line { border-top: 1px solid #344054; padding-top: 5px; margin: 0 18px; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>{{ school.name }}</h1>
+    <p>{{ school.address|default:"Nepal" }}</p>
+    <p>{{ school.contact_phone|default:"" }}{% if school.contact_email %} · {{ school.contact_email }}{% endif %}</p>
+  </div>
+  <div class="title">GRADE SHEET / MARK SHEET</div>
+  <table class="meta">
+    <tr><td><strong>Student:</strong> {{ snapshot.student.name }}</td><td><strong>Marksheet No:</strong> {{ result.marksheet_number }}</td></tr>
+    <tr><td><strong>Class/Section:</strong> {{ snapshot.student.class }} {{ snapshot.student.section }}</td><td><strong>Academic Year:</strong> {{ term.academic_year.name }}</td></tr>
+    <tr><td><strong>Examination:</strong> {{ term.name }}</td><td><strong>Published:</strong> {{ result.published_at|date:"Y-m-d" }}</td></tr>
+  </table>
+  <table class="marks">
+    <thead><tr><th>S.N.</th><th>Subject</th><th>Full Marks</th><th>Obtained</th><th>Grade</th><th>GP</th><th>Status</th></tr></thead>
+    <tbody>
+      {% for row in subjects %}
+      <tr>
+        <td>{{ forloop.counter }}</td><td class="subject">{{ row.subject_name }}</td>
+        <td>{{ row.full_marks }}</td><td>{{ row.obtained }}</td><td>{{ row.grade }}</td>
+        <td>{{ row.grade_point }}</td><td>{{ row.status }}</td>
+      </tr>
+      {% empty %}<tr><td colspan="7">No subject results</td></tr>{% endfor %}
+    </tbody>
+  </table>
+  <table class="summary">
+    <tr><td><strong>Total:</strong> {{ result.total_obtained }} / {{ result.total_full_marks }}</td><td><strong>GPA:</strong> {{ result.gpa|default:"NG" }}</td><td><strong>Result:</strong> {{ result.result_status }}</td></tr>
+  </table>
+  <p class="note">
+    Prepared under {{ regulation.directive|default:"Nepal Letter Grading Directive 2078" }}
+    ({{ regulation.amendment|default:"Fourth Amendment 2081" }}). A learner must satisfy the prescribed
+    component-wise minimum requirements; otherwise the relevant subject is recorded as NG.
+  </p>
+  <table class="signatures"><tr><td><div class="line">Class Teacher</div></td><td><div class="line">Exam Controller</div></td><td><div class="line">Principal</div></td></tr></table>
+</body>
+</html>

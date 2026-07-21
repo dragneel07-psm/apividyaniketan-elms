@@ -116,6 +116,7 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
                 },
                 { label: t('student.nav.assessments'), href: '/student/assessments', icon: Award },
                 { label: t('student.nav.myGrades'), href: '/student/grades', icon: Award },
+                { label: 'Official Results', href: '/student/term-results', icon: Award },
                 { label: t('student.nav.library'), href: '/student/library', icon: BookOpen },
             ],
         },

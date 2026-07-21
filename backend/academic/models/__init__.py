@@ -23,6 +23,15 @@ from .lesson import Chapter, Lesson, LessonMaterial, LessonProgress
 from .live_session import LiveSession
 from .meeting import ParentTeacherMeeting
 from .notice import Notice, NoticeRead
+from .nepal_result import (
+    AnswerPaperCode,
+    ExamSubject,
+    ExamTerm,
+    MarkEntry,
+    MarkEntryRevision,
+    NepalGradingProfile,
+    StudentTermResult,
+)
 from .parent import Parent
 from .student import Student
 from .student_leave import StudentLeave

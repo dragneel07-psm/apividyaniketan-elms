@@ -41,6 +41,7 @@ const navigation = [
     { name: 'Assignments',    href: '/teacher/assignments',  icon: FileText },
     { name: 'Projects',       href: '/teacher/projects',     icon: FolderKanban },
     { name: 'Grading',        href: '/teacher/grading',      icon: Award },
+    { name: 'Exam Marks',     href: '/teacher/exam-marks',   icon: ClipboardCheck },
     { name: 'Gradebook',      href: '/teacher/grades',       icon: GraduationCap },
     { name: 'Question Bank',  href: '/teacher/questions',    icon: HelpCircle },
     { name: 'Live Classes',   href: '/teacher/timetable',    icon: Video },

@@ -117,6 +117,72 @@ export interface AcademicYear {
     is_current: boolean;
 }
 
+export interface NepalGradingProfile {
+    profile_id: string;
+    name: string;
+    directive_name: string;
+    amendment: string;
+    effective_from_bs: string;
+    bands: Array<{ min: number; grade: string; grade_point: number; description?: string }>;
+    theory_pass_percent: string;
+    internal_pass_percent: string;
+    practical_pass_percent: string;
+}
+
+export interface ExamTerm {
+    term_id: string;
+    academic_year: number;
+    academic_year_name?: string;
+    grading_profile?: string;
+    grading_profile_name?: string;
+    name: string;
+    exam_type: 'unit_test' | 'first_terminal' | 'second_terminal' | 'final' | 'pre_board' | 'other';
+    start_date: string;
+    end_date: string;
+    status: 'draft' | 'active' | 'marking' | 'verification' | 'locked' | 'published';
+    subject_count?: number;
+    include_rank?: boolean;
+}
+
+export interface ExamSubjectConfiguration {
+    exam_subject_id: string;
+    term: string;
+    subject: number;
+    subject_name?: string;
+    subject_code?: string;
+    section: number;
+    class_name?: string;
+    section_name?: string;
+    examiner?: string | null;
+    examiner_name?: string;
+    theory_full_marks: string;
+    internal_full_marks: string;
+    practical_full_marks: string;
+    credit_hours: string;
+    marking_status: 'draft' | 'submitted' | 'verified';
+    paper_count?: number;
+}
+
+export interface StudentTermResult {
+    term_result_id: string;
+    term: string;
+    term_name?: string;
+    academic_year?: string;
+    student: string;
+    student_name?: string;
+    marksheet_number: string;
+    total_obtained: string;
+    total_full_marks: string;
+    gpa: string | null;
+    result_status: string;
+    rank?: number | null;
+    snapshot: {
+        student?: { name?: string; class?: string; section?: string };
+        subjects?: Array<{ subject_name: string; obtained: number; full_marks: number; grade: string; grade_point: number; status: string }>;
+    };
+    published_at: string;
+}
+
 export interface AcademicYearRolloverOptions {
     migrate_timetable?: boolean;
     migrate_courses?: boolean;
@@ -2015,6 +2081,32 @@ export const academicAPI = {
             method: 'POST',
             body: JSON.stringify({ ...data, confirm: true, dry_run: false }),
         }),
+
+    // Nepal-standard examination and result processing
+    getGradingProfiles: async () => normalizeArrayPayload(
+        await apiRequest<NepalGradingProfile[] | PaginatedResponse<NepalGradingProfile>>('/academic/grading-profiles/')
+    ),
+    ensureNepal2081Profile: () => apiRequest<NepalGradingProfile>('/academic/grading-profiles/ensure-nepal-2081/', { method: 'POST' }),
+    getExamTerms: async () => normalizeArrayPayload(
+        await apiRequest<ExamTerm[] | PaginatedResponse<ExamTerm>>('/academic/exam-terms/')
+    ),
+    createExamTerm: (data: Partial<ExamTerm>) => apiRequest<ExamTerm>('/academic/exam-terms/', { method: 'POST', body: JSON.stringify(data) }),
+    getExamTermReadiness: (id: string) => apiRequest<{ ready: boolean; subjects: Array<{ id: string; name: string; status: string; papers: number; marks: number }> }>(`/academic/exam-terms/${id}/readiness/`),
+    publishExamTerm: (id: string) => apiRequest<{ detail: string; student_count: number }>(`/academic/exam-terms/${id}/publish/`, { method: 'POST' }),
+    getExamSubjects: async (termId?: string) => normalizeArrayPayload(
+        await apiRequest<ExamSubjectConfiguration[] | PaginatedResponse<ExamSubjectConfiguration>>(`/academic/exam-subjects/${termId ? `?term=${encodeURIComponent(termId)}` : ''}`)
+    ),
+    createExamSubject: (data: Partial<ExamSubjectConfiguration>) => apiRequest<ExamSubjectConfiguration>('/academic/exam-subjects/', { method: 'POST', body: JSON.stringify(data) }),
+    generateAnswerPaperCodes: (id: string) => apiRequest<{ generated: Array<{ paper_id: string; student_id: string; student_name: string; code: string }>; warning: string }>(`/academic/exam-subjects/${id}/generate-codes/`, { method: 'POST' }),
+    submitExamMarks: (id: string) => apiRequest<ExamSubjectConfiguration>(`/academic/exam-subjects/${id}/submit-marks/`, { method: 'POST' }),
+    verifyExamMarks: (id: string) => apiRequest<ExamSubjectConfiguration>(`/academic/exam-subjects/${id}/verify/`, { method: 'POST' }),
+    reopenExamMarks: (id: string, reason: string) => apiRequest<ExamSubjectConfiguration>(`/academic/exam-subjects/${id}/reopen/`, { method: 'POST', body: JSON.stringify({ reason }) }),
+    enterCodedMarks: (data: { code: string; theory_marks?: number; internal_marks?: number; practical_marks?: number; attendance_status?: string; examiner_remarks?: string; version?: number; reason?: string }) =>
+        apiRequest<{ entry: { entry_id: string; version: number }; calculated: { grade: string; grade_point: number; status: string; percentage: number } }>('/academic/answer-papers/enter-marks/', { method: 'POST', body: JSON.stringify(data) }),
+    getTermResults: async () => normalizeArrayPayload(
+        await apiRequest<StudentTermResult[] | PaginatedResponse<StudentTermResult>>('/academic/term-results/')
+    ),
+    downloadTermMarksheet: (id: string, number: string) => downloadReport(`/academic/term-results/${id}/marksheet/`, `marksheet-${number}.pdf`),
 
     // Classes
     getClasses: async () => {
