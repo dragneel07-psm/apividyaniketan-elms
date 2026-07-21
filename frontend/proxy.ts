@@ -143,9 +143,6 @@ export async function proxy(request: NextRequest) {
         if (pathname.startsWith('/login') && !isTenantHost(hostname)) {
             return NextResponse.redirect(new URL('/saas-login', request.url));
         }
-        if (pathname.startsWith('/saas-login') && isTenantHost(hostname)) {
-            return NextResponse.redirect(new URL('/login', request.url));
-        }
         if (isAuthPage) {
             return NextResponse.next({ request: { headers: requestHeaders } });
         }
