@@ -23,7 +23,12 @@ from .models import (
     SalarySlip,
     StaffAttendance,
 )
-from .permissions import IsHRManager, IsHRManagerOrReadOnly, IsOwnLeaveOrHRManager
+from .permissions import (
+    IsHRManager,
+    IsHRManagerOrReadOnly,
+    IsOwnLeaveOrHRManager,
+    IsOwnPayslipOrHRManager,
+)
 from .serializers import (
     DepartmentSerializer,
     EmployeeListSerializer,
@@ -486,10 +491,18 @@ class SalarySlipViewSet(_HRBase):
         "employee__user", "employee__department", "payroll_period"
     ).all()
     serializer_class = SalarySlipSerializer
-    permission_classes = [IsHRManager]
+    permission_classes = [IsOwnPayslipOrHRManager]
 
     def get_queryset(self):
         qs = super().get_queryset()
+        user = self.request.user
+        from .permissions import _role
+
+        if _role(user) not in {"admin", "staff"}:
+            # Employees only see their own salary slips
+            employee = getattr(user, "employee_profile", None)
+            qs = qs.filter(employee=employee) if employee else qs.none()
+
         period_id = self.request.query_params.get("payroll_period")
         employee_id = self.request.query_params.get("employee")
         slip_status = self.request.query_params.get("status")
@@ -605,7 +618,12 @@ class SalarySlipViewSet(_HRBase):
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
 
-    @action(detail=True, methods=["post"], url_path="mark-paid")
+    @action(
+        detail=True,
+        methods=["post"],
+        url_path="mark-paid",
+        permission_classes=[IsHRManager],
+    )
     def mark_paid(self, request, pk=None):
         slip = self.get_object()
         if slip.status == SalarySlip.STATUS_PAID:

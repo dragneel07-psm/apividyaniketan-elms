@@ -44,3 +44,22 @@ class IsOwnLeaveOrHRManager(permissions.BasePermission):
         # Employee can access their own leave
         employee = getattr(user, "employee_profile", None)
         return employee is not None and obj.employee == employee
+
+
+class IsOwnPayslipOrHRManager(permissions.BasePermission):
+    """Employee can view (read-only) their own salary slips; HR manager can manage all."""
+
+    def has_permission(self, request, view):
+        user = getattr(request, "user", None)
+        if not user or not user.is_authenticated:
+            return False
+        if _role(user) in {"admin", "staff"}:
+            return True
+        return request.method in permissions.SAFE_METHODS
+
+    def has_object_permission(self, request, view, obj):
+        user = request.user
+        if _role(user) in {"admin", "staff"}:
+            return True
+        employee = getattr(user, "employee_profile", None)
+        return employee is not None and obj.employee == employee

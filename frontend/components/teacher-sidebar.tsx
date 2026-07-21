@@ -27,6 +27,7 @@ import {
     MessageCircle,
     Video,
     FolderKanban,
+    Wallet,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -49,6 +50,7 @@ const navigation = [
     { name: 'Messages',       href: '/teacher/messages',     icon: MessageSquare },
     { name: 'Communication',  href: '/teacher/communication', icon: MessageCircle },
     { name: 'Reports',        href: '/teacher/reports',      icon: BarChart2 },
+    { name: 'My Payslips',    href: '/teacher/payroll',      icon: Wallet },
     { name: 'Profile',        href: '/teacher/profile',      icon: User },
 ];
 
