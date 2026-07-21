@@ -1591,7 +1591,7 @@ export interface ProgressReportHistoryItem {
 // Auth note: tokens live in httpOnly cookies which the same-origin /api
 // proxy converts into Authorization headers server-side. Client code never
 // reads or attaches tokens.
-function getResolvedTenantId(): string {
+export function getResolvedTenantId(): string {
     if (typeof window === 'undefined') return 'public';
 
     const cachedTenant = (localStorage.getItem('tenant_id') || '').trim().toLowerCase();

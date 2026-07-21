@@ -4,7 +4,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { normalizeArrayPayload } from '@/lib/api';
+import { normalizeArrayPayload, getResolvedTenantId } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -19,7 +19,10 @@ import {
 const API = (path: string) => `/api/billing/school${path}`;
 
 async function apiFetch(path: string) {
-    const res = await fetch(API(path), { credentials: 'include' });
+    const res = await fetch(API(path), {
+        credentials: 'include',
+        headers: { 'x-tenant-id': getResolvedTenantId() },
+    });
     if (!res.ok) throw new Error(`API error ${res.status}`);
     return res.json();
 }
@@ -90,7 +93,11 @@ export default function NASAccountingPage() {
 
     const seedCOA = async () => {
         try {
-            const res = await fetch(API('/nas/chart-of-accounts/seed-defaults/'), { method: 'POST', credentials: 'include' });
+            const res = await fetch(API('/nas/chart-of-accounts/seed-defaults/'), {
+                method: 'POST',
+                credentials: 'include',
+                headers: { 'x-tenant-id': getResolvedTenantId() },
+            });
             if (!res.ok) throw new Error(`API error ${res.status}`);
             await load();
         } catch (e) {
