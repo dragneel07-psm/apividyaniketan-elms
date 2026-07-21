@@ -8,7 +8,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
-import { hrAPI, HRLeaveApplication } from '@/lib/api';
+import { hrAPI, HRLeaveApplication, normalizeArrayPayload } from '@/lib/api';
 import { CalendarDays, CheckCircle2, XCircle, Clock, AlertCircle } from 'lucide-react';
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
@@ -45,7 +45,7 @@ export function LeaveManager() {
         setLoading(true);
         try {
             const data = await hrAPI.getLeaves({ status: statusFilter || undefined });
-            setLeaves(Array.isArray(data) ? data : []);
+            setLeaves(normalizeArrayPayload(data));
         } catch {
             setLeaves([]);
         } finally {

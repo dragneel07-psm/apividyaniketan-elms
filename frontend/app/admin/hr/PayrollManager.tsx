@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input';
 import {
     Dialog, DialogContent, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
-import { hrAPI, HRPayrollPeriod, HRSalarySlip } from '@/lib/api';
+import { hrAPI, HRPayrollPeriod, HRSalarySlip, normalizeArrayPayload } from '@/lib/api';
 import {
     FileText, ChevronRight, Sparkles, CheckCheck,
     ArrowLeft, DollarSign, Users, CreditCard, Download, Loader2, Plus
@@ -81,7 +81,7 @@ export function PayrollManager() {
         setLoading(true);
         try {
             const data = await hrAPI.getPayrollPeriods();
-            setPeriods(Array.isArray(data) ? data : []);
+            setPeriods(normalizeArrayPayload(data));
         } catch {
             setPeriods([]);
         } finally {
@@ -93,7 +93,7 @@ export function PayrollManager() {
         setSlipsLoading(true);
         try {
             const data = await hrAPI.getSalarySlips({ payroll_period: period.period_id });
-            setSlips(Array.isArray(data) ? data : []);
+            setSlips(normalizeArrayPayload(data));
         } catch {
             setSlips([]);
         } finally {

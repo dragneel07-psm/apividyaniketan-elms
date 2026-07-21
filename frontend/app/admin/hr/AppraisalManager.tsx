@@ -17,7 +17,7 @@ import {
     DialogTitle,
     DialogFooter,
 } from '@/components/ui/dialog';
-import { appraisalAPI, AppraisalCycle, AppraisalForm } from '@/lib/api';
+import { appraisalAPI, AppraisalCycle, AppraisalForm, normalizeArrayPayload } from '@/lib/api';
 import { toast } from 'sonner';
 import {
     Award,
@@ -145,7 +145,7 @@ export function AppraisalManager() {
         setCyclesLoading(true);
         try {
             const data = await appraisalAPI.getCycles();
-            setCycles(Array.isArray(data) ? data : []);
+            setCycles(normalizeArrayPayload(data));
         } catch {
             setCycles([]);
             toast.error('Failed to load appraisal cycles');
@@ -164,7 +164,7 @@ export function AppraisalManager() {
         setFormsLoading(true);
         try {
             const data = await appraisalAPI.getForms({ cycle: cycleId });
-            setForms(Array.isArray(data) ? data : []);
+            setForms(normalizeArrayPayload(data));
         } catch {
             setForms([]);
             toast.error('Failed to load appraisal forms');

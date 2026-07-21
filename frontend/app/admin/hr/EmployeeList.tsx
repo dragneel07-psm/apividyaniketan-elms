@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { hrAPI, HREmployee } from '@/lib/api';
+import { hrAPI, HREmployee, normalizeArrayPayload } from '@/lib/api';
 import {
     Search, UserPlus, UserCheck, UserX,
     ChevronRight, Building2, Briefcase
@@ -39,7 +39,7 @@ export function EmployeeList() {
         setLoading(true);
         try {
             const data = await hrAPI.getEmployees({ is_active: filterActive });
-            setEmployees(Array.isArray(data) ? data : []);
+            setEmployees(normalizeArrayPayload(data));
         } catch {
             setEmployees([]);
         } finally {

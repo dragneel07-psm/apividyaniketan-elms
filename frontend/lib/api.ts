@@ -959,7 +959,7 @@ type PaginatedResponse<T> = {
     results?: T[];
 };
 
-function normalizeArrayPayload<T>(payload: T[] | PaginatedResponse<T> | null | undefined): T[] {
+export function normalizeArrayPayload<T>(payload: T[] | PaginatedResponse<T> | null | undefined): T[] {
     if (Array.isArray(payload)) return payload;
     if (payload && Array.isArray(payload.results)) return payload.results;
     return [];
