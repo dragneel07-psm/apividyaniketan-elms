@@ -13,6 +13,8 @@ Usage:
 """
 
 import random
+from datetime import date
+from decimal import Decimal
 
 from django.core.management.base import BaseCommand, CommandError
 from django.db.models.signals import post_save, pre_save
@@ -21,7 +23,26 @@ from django_tenants.utils import schema_context
 from academic.models import AcademicClass, Section, Student, Teacher
 from academic.signals import sync_student_groups, track_section_change
 from core.models import Tenant
+from hr_payroll.models import Employee, PayrollPeriod, SalarySlip
 from users.models import UserAccount
+
+STAFF_DESIGNATIONS = {
+    "accountant": ("Accountant", Decimal("50000")),
+    "librarian": ("Librarian", Decimal("35000")),
+    "receptionist": ("Receptionist", Decimal("30000")),
+    "hr_manager": ("HR Manager", Decimal("55000")),
+    "hostel_warden": ("Hostel Warden", Decimal("32000")),
+    "transport_manager": ("Transport Manager", Decimal("32000")),
+}
+TEACHER_DESIGNATION = ("Subject Teacher", Decimal("45000"))
+EMPLOYEE_JOIN_DATE = date(2024, 4, 1)
+
+EARLY_YEARS_SUBJECTS = ["English", "Nepali", "Mathematics", "Art & Craft", "General Awareness"]
+CORE_SUBJECTS = [
+    "English", "Nepali", "Mathematics", "Science",
+    "Social Studies", "Computer Science", "Health & Physical Education",
+]
+N_CLASS_TEACHERS = 11  # one per grade, Nursery -> Grade 8
 
 GRADE_LEVELS = [
     "Nursery", "LKG", "UKG",
@@ -89,6 +110,8 @@ class Command(BaseCommand):
             self._seed_staff(tenant, n_staff)
             self._seed_teachers(tenant, n_teachers, rng)
             self._seed_students(tenant, n_students, classes, rng)
+            self._seed_hr_records(tenant)
+            self._seed_academic_assignments(classes)
 
         self.stdout.write(self.style.SUCCESS(f"\nDemo data seeded into schema={schema}."))
         self.stdout.write("Credentials (shared per role tier):")
@@ -189,3 +212,113 @@ class Command(BaseCommand):
             post_save.connect(sync_student_groups, sender=Student)
             pre_save.connect(track_section_change, sender=Student)
         self.stdout.write(self.style.SUCCESS(f"Students: {created} created, {count - created} already existed."))
+
+    def _seed_hr_records(self, tenant: Tenant) -> None:
+        # hr_payroll.Employee/PayrollPeriod/SalarySlip are a separate data
+        # model from users.UserAccount + academic.Teacher — creating an
+        # account doesn't create an HR profile. Backfill one for every
+        # staff/teacher account that doesn't have one yet, plus a salary
+        # slip in a shared finalized period so the payroll module (and the
+        # teacher self-service payslip page) actually has data to show.
+        period, _ = PayrollPeriod.objects.get_or_create(
+            tenant=tenant,
+            month=3,
+            year=2026,
+            defaults={
+                "name": "March 2026",
+                "start_date": date(2026, 3, 1),
+                "end_date": date(2026, 3, 31),
+                "status": PayrollPeriod.STATUS_FINALIZED,
+            },
+        )
+
+        employees_created = 0
+        slips_created = 0
+        for user in UserAccount.objects.filter(tenant=tenant, role__in=["teacher", "staff"]):
+            if user.role == "teacher":
+                designation, basic_salary = TEACHER_DESIGNATION
+            else:
+                designation, basic_salary = STAFF_DESIGNATIONS.get(user.staff_role, ("Staff", Decimal("35000")))
+
+            employee, was_created = Employee.objects.get_or_create(
+                user=user,
+                defaults={
+                    "tenant": tenant,
+                    "designation": designation,
+                    "join_date": EMPLOYEE_JOIN_DATE,
+                },
+            )
+            if was_created:
+                employees_created += 1
+
+            _, slip_created = SalarySlip.objects.get_or_create(
+                employee=employee,
+                payroll_period=period,
+                defaults={
+                    "tenant": tenant,
+                    "basic_salary": basic_salary,
+                    "hra": (basic_salary * Decimal("0.1")).quantize(Decimal("1")),
+                    "status": SalarySlip.STATUS_FINALIZED,
+                },
+            )
+            if slip_created:
+                slips_created += 1
+
+        self.stdout.write(
+            self.style.SUCCESS(
+                f"HR: {employees_created} employee profiles created, "
+                f"{slips_created} salary slips created (period: {period.name})."
+            )
+        )
+
+    def _seed_academic_assignments(self, classes: list[Section]) -> None:
+        # Assigns every teacher to subjects across all classes (round-robin),
+        # and designates one class teacher per grade (Nursery -> Grade 8) via
+        # Teacher.designation + Teacher.assigned_classes — there's no
+        # dedicated "class teacher" field on Section/AcademicClass itself.
+        from academic.models import Subject
+        from academic.services.academic_year_service import ensure_current_academic_year
+
+        # SubjectViewSet defaults non-teacher roles to whatever the app
+        # considers the *current* academic year — using this helper instead
+        # of hardcoding a year keeps seeded Subjects visible through the
+        # actual API regardless of what "today" is when this command runs.
+        year = ensure_current_academic_year()
+
+        teachers = list(Teacher.objects.select_related("user").order_by("user__email"))
+        if not teachers:
+            self.stdout.write(self.style.WARNING("No teachers found; skipping subject/class-teacher assignment."))
+            return
+
+        subjects_created = 0
+        cycle = 0
+        for section in classes:
+            cls = section.academic_class
+            is_early_years = cls.name in {"Nursery", "LKG", "UKG"}
+            subject_names = EARLY_YEARS_SUBJECTS if is_early_years else CORE_SUBJECTS
+            for subject_name in subject_names:
+                teacher = teachers[cycle % len(teachers)]
+                cycle += 1
+                code = f"{subject_name[:3].upper()}{cls.order}"
+                _, was_created = Subject.objects.get_or_create(
+                    name=subject_name,
+                    academic_class=cls,
+                    academic_year=year,
+                    defaults={"code": code, "teacher": teacher, "is_active": True},
+                )
+                if was_created:
+                    subjects_created += 1
+
+        class_teacher_count = min(N_CLASS_TEACHERS, len(classes), len(teachers))
+        for i in range(class_teacher_count):
+            teacher = teachers[i]
+            teacher.designation = "class_teacher"
+            teacher.assigned_classes.add(classes[i].academic_class)
+            teacher.save(update_fields=["designation"])
+
+        self.stdout.write(
+            self.style.SUCCESS(
+                f"Academic: {subjects_created} subject assignments created, "
+                f"{class_teacher_count} class teachers assigned (Nursery -> Grade 8)."
+            )
+        )
