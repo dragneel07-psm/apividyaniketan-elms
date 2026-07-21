@@ -11,9 +11,18 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from '@/components/ui/dialog';
+import { Badge } from '@/components/ui/badge';
 import { billingAPI, academicAPI, FeeStructure, AcademicClass } from '@/lib/api';
+import { formatRs } from '@/lib/finance';
 import { toast } from 'sonner';
-import { Plus, Trash2, Edit, Save, X, Coins, Users } from 'lucide-react';
+import { Plus, Trash2, Edit, Save, X, Coins, Users, Loader2, Wallet } from 'lucide-react';
+
+const FREQUENCY_COLOR: Record<string, string> = {
+    monthly: 'bg-indigo-100 text-indigo-700 border-indigo-200',
+    term: 'bg-amber-100 text-amber-700 border-amber-200',
+    annual: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+    one_time: 'bg-slate-100 text-slate-600 border-slate-200',
+};
 
 export default function FeeStructureManager() {
     const [feeStructures, setFeeStructures] = useState<FeeStructure[]>([]);
@@ -172,12 +181,18 @@ export default function FeeStructureManager() {
                         <TableBody>
                             {loading ? (
                                 <TableRow>
-                                    <TableCell colSpan={5} className="text-center py-8">Loading...</TableCell>
+                                    <TableCell colSpan={5} className="py-12">
+                                        <div className="flex justify-center">
+                                            <Loader2 className="h-6 w-6 animate-spin text-indigo-500" />
+                                        </div>
+                                    </TableCell>
                                 </TableRow>
                             ) : feeStructures.length === 0 ? (
                                 <TableRow>
-                                    <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
-                                        No fee structures defined.
+                                    <TableCell colSpan={5} className="py-12 text-center">
+                                        <Wallet className="h-8 w-8 mx-auto mb-2 text-slate-300" />
+                                        <p className="text-sm font-medium text-slate-500">No fee structures defined.</p>
+                                        <p className="text-xs text-slate-400">Add one to start billing students.</p>
                                     </TableCell>
                                 </TableRow>
                             ) : (
@@ -196,8 +211,12 @@ export default function FeeStructureManager() {
                                                 ? classes.find(c => c.id === fee.academic_class)?.name || 'Unknown Class'
                                                 : <span className="text-slate-500 italic">All Classes</span>}
                                         </TableCell>
-                                        <TableCell>${fee.amount.toLocaleString()}</TableCell>
-                                        <TableCell className="capitalize">{fee.frequency.replace('_', ' ')}</TableCell>
+                                        <TableCell className="font-semibold">{formatRs(fee.amount)}</TableCell>
+                                        <TableCell>
+                                            <Badge variant="outline" className={`capitalize font-semibold ${FREQUENCY_COLOR[fee.frequency] || FREQUENCY_COLOR.one_time}`}>
+                                                {fee.frequency.replace('_', ' ')}
+                                            </Badge>
+                                        </TableCell>
                                         <TableCell className="text-right">
                                             <Button variant="ghost" size="icon" onClick={() => openAssignDialog(fee)} title="Assign to Students">
                                                 <Users className="h-4 w-4 text-indigo-500" />

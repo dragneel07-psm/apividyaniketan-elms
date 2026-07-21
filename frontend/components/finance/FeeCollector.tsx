@@ -3,22 +3,34 @@
 // via any medium, is strictly prohibited. Proprietary and confidential.
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Badge } from '@/components/ui/badge';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { billingAPI, academicAPI, Student, StudentFee } from '@/lib/api';
 import { toast } from 'sonner';
-import { Search, CreditCard, Printer, CheckCircle, Banknote, User } from 'lucide-react';
+import { formatRs } from '@/lib/finance';
+import { CreditCard, Printer, CheckCircle, Banknote, User, Loader2, ChevronsUpDown, Check } from 'lucide-react';
+
+const FEE_STATUS_COLOR: Record<string, string> = {
+    paid: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+    partial: 'bg-amber-100 text-amber-700 border-amber-200',
+    overdue: 'bg-red-100 text-red-700 border-red-200',
+    pending: 'bg-slate-100 text-slate-600 border-slate-200',
+    waived: 'bg-blue-100 text-blue-700 border-blue-200',
+};
 
 export default function FeeCollector() {
-    const [searchTerm, setSearchTerm] = useState('');
-    const [students, setStudents] = useState<Student[]>([]);
+    const [allStudents, setAllStudents] = useState<Student[]>([]);
+    const [loadingStudents, setLoadingStudents] = useState(true);
+    const [comboOpen, setComboOpen] = useState(false);
     const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
     const [fees, setFees] = useState<StudentFee[]>([]);
     const [loadingInfo, setLoadingInfo] = useState(false);
@@ -30,31 +42,29 @@ export default function FeeCollector() {
     const [isConfirmOpen, setIsConfirmOpen] = useState(false);
     const [lastPaymentId, setLastPaymentId] = useState<string | null>(null);
 
-    const handleSearch = async () => {
-        if (!searchTerm) return;
-        setLoadingInfo(true);
-        try {
-            // In a real app, use a dedicated search endpoint. 
-            // Here we fetch all (demo scale) and filter.
-            const allStudents = await academicAPI.getStudents();
-            const filtered = allStudents.filter(s =>
-                s.first_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                s.last_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                s.student_id.includes(searchTerm)
-            );
-            setStudents(filtered);
-            setSelectedStudent(null);
-            setFees([]);
-        } catch (error) {
-            toast.error('Search failed');
-        } finally {
-            setLoadingInfo(false);
-        }
-    };
+    useEffect(() => {
+        (async () => {
+            setLoadingStudents(true);
+            try {
+                // In a real app, use a dedicated search endpoint. Here we
+                // fetch all (demo scale) once and filter client-side as the
+                // dropdown's search box is typed into.
+                const data = await academicAPI.getStudents();
+                setAllStudents(data);
+            } catch {
+                toast.error('Failed to load students');
+            } finally {
+                setLoadingStudents(false);
+            }
+        })();
+    }, []);
 
     const selectStudent = async (student: Student) => {
         setSelectedStudent(student);
         setFees([]);
+        setSelectedFeeIds([]);
+        setPaymentAmount(0);
+        setLastPaymentId(null);
         setLoadingInfo(true);
         try {
             const allFees = await billingAPI.getStudentFees();
@@ -82,18 +92,8 @@ export default function FeeCollector() {
         if (!selectedStudent || paymentAmount <= 0) return;
 
         try {
-            // For MVP: multiple fees payment = multiple records or one transaction? 
-            // API only supports one recordPayment call which accepts `student_fee` ID (singular).
-            // So we loop? Or API needs update. 
-            // Let's assume for now we pay fees one by one or the backend handles bulk?
-            // "recordPayment" takes "student_fee" FK.
-            // If paying multiple, we need to make multiple calls or enhance API.
-
-            // Wait, recordPayment is:
-            // payment = serializer.save(...)
-            // if payment.student_fee: update...
-
-            // We'll iterate for now.
+            // recordPayment only accepts a single student_fee per call, so a
+            // multi-fee collection is submitted as one request per fee line.
             for (const feeId of selectedFeeIds) {
                 const fee = fees.find(f => f.student_fee_id === feeId);
                 const amountToPay = fee ? (fee.amount_due - fee.amount_paid) : 0; // Paying full balance
@@ -138,41 +138,67 @@ export default function FeeCollector() {
                         <CardDescription>Search by name or ID</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
-                        <div className="flex gap-2">
-                            <Input
-                                placeholder="Name or ID..."
-                                value={searchTerm}
-                                onChange={e => setSearchTerm(e.target.value)}
-                                onKeyDown={e => e.key === 'Enter' && handleSearch()}
-                            />
-                            <Button size="icon" onClick={handleSearch}>
-                                <Search className="h-4 w-4" />
-                            </Button>
-                        </div>
-
-                        <div className="space-y-2 max-h-[400px] overflow-y-auto">
-                            {students.map(student => (
-                                <div
-                                    key={student.id}
-                                    onClick={() => selectStudent(student)}
-                                    className={`p-3 rounded-lg cursor-pointer border transition-colors flex items-center gap-3
-                                        ${selectedStudent?.id === student.id
-                                            ? 'bg-indigo-50 border-indigo-200 shadow-sm'
-                                            : 'hover:bg-slate-50 border-transparent'}`}
+                        <Popover open={comboOpen} onOpenChange={setComboOpen}>
+                            <PopoverTrigger asChild>
+                                <Button
+                                    variant="outline"
+                                    role="combobox"
+                                    aria-expanded={comboOpen}
+                                    disabled={loadingStudents}
+                                    className="w-full justify-between font-normal"
                                 >
-                                    <div className="h-8 w-8 rounded-full bg-slate-200 flex items-center justify-center text-slate-600">
-                                        <User className="h-4 w-4" />
-                                    </div>
-                                    <div>
-                                        <div className="font-medium text-sm">{student.first_name} {student.last_name}</div>
-                                        <div className="text-xs text-muted-foreground">ID: {student.student_id}</div>
-                                    </div>
-                                </div>
-                            ))}
-                            {students.length === 0 && searchTerm && !loadingInfo && (
-                                <div className="text-center text-sm text-muted-foreground py-4">No students found</div>
-                            )}
-                        </div>
+                                    <span className="flex items-center gap-2 truncate">
+                                        {loadingStudents ? (
+                                            <>
+                                                <Loader2 className="h-4 w-4 animate-spin text-slate-400" />
+                                                Loading students...
+                                            </>
+                                        ) : selectedStudent ? (
+                                            `${selectedStudent.first_name} ${selectedStudent.last_name} (${selectedStudent.student_id})`
+                                        ) : (
+                                            <span className="text-muted-foreground">Search by name or ID...</span>
+                                        )}
+                                    </span>
+                                    <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50" />
+                                </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                                <Command>
+                                    <CommandInput placeholder="Name or ID..." />
+                                    <CommandList className="max-h-[320px]">
+                                        <CommandEmpty>No students found.</CommandEmpty>
+                                        <CommandGroup>
+                                            {allStudents.map(student => (
+                                                <CommandItem
+                                                    key={student.id}
+                                                    value={`${student.first_name} ${student.last_name} ${student.student_id}`}
+                                                    onSelect={() => {
+                                                        selectStudent(student);
+                                                        setComboOpen(false);
+                                                    }}
+                                                    className="gap-2"
+                                                >
+                                                    <Check className={`h-4 w-4 shrink-0 ${selectedStudent?.id === student.id ? 'opacity-100' : 'opacity-0'}`} />
+                                                    <div className="h-7 w-7 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 shrink-0">
+                                                        <User className="h-3.5 w-3.5" />
+                                                    </div>
+                                                    <div className="min-w-0">
+                                                        <div className="font-medium text-sm truncate">{student.first_name} {student.last_name}</div>
+                                                        <div className="text-xs text-muted-foreground">ID: {student.student_id}</div>
+                                                    </div>
+                                                </CommandItem>
+                                            ))}
+                                        </CommandGroup>
+                                    </CommandList>
+                                </Command>
+                            </PopoverContent>
+                        </Popover>
+
+                        {loadingInfo && (
+                            <div className="flex justify-center py-6">
+                                <Loader2 className="h-5 w-5 animate-spin text-indigo-500" />
+                            </div>
+                        )}
                     </CardContent>
                 </Card>
             </div>
@@ -190,7 +216,7 @@ export default function FeeCollector() {
                                 {selectedFeeIds.length > 0 && (
                                     <Button onClick={() => setIsConfirmOpen(true)}>
                                         <CreditCard className="mr-2 h-4 w-4" />
-                                        Collect ${paymentAmount.toFixed(2)}
+                                        Collect {formatRs(paymentAmount)}
                                     </Button>
                                 )}
                             </CardHeader>
@@ -218,11 +244,12 @@ export default function FeeCollector() {
                                             fees.map(fee => {
                                                 const balance = fee.amount_due - fee.amount_paid;
                                                 const isPaid = balance <= 0;
+                                                const isPayable = !isPaid && fee.status !== 'waived';
 
                                                 return (
-                                                    <TableRow key={fee.student_fee_id} className={isPaid ? "bg-slate-50 opacity-75" : ""}>
+                                                    <TableRow key={fee.student_fee_id} className={!isPayable ? "bg-slate-50 opacity-75" : ""}>
                                                         <TableCell>
-                                                            {!isPaid && (
+                                                            {isPayable && (
                                                                 <Checkbox
                                                                     checked={selectedFeeIds.includes(fee.student_fee_id)}
                                                                     onCheckedChange={() => toggleFeeSelection(fee.student_fee_id, balance)}
@@ -231,16 +258,13 @@ export default function FeeCollector() {
                                                         </TableCell>
                                                         <TableCell className="font-medium">{fee.fee_name}</TableCell>
                                                         <TableCell>{fee.due_date}</TableCell>
-                                                        <TableCell>${fee.amount_due}</TableCell>
-                                                        <TableCell>${fee.amount_paid}</TableCell>
-                                                        <TableCell className="font-bold text-slate-900">${balance.toFixed(2)}</TableCell>
+                                                        <TableCell>{formatRs(fee.amount_due)}</TableCell>
+                                                        <TableCell>{formatRs(fee.amount_paid)}</TableCell>
+                                                        <TableCell className="font-bold text-slate-900">{formatRs(balance)}</TableCell>
                                                         <TableCell>
-                                                            <span className={`px-2 py-1 rounded-full text-xs font-medium 
-                                                                ${fee.status === 'paid' ? 'bg-green-100 text-green-700' :
-                                                                    fee.status === 'overdue' ? 'bg-red-100 text-red-700' :
-                                                                        'bg-amber-100 text-amber-700'}`}>
+                                                            <Badge variant="outline" className={`font-bold ${FEE_STATUS_COLOR[fee.status] || FEE_STATUS_COLOR.pending}`}>
                                                                 {fee.status.toUpperCase()}
-                                                            </span>
+                                                            </Badge>
                                                         </TableCell>
                                                     </TableRow>
                                                 );
@@ -292,7 +316,7 @@ export default function FeeCollector() {
                             </div>
                             <div className="border-t pt-2 flex justify-between font-bold text-lg">
                                 <span>Total Amount:</span>
-                                <span>${paymentAmount.toFixed(2)}</span>
+                                <span>{formatRs(paymentAmount)}</span>
                             </div>
                         </div>
 

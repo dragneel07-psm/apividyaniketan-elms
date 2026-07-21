@@ -4,6 +4,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import { normalizeArrayPayload } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -15,7 +16,7 @@ import {
     Coins, Scale,
 } from 'lucide-react';
 
-const API = (path: string) => `/api/billing_school${path}`;
+const API = (path: string) => `/api/billing/school${path}`;
 
 async function apiFetch(path: string) {
     const res = await fetch(API(path), { credentials: 'include' });
@@ -74,10 +75,10 @@ export default function NASAccountingPage() {
             setBsDate(calData);
             setIE(ieData?.data);
             setBS(bsData?.data);
-            setCoa(Array.isArray(coaData) ? coaData : []);
+            setCoa(normalizeArrayPayload(coaData));
             setTdsSummary(tdsData);
             setDepSchedule(depData);
-            setFunds(Array.isArray(fundData) ? fundData : []);
+            setFunds(normalizeArrayPayload(fundData));
         } catch (e: any) {
             setError(e.message || 'Failed to load accounting data.');
         } finally {
@@ -88,8 +89,13 @@ export default function NASAccountingPage() {
     useEffect(() => { load(); }, [load]);
 
     const seedCOA = async () => {
-        await fetch(API('/nas/chart-of-accounts/seed-defaults/'), { method: 'POST', credentials: 'include' });
-        load();
+        try {
+            const res = await fetch(API('/nas/chart-of-accounts/seed-defaults/'), { method: 'POST', credentials: 'include' });
+            if (!res.ok) throw new Error(`API error ${res.status}`);
+            await load();
+        } catch (e) {
+            setError(e instanceof Error ? e.message : 'Failed to seed the chart of accounts.');
+        }
     };
 
     if (loading) return (
@@ -143,7 +149,7 @@ export default function NASAccountingPage() {
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                     <StatCard
                         label="Total Income"
-                        value={`NPR ${ie.income.total.toLocaleString()}`}
+                        value={`Rs. ${ie.income.total.toLocaleString()}`}
                         icon={<TrendingUp className="h-5 w-5 text-emerald-600" />}
                         bg="from-emerald-50 to-teal-50"
                         iconBg="bg-emerald-100"
@@ -151,21 +157,21 @@ export default function NASAccountingPage() {
                     />
                     <StatCard
                         label="Total Expenditure"
-                        value={`NPR ${ie.expenditure.total.toLocaleString()}`}
+                        value={`Rs. ${ie.expenditure.total.toLocaleString()}`}
                         icon={<TrendingDown className="h-5 w-5 text-rose-600" />}
                         bg="from-rose-50 to-pink-50"
                         iconBg="bg-rose-100"
                     />
                     <StatCard
                         label={ie.label_surplus}
-                        value={`NPR ${Math.abs(ie.surplus_deficit).toLocaleString()}`}
+                        value={`Rs. ${Math.abs(ie.surplus_deficit).toLocaleString()}`}
                         icon={<BarChart3 className="h-5 w-5 text-indigo-600" />}
                         bg="from-indigo-50 to-purple-50"
                         iconBg="bg-indigo-100"
                     />
                     <StatCard
                         label="Total Assets"
-                        value={`NPR ${bs.assets.total_assets.toLocaleString()}`}
+                        value={`Rs. ${bs.assets.total_assets.toLocaleString()}`}
                         icon={<Coins className="h-5 w-5 text-amber-600" />}
                         bg="from-amber-50 to-orange-50"
                         iconBg="bg-amber-100"
@@ -237,7 +243,7 @@ export default function NASAccountingPage() {
                                                 {ie.label_surplus} for the Period
                                             </span>
                                             <span className={`font-black text-xl ${ie.surplus_deficit >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
-                                                NPR {Math.abs(ie.surplus_deficit).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                                Rs. {Math.abs(ie.surplus_deficit).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                                             </span>
                                         </div>
                                     </div>
@@ -266,7 +272,7 @@ export default function NASAccountingPage() {
                                             <div key={label}>
                                                 <div className="flex justify-between text-xs mb-1">
                                                     <span className="text-slate-600 font-medium">{label}</span>
-                                                    <span className="text-slate-500">NPR {value.toLocaleString()} ({pct.toFixed(1)}%)</span>
+                                                    <span className="text-slate-500">Rs. {value.toLocaleString()} ({pct.toFixed(1)}%)</span>
                                                 </div>
                                                 <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
                                                     <div className={`h-full ${color} rounded-full`} style={{ width: `${pct}%` }} />
@@ -349,7 +355,7 @@ export default function NASAccountingPage() {
                                                             {f.type}
                                                         </Badge>
                                                     </div>
-                                                    <span className="text-sm font-bold text-slate-900">NPR {f.balance.toLocaleString()}</span>
+                                                    <span className="text-sm font-bold text-slate-900">Rs. {f.balance.toLocaleString()}</span>
                                                 </div>
                                             ))}
                                         </div>
@@ -403,7 +409,7 @@ export default function NASAccountingPage() {
                                                             {acc.sub_type && <Badge className="text-[9px] px-1.5 py-0 bg-slate-100 text-slate-500 border-0">{acc.sub_type.replace('_', ' ')}</Badge>}
                                                         </div>
                                                         <span className={`text-sm font-bold ${acc.balance >= 0 ? 'text-slate-700' : 'text-rose-600'}`}>
-                                                            NPR {acc.balance.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                                            Rs. {acc.balance.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                                                         </span>
                                                     </div>
                                                 ))}
@@ -424,14 +430,14 @@ export default function NASAccountingPage() {
                                 <Card className="rounded-2xl border-0 shadow-md bg-gradient-to-br from-indigo-500 to-indigo-600 text-white">
                                     <CardContent className="p-5">
                                         <p className="text-indigo-200 text-xs font-bold uppercase tracking-widest">Total TDS Withheld</p>
-                                        <p className="text-3xl font-black mt-1">NPR {tdsSummary.total_tds.toLocaleString()}</p>
+                                        <p className="text-3xl font-black mt-1">Rs. {tdsSummary.total_tds.toLocaleString()}</p>
                                         <p className="text-indigo-200 text-xs mt-1">FY {tdsSummary.fiscal_year}</p>
                                     </CardContent>
                                 </Card>
                                 <Card className="rounded-2xl border-0 shadow-md bg-gradient-to-br from-emerald-500 to-emerald-600 text-white">
                                     <CardContent className="p-5">
                                         <p className="text-emerald-200 text-xs font-bold uppercase tracking-widest">Deposited to IRD</p>
-                                        <p className="text-3xl font-black mt-1">NPR {tdsSummary.deposited_tds.toLocaleString()}</p>
+                                        <p className="text-3xl font-black mt-1">Rs. {tdsSummary.deposited_tds.toLocaleString()}</p>
                                         <p className="text-emerald-200 text-xs mt-1">
                                             <CheckCircle2 className="inline h-3 w-3 mr-1" />Cleared
                                         </p>
@@ -440,7 +446,7 @@ export default function NASAccountingPage() {
                                 <Card className={`rounded-2xl border-0 shadow-md text-white ${tdsSummary.pending_tds > 0 ? 'bg-gradient-to-br from-rose-500 to-rose-600' : 'bg-gradient-to-br from-slate-400 to-slate-500'}`}>
                                     <CardContent className="p-5">
                                         <p className="text-rose-100 text-xs font-bold uppercase tracking-widest">Pending Deposit</p>
-                                        <p className="text-3xl font-black mt-1">NPR {tdsSummary.pending_tds.toLocaleString()}</p>
+                                        <p className="text-3xl font-black mt-1">Rs. {tdsSummary.pending_tds.toLocaleString()}</p>
                                         {tdsSummary.pending_tds > 0 && (
                                             <p className="text-rose-200 text-xs mt-1">
                                                 <AlertCircle className="inline h-3 w-3 mr-1" />Deposit to IRD
@@ -466,7 +472,7 @@ export default function NASAccountingPage() {
                                                 <div>
                                                     <p className="text-sm font-bold text-slate-800 capitalize">{type.replace('_', ' ')}</p>
                                                 </div>
-                                                <span className="text-sm font-bold text-indigo-700">NPR {data.total.toLocaleString()}</span>
+                                                <span className="text-sm font-bold text-indigo-700">Rs. {data.total.toLocaleString()}</span>
                                             </div>
                                         ))}
                                     </div>
@@ -489,7 +495,7 @@ export default function NASAccountingPage() {
                             {depSchedule && (
                                 <div className="text-right">
                                     <p className="text-[10px] text-slate-400">Annual Depreciation</p>
-                                    <p className="text-sm font-black text-rose-600">NPR {depSchedule.total_annual_dep.toLocaleString()}</p>
+                                    <p className="text-sm font-black text-rose-600">Rs. {depSchedule.total_annual_dep.toLocaleString()}</p>
                                 </div>
                             )}
                         </CardHeader>
@@ -538,7 +544,7 @@ export default function NASAccountingPage() {
                                             <tr className="bg-slate-50 font-bold">
                                                 <td colSpan={5} className="py-2 px-3 text-slate-700">Total Annual Depreciation</td>
                                                 <td className="py-2 px-3 text-right text-rose-700">
-                                                    NPR {depSchedule.total_annual_dep.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                                    Rs. {depSchedule.total_annual_dep.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                                                 </td>
                                                 <td colSpan={2} />
                                             </tr>
@@ -584,8 +590,8 @@ export default function NASAccountingPage() {
                                                             {fund.purpose && <p className="text-xs text-slate-400 mt-0.5">{fund.purpose}</p>}
                                                         </div>
                                                         <div className="text-right">
-                                                            <p className="text-base font-black text-slate-900">NPR {fund.current_balance.toLocaleString()}</p>
-                                                            <p className="text-[10px] text-slate-400">Opening: NPR {fund.opening_balance.toLocaleString()}</p>
+                                                            <p className="text-base font-black text-slate-900">Rs. {fund.current_balance.toLocaleString()}</p>
+                                                            <p className="text-[10px] text-slate-400">Opening: Rs. {fund.opening_balance.toLocaleString()}</p>
                                                         </div>
                                                     </div>
                                                 ))}
@@ -642,7 +648,7 @@ function LineItem({ label, value, color }: { label: string; value: number; color
         <div className="flex items-center justify-between py-1.5 border-b border-slate-50">
             <span className="text-sm text-slate-600">{label}</span>
             <span className={`text-sm font-semibold text-${color}-700`}>
-                NPR {value.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                Rs. {value.toLocaleString(undefined, { minimumFractionDigits: 2 })}
             </span>
         </div>
     );
@@ -652,7 +658,7 @@ function SubTotalLine({ label, value }: { label: string; value: number }) {
     return (
         <div className="flex items-center justify-between py-1.5 bg-slate-50 rounded-lg px-2 mt-1">
             <span className="text-xs font-bold text-slate-600">{label}</span>
-            <span className="text-sm font-bold text-slate-800">NPR {value.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+            <span className="text-sm font-bold text-slate-800">Rs. {value.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
         </div>
     );
 }
@@ -661,7 +667,7 @@ function TotalLine({ label, value }: { label: string; value: number }) {
     return (
         <div className="flex items-center justify-between py-2 border-t-2 border-slate-200 mt-1">
             <span className="text-sm font-black text-slate-800">{label}</span>
-            <span className="text-base font-black text-slate-900">NPR {value.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+            <span className="text-base font-black text-slate-900">Rs. {value.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
         </div>
     );
 }

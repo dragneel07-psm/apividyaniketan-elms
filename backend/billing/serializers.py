@@ -213,6 +213,11 @@ class FeeHeadSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ["head_id", "tenant", "created_at"]
 
+    def validate_amount(self, value):
+        if value < 0:
+            raise serializers.ValidationError("Fee head amount cannot be negative.")
+        return value
+
 
 class FeeStructureSerializer(serializers.ModelSerializer):
     class_name = serializers.SerializerMethodField()
@@ -228,6 +233,29 @@ class FeeStructureSerializer(serializers.ModelSerializer):
             return float(sum(Decimal(str(h.amount or 0)) for h in obj.heads.all()))
         except Exception:
             return 0.0
+
+    def validate_amount(self, value):
+        if value <= 0:
+            raise serializers.ValidationError("Fee amount must be greater than zero.")
+        return value
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        late_fee_type = attrs.get(
+            "late_fee_type", getattr(self.instance, "late_fee_type", "none")
+        )
+        late_fee_amount = attrs.get(
+            "late_fee_amount", getattr(self.instance, "late_fee_amount", Decimal("0"))
+        )
+        if late_fee_amount < 0:
+            raise serializers.ValidationError(
+                {"late_fee_amount": "Late fee cannot be negative."}
+            )
+        if late_fee_type == "percent" and late_fee_amount > 100:
+            raise serializers.ValidationError(
+                {"late_fee_amount": "Percentage late fee cannot exceed 100%."}
+            )
+        return attrs
 
     class Meta:
         model = FeeStructure
@@ -341,6 +369,29 @@ class PaymentSerializer(serializers.ModelSerializer):
                     }
                 )
 
+        amount = attrs.get("amount", getattr(instance, "amount", None))
+        if amount is not None and amount <= 0:
+            raise serializers.ValidationError(
+                {"amount": "Payment amount must be greater than zero."}
+            )
+
+        # A payment linked to a fee may not exceed its current outstanding
+        # balance. This protects every caller, including imports and API clients,
+        # rather than relying only on the admin form's max attribute.
+        if student_fee and amount is not None and instance is None:
+            outstanding = Decimal(str(student_fee.amount_due or 0)) - Decimal(
+                str(student_fee.amount_paid or 0)
+            )
+            if amount > outstanding:
+                raise serializers.ValidationError(
+                    {
+                        "amount": (
+                            "Payment exceeds the outstanding balance "
+                            f"of {outstanding:.2f}."
+                        )
+                    }
+                )
+
         return attrs
 
 
@@ -353,3 +404,8 @@ class ExpenseSerializer(serializers.ModelSerializer):
         model = Expense
         fields = "__all__"
         read_only_fields = ["tenant", "recorded_by"]
+
+    def validate_amount(self, value):
+        if value <= 0:
+            raise serializers.ValidationError("Expense amount must be greater than zero.")
+        return value

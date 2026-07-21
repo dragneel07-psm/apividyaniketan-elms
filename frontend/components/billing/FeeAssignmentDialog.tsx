@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { billingAPI, FeeStructure, AcademicClass } from '@/lib/api';
+import { formatRs } from '@/lib/finance';
 import { toast } from 'sonner';
 import { Rocket, Calendar, Users, Loader2 } from 'lucide-react';
 
@@ -73,7 +74,7 @@ export function FeeAssignmentDialog({ open, onOpenChange, feeStructures, classes
                             <SelectContent>
                                 {feeStructures.map(f => (
                                     <SelectItem key={f.fee_id} value={f.fee_id.toString()}>
-                                        {f.name} (${f.amount})
+                                        {f.name} ({formatRs(f.amount)})
                                     </SelectItem>
                                 ))}
                             </SelectContent>

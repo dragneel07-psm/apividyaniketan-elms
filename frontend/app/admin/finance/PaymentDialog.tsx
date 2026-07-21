@@ -23,6 +23,7 @@ import {
     SelectValue,
 } from "@/components/ui/select";
 import { billingAPI, StudentFee } from '@/lib/api';
+import { formatRs } from '@/lib/finance';
 import { DollarSign, CreditCard, Receipt, Wallet, Banknote, Building2, CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -103,7 +104,7 @@ export function PaymentDialog({ open, onOpenChange, fee, onSuccess }: PaymentDia
                         <div className="space-y-2">
                             <h2 className="text-2xl font-black text-slate-900">Payment Successful!</h2>
                             <p className="text-slate-500 text-sm max-w-[280px]">
-                                Your payment of <strong>${parseFloat(amount).toLocaleString()}</strong> for <strong>{fee?.fee_name}</strong> has been recorded.
+                                Your payment of <strong>{formatRs(amount)}</strong> for <strong>{fee?.fee_name}</strong> has been recorded.
                             </p>
                         </div>
                         <div className="pt-6 flex gap-3 w-full max-w-[300px]">
@@ -142,14 +143,14 @@ export function PaymentDialog({ open, onOpenChange, fee, onSuccess }: PaymentDia
                     </div>
                     <div className="flex justify-between text-xs">
                         <span className="text-slate-400 font-bold uppercase tracking-wider">Balance Due</span>
-                        <span className="text-red-600 font-black">${(fee?.balance || 0).toLocaleString()}</span>
+                        <span className="text-red-600 font-black">{formatRs(fee?.balance)}</span>
                     </div>
                 </div>
 
                 <form onSubmit={handleSubmit} className="space-y-6 pt-2">
                     <div className="space-y-4">
                         <div className="space-y-2">
-                            <Label htmlFor="pay-amount" className="text-xs font-bold uppercase tracking-wider text-slate-500">Amount to Pay ($)</Label>
+                            <Label htmlFor="pay-amount" className="text-xs font-bold uppercase tracking-wider text-slate-500">Amount to Pay (Rs.)</Label>
                             <div className="relative">
                                 <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                                 <Input

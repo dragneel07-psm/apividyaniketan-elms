@@ -7,10 +7,10 @@ from datetime import date
 from rest_framework import serializers as drf_serializers
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
-from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from billing_school.models_ledger import LedgerAccount, LedgerEntry
+from billing.permissions import IsSchoolFinanceManager
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +64,7 @@ class LedgerEntrySerializer(drf_serializers.ModelSerializer):
 
 class LedgerAccountViewSet(viewsets.ModelViewSet):
     serializer_class = LedgerAccountSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsSchoolFinanceManager]
 
     def get_queryset(self):
         tenant = getattr(self.request.user, "tenant", None)
@@ -118,7 +118,7 @@ class LedgerAccountViewSet(viewsets.ModelViewSet):
 
 class LedgerEntryViewSet(viewsets.ModelViewSet):
     serializer_class = LedgerEntrySerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsSchoolFinanceManager]
 
     def get_queryset(self):
         tenant = getattr(self.request.user, "tenant", None)

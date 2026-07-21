@@ -13,6 +13,7 @@ import {
     Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger,
 } from '@/components/ui/dialog';
 import { billingAPI, Expense } from '@/lib/api';
+import { formatRs } from '@/lib/finance';
 import { useToast } from '@/hooks/use-toast';
 import {
     Plus, Trash2, Loader2, Search, Receipt,
@@ -143,7 +144,7 @@ export function ExpenseManager() {
                     {filtered.length > 0 && (
                         <div className="text-right">
                             <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wide">Total</p>
-                            <p className="text-sm font-black text-orange-700">${totalFiltered.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                            <p className="text-sm font-black text-orange-700">{formatRs(totalFiltered)}</p>
                         </div>
                     )}
                     <Dialog open={formOpen} onOpenChange={o => { setFormOpen(o); if (!o) { setEditExpense(null); setForm({ ...BLANK_FORM }); } }}>
@@ -162,7 +163,7 @@ export function ExpenseManager() {
                                 </div>
                                 <div className="grid grid-cols-2 gap-3">
                                     <div className="space-y-1.5">
-                                        <label className="text-xs font-bold text-slate-600 uppercase tracking-wide">Amount ($)</label>
+                                        <label className="text-xs font-bold text-slate-600 uppercase tracking-wide">Amount (Rs.)</label>
                                         <Input type="number" step="0.01" min="0" value={form.amount}
                                             onChange={e => setForm(f => ({ ...f, amount: e.target.value }))}
                                             placeholder="0.00" className="rounded-xl border-slate-200 text-sm" required />
@@ -226,7 +227,7 @@ export function ExpenseManager() {
                                         </p>
                                     </div>
                                     <div className="flex items-center gap-3 flex-shrink-0">
-                                        <span className="text-base font-black text-orange-700">${Number(exp.amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                        <span className="text-base font-black text-orange-700">{formatRs(exp.amount)}</span>
                                         <Button size="sm" variant="outline" onClick={() => openEdit(exp)}
                                             className="h-8 px-2 rounded-lg text-xs border-slate-200">Edit</Button>
                                         <Dialog open={deleteId === exp.expense_id} onOpenChange={o => setDeleteId(o ? exp.expense_id : null)}>
@@ -238,7 +239,7 @@ export function ExpenseManager() {
                                             <DialogContent className="sm:max-w-[340px]">
                                                 <DialogHeader><DialogTitle>Delete Expense</DialogTitle></DialogHeader>
                                                 <div className="space-y-4 pt-2">
-                                                    <p className="text-sm text-slate-600">Delete <strong>{exp.title}</strong> (${Number(exp.amount).toFixed(2)})? This cannot be undone.</p>
+                                                    <p className="text-sm text-slate-600">Delete <strong>{exp.title}</strong> ({formatRs(exp.amount)})? This cannot be undone.</p>
                                                     <Button onClick={() => handleDelete(exp.expense_id)} disabled={submitting}
                                                         className="w-full bg-red-600 hover:bg-red-700 text-white rounded-xl font-bold">
                                                         {submitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null} Delete

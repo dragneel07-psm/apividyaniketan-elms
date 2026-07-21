@@ -4759,7 +4759,10 @@ export interface LedgerStatement {
 }
 
 export const ledgerAPI = {
-    getAccounts: () => apiRequest<LedgerAccount[]>('/billing/school/ledger-accounts/'),
+    getAccounts: async () => {
+        const payload = await apiRequest<LedgerAccount[] | PaginatedResponse<LedgerAccount>>('/billing/school/ledger-accounts/');
+        return normalizeArrayPayload(payload);
+    },
     createAccount: (data: Partial<LedgerAccount>) =>
         apiRequest<LedgerAccount>('/billing/school/ledger-accounts/', { method: 'POST', body: JSON.stringify(data) }),
     updateAccount: (id: string, data: Partial<LedgerAccount>) =>

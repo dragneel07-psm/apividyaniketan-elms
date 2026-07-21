@@ -540,36 +540,92 @@ class Command(BaseCommand):
 
     def _setup_billing(self, users, tenant=None):
         try:
-            from billing.models_school import FeeStructure, StudentFee
+            from billing.models_school import Expense, FeeStructure, Payment, StudentFee
 
-            fee_structure, _ = FeeStructure.objects.get_or_create(
-                name="QA Tuition Fee",
-                tenant=tenant,
-                defaults={
-                    "amount": 5000.00,
-                    "frequency": "monthly",
-                },
+            from academic.models import AcademicClass, Student
+
+            fee_definitions = (
+                ("Monthly Tuition", 5000.00, "monthly"),
+                ("Annual Library", 1500.00, "annual"),
+                ("Term Examination", 2500.00, "term"),
+                ("Transport", 1800.00, "monthly"),
             )
+            classes = list(AcademicClass.objects.all().order_by("id"))
+            structures_by_class = {}
+            structures = []
+            for academic_class in classes:
+                class_structures = []
+                for label, amount, frequency in fee_definitions:
+                    structure, _ = FeeStructure.objects.update_or_create(
+                        name=f"QA {academic_class.name} {label}",
+                        academic_class=academic_class,
+                        tenant=tenant,
+                        defaults={"amount": amount, "frequency": frequency},
+                    )
+                    structures.append(structure)
+                    class_structures.append(structure)
+                structures_by_class[academic_class.pk] = class_structures
 
-            # StudentFee requires a Student — try to link to qa student
-            from academic.models import Student
+            students = list(Student.objects.filter(user__in=[users["student"], users["student2"]]))
+            statuses = (
+                ("paid", 1, 0),
+                ("partial", 0.5, -5),
+                ("overdue", 0, -45),
+                ("pending", 0, 30),
+            )
+            for student_index, student in enumerate(students):
+                student_structures = structures_by_class.get(student.academic_class_id, [])
+                for fee_index, structure in enumerate(student_structures):
+                    status, paid_ratio, due_offset = statuses[(student_index + fee_index) % len(statuses)]
+                    amount_paid = float(structure.amount) * paid_ratio
+                    student_fee, _ = StudentFee.objects.update_or_create(
+                        student=student,
+                        fee_structure=structure,
+                        tenant=tenant,
+                        defaults={
+                            "amount_due": structure.amount,
+                            "amount_paid": amount_paid,
+                            "due_date": date.today() + timedelta(days=due_offset),
+                            "status": status,
+                        },
+                    )
+                    if amount_paid:
+                        Payment.objects.get_or_create(
+                            tenant=tenant,
+                            student=student,
+                            student_fee=student_fee,
+                            transaction_id=f"QA-{student_index + 1}-{str(structure.fee_id)[:8]}",
+                            defaults={
+                                "amount": amount_paid,
+                                "method": ("cash", "bank_transfer", "online")[fee_index % 3],
+                                "recorded_by": users["admin"],
+                                "remarks": "Dummy payment created by setup_qa_tenant",
+                            },
+                        )
 
-            try:
-                student = Student.objects.get(user=users["student"])
-                StudentFee.objects.get_or_create(
-                    student=student,
-                    fee_structure=fee_structure,
+            for title, amount, category, days_ago in (
+                ("QA Electricity Bill", 12500.00, "utilities", 2),
+                ("QA Classroom Supplies", 4200.00, "supplies", 7),
+                ("QA Bus Maintenance", 8500.00, "transport", 15),
+                ("QA Staff Payroll", 75000.00, "salary", 25),
+            ):
+                Expense.objects.update_or_create(
                     tenant=tenant,
+                    title=title,
                     defaults={
-                        "amount_due": 5000.00,
-                        "due_date": date.today() + timedelta(days=30),
+                        "amount": amount,
+                        "category": category,
+                        "date": date.today() - timedelta(days=days_ago),
+                        "description": "Dummy finance data for functional testing",
+                        "recorded_by": users["admin"],
                     },
                 )
-            except Student.DoesNotExist:
-                pass
 
-            self.stdout.write(self.style.SUCCESS(f"  ✓ Billing: 1 fee structure"))
-            return {"fee_structure_id": fee_structure.pk}
+            self.stdout.write(self.style.SUCCESS(
+                f"  ✓ Billing: {len(structures)} structures across {len(classes)} classes, "
+                f"student fees, payments and 4 expenses"
+            ))
+            return {"fee_structure_id": str(structures[0].pk) if structures else None}
         except Exception as e:
             self.stdout.write(self.style.WARNING(f"  ⚠ Billing skipped: {e}"))
             return {}

@@ -14,6 +14,7 @@ import {
     Users, Calendar
 } from 'lucide-react';
 import { billingAPI, academicAPI, StudentFee, FeeStructure, AcademicClass, Payment } from '@/lib/api';
+import { formatRs } from '@/lib/finance';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { PaymentDialog } from './PaymentDialog';
@@ -40,7 +41,7 @@ export function StudentFeeList() {
     const [structures, setStructures] = useState<FeeStructure[]>([]);
     const [classes, setClasses] = useState<AcademicClass[]>([]);
     const [searchTerm, setSearchTerm] = useState('');
-    const [statusFilter, setStatusFilter] = useState<'all' | 'paid' | 'pending' | 'overdue'>('all');
+    const [statusFilter, setStatusFilter] = useState<'all' | StudentFee['status']>('all');
     const [isPaymentOpen, setIsPaymentOpen] = useState(false);
     const [selectedFee, setSelectedFee] = useState<StudentFee | null>(null);
     const [waiveTarget, setWaiveTarget] = useState<StudentFee | null>(null);
@@ -127,8 +128,8 @@ export function StudentFeeList() {
             <tr>
                 <td>${escapeHtml(f.fee_name || '')}</td>
                 <td>${new Date(f.due_date).toLocaleDateString()}</td>
-                <td class="num">$${fmt(Number(f.amount_due))}</td>
-                <td class="num paid">$${fmt(Number(f.amount_paid))}</td>
+                <td class="num">Rs. ${fmt(Number(f.amount_due))}</td>
+                <td class="num paid">Rs. ${fmt(Number(f.amount_paid))}</td>
                 <td class="status">${escapeHtml(f.status)}</td>
             </tr>`).join('');
 
@@ -137,7 +138,7 @@ export function StudentFeeList() {
                 <td>${new Date(p.payment_date).toLocaleDateString()}</td>
                 <td class="cap">${escapeHtml(p.method)}</td>
                 <td>${escapeHtml(p.transaction_id || '—')}</td>
-                <td class="num paid">$${fmt(Number(p.amount))}</td>
+                <td class="num paid">Rs. ${fmt(Number(p.amount))}</td>
             </tr>`).join('');
 
         const html = `<!doctype html>
@@ -166,9 +167,9 @@ export function StudentFeeList() {
   <h1>Account Statement</h1>
   <div class="meta">${escapeHtml(statementTarget.student_name || '')} &middot; Generated ${today}</div>
   <div class="summary">
-    <div class="card"><div class="label">Total Charged</div><div class="value">$${fmt(totalDue)}</div></div>
-    <div class="card paid"><div class="label">Total Paid</div><div class="value">$${fmt(totalPaid)}</div></div>
-    <div class="card due"><div class="label">Outstanding</div><div class="value">$${fmt(outstanding)}</div></div>
+    <div class="card"><div class="label">Total Charged</div><div class="value">Rs. ${fmt(totalDue)}</div></div>
+    <div class="card paid"><div class="label">Total Paid</div><div class="value">Rs. ${fmt(totalPaid)}</div></div>
+    <div class="card due"><div class="label">Outstanding</div><div class="value">Rs. ${fmt(outstanding)}</div></div>
   </div>
   <h2>Fees</h2>
   ${studentFees.length ? `<table><thead><tr><th>Item</th><th>Due</th><th class="num">Charged</th><th class="num">Paid</th><th>Status</th></tr></thead><tbody>${feeRows}</tbody></table>` : '<div class="empty">No fees recorded.</div>'}
@@ -312,8 +313,14 @@ export function StudentFeeList() {
                                     <DropdownMenuItem onClick={() => setStatusFilter('pending')} className={statusFilter === 'pending' ? 'text-slate-600 font-bold bg-slate-50' : ''}>
                                         Pending
                                     </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => setStatusFilter('partial')} className={statusFilter === 'partial' ? 'text-amber-600 font-bold bg-amber-50' : ''}>
+                                        Partially Paid
+                                    </DropdownMenuItem>
                                     <DropdownMenuItem onClick={() => setStatusFilter('overdue')} className={statusFilter === 'overdue' ? 'text-red-600 font-bold bg-red-50' : ''}>
                                         Overdue
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => setStatusFilter('waived')} className={statusFilter === 'waived' ? 'text-violet-600 font-bold bg-violet-50' : ''}>
+                                        Waived
                                     </DropdownMenuItem>
                                 </DropdownMenuContent>
                             </DropdownMenu>
@@ -361,14 +368,14 @@ export function StudentFeeList() {
                                             <p className="font-medium text-slate-700">{fee.fee_name}</p>
                                         </td>
                                         <td className="px-6 py-4 font-bold text-slate-900">
-                                            ${fee.amount_due.toLocaleString()}
+                                            {formatRs(fee.amount_due)}
                                         </td>
                                         <td className="px-6 py-4 font-medium text-emerald-600">
-                                            ${fee.amount_paid.toLocaleString()}
+                                            {formatRs(fee.amount_paid)}
                                         </td>
                                         <td className="px-6 py-4">
                                             <span className={`font-black ${fee.balance! > 0 ? 'text-red-600' : 'text-slate-400'}`}>
-                                                ${(fee.balance || 0).toLocaleString()}
+                                                {formatRs(fee.balance)}
                                             </span>
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap">
@@ -382,7 +389,7 @@ export function StudentFeeList() {
                                         </td>
                                         <td className="px-6 py-4 text-right">
                                             <div className="flex justify-end gap-2">
-                                                {fee.status !== 'paid' && (
+                                                {['pending', 'partial', 'overdue'].includes(fee.status) && (
                                                     <Button
                                                         size="sm"
                                                         className="h-8 bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white border border-indigo-100 shadow-none font-bold text-xs"
@@ -463,7 +470,7 @@ export function StudentFeeList() {
                                 <>
                                     Mark <span className="font-semibold">{waiveTarget.fee_name}</span> for{' '}
                                     <span className="font-semibold">{waiveTarget.student_name}</span> as waived.
-                                    The outstanding balance of ${(waiveTarget.balance ?? (waiveTarget.amount_due - waiveTarget.amount_paid)).toLocaleString()} will be cleared.
+                                    The outstanding balance of {formatRs(waiveTarget.balance ?? (waiveTarget.amount_due - waiveTarget.amount_paid))} will be cleared.
                                     This cannot be undone from the UI.
                                 </>
                             )}
@@ -505,7 +512,7 @@ export function StudentFeeList() {
                                             <td className="py-2">{new Date(p.payment_date).toLocaleDateString()}</td>
                                             <td className="py-2 capitalize">{p.method}</td>
                                             <td className="py-2 text-slate-500">{p.transaction_id || '—'}</td>
-                                            <td className="py-2 text-right font-semibold">${Number(p.amount).toLocaleString()}</td>
+                                            <td className="py-2 text-right font-semibold">{formatRs(p.amount)}</td>
                                         </tr>
                                     ))}
                                 </tbody>
@@ -533,15 +540,15 @@ export function StudentFeeList() {
                                 <div className="grid grid-cols-3 gap-3 text-sm">
                                     <div className="rounded-lg border p-3">
                                         <div className="text-xs text-slate-500">Total Charged</div>
-                                        <div className="font-bold">${totalDue.toLocaleString()}</div>
+                                        <div className="font-bold">{formatRs(totalDue)}</div>
                                     </div>
                                     <div className="rounded-lg border p-3">
                                         <div className="text-xs text-slate-500">Total Paid</div>
-                                        <div className="font-bold text-emerald-600">${totalPaid.toLocaleString()}</div>
+                                        <div className="font-bold text-emerald-600">{formatRs(totalPaid)}</div>
                                     </div>
                                     <div className="rounded-lg border p-3">
                                         <div className="text-xs text-slate-500">Outstanding</div>
-                                        <div className={`font-bold ${outstanding > 0 ? 'text-red-600' : 'text-slate-500'}`}>${outstanding.toLocaleString()}</div>
+                                        <div className={`font-bold ${outstanding > 0 ? 'text-red-600' : 'text-slate-500'}`}>{formatRs(outstanding)}</div>
                                     </div>
                                 </div>
                                 <div>
@@ -561,8 +568,8 @@ export function StudentFeeList() {
                                                 <tr key={f.student_fee_id} className="border-b last:border-b-0">
                                                     <td className="py-2">{f.fee_name}</td>
                                                     <td className="py-2">{new Date(f.due_date).toLocaleDateString()}</td>
-                                                    <td className="py-2 text-right">${Number(f.amount_due).toLocaleString()}</td>
-                                                    <td className="py-2 text-right text-emerald-600">${Number(f.amount_paid).toLocaleString()}</td>
+                                                    <td className="py-2 text-right">{formatRs(f.amount_due)}</td>
+                                                    <td className="py-2 text-right text-emerald-600">{formatRs(f.amount_paid)}</td>
                                                     <td className="py-2 text-right capitalize">{f.status}</td>
                                                 </tr>
                                             ))}
@@ -589,7 +596,7 @@ export function StudentFeeList() {
                                                     <tr key={p.payment_id} className="border-b last:border-b-0">
                                                         <td className="py-2">{new Date(p.payment_date).toLocaleDateString()}</td>
                                                         <td className="py-2 capitalize">{p.method}</td>
-                                                        <td className="py-2 text-right font-semibold">${Number(p.amount).toLocaleString()}</td>
+                                                        <td className="py-2 text-right font-semibold">{formatRs(p.amount)}</td>
                                                     </tr>
                                                 ))}
                                             </tbody>

@@ -10,6 +10,7 @@ import {
     AlertCircle, Activity, Users
 } from 'lucide-react';
 import { billingAPI, FinanceDashboard, FinancialAnalytics } from '@/lib/api';
+import { formatRs } from '@/lib/finance';
 
 const EXPENSE_CATEGORY_LABELS: Record<string, string> = {
     salary: 'Salaries', maintenance: 'Maintenance', utilities: 'Utilities',
@@ -62,28 +63,28 @@ export function FinanceOverview() {
     const statCards = [
         {
             title: 'Total Revenue',
-            value: `$${(data?.total_revenue ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+            value: formatRs(data?.total_revenue),
             icon: <DollarSign className="h-5 w-5 text-emerald-600" />,
             color: 'bg-emerald-50',
             sub: analytics?.collection_rate != null ? `${analytics.collection_rate}% collected` : undefined,
         },
         {
             title: 'Outstanding Fees',
-            value: `$${(data?.total_pending ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+            value: formatRs(data?.total_pending),
             icon: <AlertCircle className="h-5 w-5 text-red-600" />,
             color: 'bg-red-50',
             sub: analytics?.top_defaulters?.length ? `${analytics.top_defaulters.length} defaulters` : undefined,
         },
         {
             title: 'Total Expenses',
-            value: `$${(data?.total_expenses ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+            value: formatRs(data?.total_expenses),
             icon: <TrendingDown className="h-5 w-5 text-orange-600" />,
             color: 'bg-orange-50',
             sub: analytics?.expense_by_category?.length ? `${analytics.expense_by_category.length} categories` : undefined,
         },
         {
             title: 'Net Balance',
-            value: `$${(data?.net_balance ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+            value: formatRs(data?.net_balance),
             icon: <Activity className="h-5 w-5 text-indigo-600" />,
             color: 'bg-indigo-50',
             sub: (data?.net_balance ?? 0) >= 0 ? 'Surplus' : 'Deficit',
@@ -192,7 +193,7 @@ export function FinanceOverview() {
                                 <div key={item.category} className="space-y-1">
                                     <div className="flex justify-between text-xs font-bold">
                                         <span className="text-slate-600">{EXPENSE_CATEGORY_LABELS[item.category] ?? item.category}</span>
-                                        <span className="text-slate-800">${item.total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                        <span className="text-slate-800">{formatRs(item.total)}</span>
                                     </div>
                                     <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
                                         <div className="h-full bg-orange-400 rounded-full" style={{ width: `${(item.total / maxExp) * 100}%` }} />
@@ -222,7 +223,7 @@ export function FinanceOverview() {
                                         <p className="text-xs font-bold text-slate-700 truncate">{d.student_name}</p>
                                         <p className="text-[10px] text-slate-400">{d.fee_count} pending fee{d.fee_count > 1 ? 's' : ''}</p>
                                     </div>
-                                    <span className="text-xs font-black text-red-600">${d.outstanding.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                    <span className="text-xs font-black text-red-600">{formatRs(d.outstanding)}</span>
                                 </div>
                             ))
                         )}
@@ -247,7 +248,7 @@ export function FinanceOverview() {
                                         <p className="text-xs font-bold text-slate-700 truncate">{(p as any).student_name ?? 'Student'}</p>
                                         <p className="text-[10px] text-slate-400 capitalize">{p.method} · {new Date(p.payment_date).toLocaleDateString()}</p>
                                     </div>
-                                    <span className="text-sm font-black text-emerald-600">${Number(p.amount).toFixed(2)}</span>
+                                    <span className="text-sm font-black text-emerald-600">{formatRs(p.amount)}</span>
                                 </div>
                             ))}
                         </div>

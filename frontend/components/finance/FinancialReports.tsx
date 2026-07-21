@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { billingAPI, academicAPI, api, downloadReport, StudentFee, Payment, Student } from '@/lib/api';
+import { formatRs } from '@/lib/finance';
 import { toast } from 'sonner';
 import { Download, AlertCircle, Calendar } from 'lucide-react';
 import { format } from 'date-fns';
@@ -125,7 +126,7 @@ function DefaultersList() {
                                     <TableCell className="font-medium">{d.name}</TableCell>
                                     <TableCell>{d.count} invoices</TableCell>
                                     <TableCell className="text-right font-bold text-red-600">
-                                        ${d.amount.toFixed(2)}
+                                        {formatRs(d.amount)}
                                     </TableCell>
                                 </TableRow>
                             ))
@@ -181,7 +182,7 @@ function DailyCollection() {
                 </div>
                 <div className="flex items-center gap-4">
                     <div className="text-xl font-bold text-green-600">
-                        Total: ${total.toFixed(2)}
+                        Total: {formatRs(total)}
                     </div>
                     <Button variant="outline" onClick={downloadDailyReport}>
                         <Download className="mr-2 h-4 w-4" /> Download Report
@@ -216,7 +217,7 @@ function DailyCollection() {
                                     <TableCell>{p.student_name || 'Unknown'}</TableCell>
                                     <TableCell className="capitalize">{p.method}</TableCell>
                                     <TableCell className="text-right font-medium">
-                                        ${Number(p.amount).toFixed(2)}
+                                        {formatRs(p.amount)}
                                     </TableCell>
                                 </TableRow>
                             ))

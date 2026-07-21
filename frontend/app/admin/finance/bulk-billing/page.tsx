@@ -5,6 +5,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -199,24 +200,26 @@ export default function BulkBillingPage() {
                             <Stat label="Students" value={lastResult.student_count.toString()} color="text-slate-700" />
                         </div>
 
-                        <table className="w-full text-sm">
-                            <thead className="bg-white">
-                                <tr>
-                                    <th className="text-left py-2 px-3 text-xs uppercase font-bold text-slate-500 border-b">Structure</th>
-                                    <th className="text-right py-2 px-3 text-xs uppercase font-bold text-slate-500 border-b">Created</th>
-                                    <th className="text-right py-2 px-3 text-xs uppercase font-bold text-slate-500 border-b">Skipped</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {lastResult.summary.map(r => (
-                                    <tr key={r.fee_structure_id} className="border-b last:border-b-0">
-                                        <td className="py-2 px-3">{r.fee_structure_name}</td>
-                                        <td className="py-2 px-3 text-right font-semibold text-emerald-700">{r.created}</td>
-                                        <td className="py-2 px-3 text-right text-slate-500">{r.skipped}</td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
+                        <div className="rounded-lg border border-slate-100 overflow-hidden">
+                            <Table>
+                                <TableHeader>
+                                    <TableRow className="bg-slate-50 hover:bg-slate-50">
+                                        <TableHead className="text-xs font-bold text-slate-500 uppercase tracking-wider">Structure</TableHead>
+                                        <TableHead className="text-right text-xs font-bold text-slate-500 uppercase tracking-wider">Created</TableHead>
+                                        <TableHead className="text-right text-xs font-bold text-slate-500 uppercase tracking-wider">Skipped</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {lastResult.summary.map(r => (
+                                        <TableRow key={r.fee_structure_id} className="hover:bg-slate-50/50">
+                                            <TableCell className="font-medium">{r.fee_structure_name}</TableCell>
+                                            <TableCell className="text-right font-semibold text-emerald-700">{r.created}</TableCell>
+                                            <TableCell className="text-right text-slate-500">{r.skipped}</TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        </div>
 
                         {lastResult.created > 0 && (
                             <Button onClick={handlePrintBills} disabled={busy !== 'idle'} className="w-full">

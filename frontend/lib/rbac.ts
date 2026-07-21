@@ -37,6 +37,8 @@ export type AdminModule =
     | '/admin/finance'
     | '/admin/finance/fees'
     | '/admin/finance/collect'
+    | '/admin/finance/bulk-billing'
+    | '/admin/finance/accounting'
     | '/admin/finance/reports'
     | '/admin/calendar'
     | '/admin/hr'
@@ -76,6 +78,8 @@ const ADMIN_FULL: AdminModule[] = [
     '/admin/finance',
     '/admin/finance/fees',
     '/admin/finance/collect',
+    '/admin/finance/bulk-billing',
+    '/admin/finance/accounting',
     '/admin/finance/reports',
     '/admin/calendar',
     '/admin/hr',
@@ -105,6 +109,8 @@ const STAFF_ROLE_MODULES: Record<StaffRole, AdminModule[]> = {
         '/admin/finance',
         '/admin/finance/fees',
         '/admin/finance/collect',
+        '/admin/finance/bulk-billing',
+        '/admin/finance/accounting',
         '/admin/finance/reports',
         '/admin/inventory',
         '/admin/reports',

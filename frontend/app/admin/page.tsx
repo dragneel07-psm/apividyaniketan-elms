@@ -240,10 +240,10 @@ export default function SchoolAdminDashboard() {
         {
             title: 'Revenue',
             value: stats.revenue,
-            prefix: '$',
+            prefix: 'Rs. ',
             suffix: '',
             spark: revenueTrend,
-            trend: stats.pendingFees > 0 ? `$${stats.pendingFees.toLocaleString()} pending` : 'All collected',
+            trend: stats.pendingFees > 0 ? `Rs. ${stats.pendingFees.toLocaleString()} pending` : 'All collected',
             trendUp: (stats.pendingFees === 0) as boolean | null,
             icon: TrendingUp,
             color: 'text-orange-600',

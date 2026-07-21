@@ -293,7 +293,7 @@ export function LedgerManager() {
                                                             </p>
                                                         )}
                                                         <p className="text-[11px] text-slate-400 mt-0.5">
-                                                            Opening: NPR {fmt(acc.opening_balance)}
+                                                            Opening: Rs. {fmt(acc.opening_balance)}
                                                         </p>
                                                     </div>
                                                     <div className="flex flex-col items-end gap-1.5 shrink-0">
@@ -303,7 +303,7 @@ export function LedgerManager() {
                                                             {ACCOUNT_TYPE_LABELS[acc.account_type]}
                                                         </Badge>
                                                         <span className={`text-sm font-black ${acc.current_balance >= 0 ? 'text-teal-700' : 'text-red-600'}`}>
-                                                            NPR {fmt(acc.current_balance)}
+                                                            Rs. {fmt(acc.current_balance)}
                                                         </span>
                                                     </div>
                                                 </div>
@@ -442,7 +442,7 @@ export function LedgerManager() {
                                                     Closing Balance
                                                 </div>
                                                 <span className={`text-sm font-black ${statement.closing_balance >= 0 ? 'text-teal-700' : 'text-red-600'}`}>
-                                                    NPR {fmt(statement.closing_balance)}
+                                                    Rs. {fmt(statement.closing_balance)}
                                                 </span>
                                             </div>
                                         </div>
@@ -462,7 +462,7 @@ export function LedgerManager() {
                                             )}
                                             <span>Current Balance:</span>
                                             <span className={`font-black ${selectedAccount.current_balance >= 0 ? 'text-teal-700' : 'text-red-600'}`}>
-                                                NPR {fmt(selectedAccount.current_balance)}
+                                                Rs. {fmt(selectedAccount.current_balance)}
                                             </span>
                                         </div>
                                     )}
@@ -532,7 +532,7 @@ export function LedgerManager() {
                             </div>
                         </div>
                         <div className="space-y-1.5">
-                            <Label className="text-xs font-bold text-slate-600">Opening Balance (NPR)</Label>
+                            <Label className="text-xs font-bold text-slate-600">Opening Balance (Rs.)</Label>
                             <Input
                                 type="number"
                                 min={0}
@@ -606,7 +606,7 @@ export function LedgerManager() {
                             </div>
                         </div>
                         <div className="space-y-1.5">
-                            <Label className="text-xs font-bold text-slate-600">Amount (NPR) *</Label>
+                            <Label className="text-xs font-bold text-slate-600">Amount (Rs.) *</Label>
                             <Input
                                 type="number"
                                 min={0}

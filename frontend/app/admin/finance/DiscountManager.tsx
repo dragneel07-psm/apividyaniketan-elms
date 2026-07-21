@@ -232,17 +232,17 @@ export function DiscountManager() {
                                                     {d.discount_type === 'percentage' ? (
                                                         <><Percent className="h-2.5 w-2.5 inline mr-0.5" />%</>
                                                     ) : (
-                                                        'NPR Flat'
+                                                        'Rs. Flat'
                                                     )}
                                                 </Badge>
                                             </td>
                                             <td className="px-4 py-3 text-right font-bold text-slate-700">
                                                 {d.discount_type === 'percentage'
                                                     ? `${fmt(d.value)}%`
-                                                    : `NPR ${fmt(d.value)}`}
+                                                    : `Rs. ${fmt(d.value)}`}
                                             </td>
                                             <td className="px-4 py-3 text-right text-slate-500 text-xs">
-                                                {d.max_cap != null ? `NPR ${fmt(d.max_cap)}` : '—'}
+                                                {d.max_cap != null ? `Rs. ${fmt(d.max_cap)}` : '—'}
                                             </td>
                                             <td className="px-4 py-3 text-slate-500 text-xs max-w-[180px] truncate">
                                                 {d.reason || '—'}
@@ -330,7 +330,7 @@ export function DiscountManager() {
                                     </SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="percentage">Percentage (%)</SelectItem>
-                                        <SelectItem value="flat">Flat (NPR)</SelectItem>
+                                        <SelectItem value="flat">Flat (Rs.)</SelectItem>
                                     </SelectContent>
                                 </Select>
                             </div>
@@ -348,7 +348,7 @@ export function DiscountManager() {
                             </div>
                         </div>
                         <div className="space-y-1.5">
-                            <Label className="text-xs font-bold text-slate-600">Max Cap (NPR, optional)</Label>
+                            <Label className="text-xs font-bold text-slate-600">Max Cap (Rs., optional)</Label>
                             <Input
                                 type="number"
                                 min={0}

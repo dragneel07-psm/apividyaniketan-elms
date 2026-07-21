@@ -10,7 +10,7 @@ import {
     LayoutDashboard, Users, GraduationCap, School, CreditCard, BarChart3,
     Settings, LogOut, Bell, BookOpen, Calendar, Library, Wallet, DollarSign,
     ClipboardList, FileText, MessageSquare, UserRoundPlus, ShieldAlert,
-    Sparkles, Bus, Building2, UserCog, ChevronDown, Trophy, type LucideIcon,
+    Sparkles, Bus, Building2, UserCog, ChevronDown, Trophy, Receipt, type LucideIcon,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -75,6 +75,8 @@ const NAV: NavItem[] = [
             { kind: 'leaf', name: 'Overview',          href: '/admin/finance',         icon: CreditCard },
             { kind: 'leaf', name: 'Fee Structures',    href: '/admin/finance/fees',    icon: Wallet },
             { kind: 'leaf', name: 'Collect Payments',  href: '/admin/finance/collect', icon: DollarSign },
+            { kind: 'leaf', name: 'Bulk Billing',       href: '/admin/finance/bulk-billing', icon: Receipt },
+            { kind: 'leaf', name: 'Accounting',         href: '/admin/finance/accounting', icon: BookOpen },
             { kind: 'leaf', name: 'Financial Reports', href: '/admin/finance/reports', icon: BarChart3 },
         ],
     },
