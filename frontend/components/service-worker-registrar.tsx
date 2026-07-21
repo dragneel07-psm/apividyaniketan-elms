@@ -12,10 +12,18 @@ export function ServiceWorkerRegistrar() {
 
     useEffect(() => {
         if (typeof window === 'undefined') return;
+
+        // Never register in dev: sw.js cache-firsts /_next/static/ assets,
+        // which is correct for production's content-hashed filenames but
+        // actively harmful under Turbopack Fast Refresh — it can keep
+        // serving a stale JS bundle indefinitely, long after a fix has
+        // landed and the dev server has restarted.
+        if (process.env.NODE_ENV !== 'production') {
+            console.log('[PWA] Service Worker registration skipped in development.');
+            return;
+        }
+
         if (!('serviceWorker' in navigator)) {
-            if (process.env.NODE_ENV !== 'production') {
-                console.log('[PWA] Service Worker not supported in this browser.');
-            }
             return;
         }
 
