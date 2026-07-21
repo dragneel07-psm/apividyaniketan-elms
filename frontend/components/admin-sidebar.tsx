@@ -163,9 +163,13 @@ function GroupMenu({
     pathname: string;
     allowed: Set<AdminModule>;
 }) {
+    // Hooks must run unconditionally on every render (Rules of Hooks) — the
+    // `visibleChildren.length === 0` bail-out below used to sit before these,
+    // so whenever a role change flipped a group's visible-child count
+    // between 0 and >0, React saw a different hook count for the same
+    // mounted fiber, corrupting its internal bookkeeping ("Expected static
+    // flag was missing"). Compute everything first, return late instead.
     const visibleChildren = item.children.filter((c) => allowed.has(c.href));
-    if (visibleChildren.length === 0) return null;
-
     const groupActive = isGroupActive({ ...item, children: visibleChildren }, pathname);
     const [open, setOpen] = useState(groupActive);
 
@@ -173,6 +177,8 @@ function GroupMenu({
     useEffect(() => {
         if (groupActive) setOpen(true);
     }, [pathname, groupActive]);
+
+    if (visibleChildren.length === 0) return null;
 
     return (
         <div>
@@ -213,7 +219,14 @@ function GroupMenu({
 export function AdminSidebar() {
     const pathname = usePathname();
 
-    const user = getUser();
+    // getUser() reads localStorage, which is unavailable during SSR — start
+    // with the same `null` the server sees and pick up the real value in an
+    // effect (not synchronously during render), so the first client render
+    // matches the SSR-ed HTML instead of mismatching it.
+    const [user, setUser] = useState<ReturnType<typeof getUser>>(null);
+    useEffect(() => {
+        setUser(getUser());
+    }, []);
     const role = user?.role ?? 'staff';
     const staffRole = (user?.staff_role ?? '') as StaffRole;
     const roleLabel = getRoleLabel(role, staffRole);

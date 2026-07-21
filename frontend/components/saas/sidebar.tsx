@@ -3,6 +3,7 @@
 // via any medium, is strictly prohibited. Proprietary and confidential.
 'use client';
 
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
@@ -24,7 +25,14 @@ import { removeTokens, getUser } from '@/lib/auth';
 
 export function SaasSidebar() {
     const pathname = usePathname();
-    const currentUser = getUser();
+    // getUser() reads localStorage, unavailable during SSR — start with the
+    // same `null` the server sees and pick up the real value in an effect
+    // (not synchronously during render), so the first client render matches
+    // the SSR-ed HTML (and nav item count) instead of mismatching it.
+    const [currentUser, setCurrentUser] = useState<ReturnType<typeof getUser>>(null);
+    useEffect(() => {
+        setCurrentUser(getUser());
+    }, []);
     const isSuperAdmin = currentUser?.role === 'saas_admin';
 
     const routes = [
