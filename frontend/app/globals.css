@@ -126,6 +126,30 @@
   }
 }
 
+/*
+ * Public school marketing site (/school/*) brand palette + type tokens.
+ * Scoped to its own --color-school-*/--font-* namespace so it never
+ * touches the app-wide shadcn neutral theme used by the authenticated
+ * LMS product. Fonts are loaded only in app/school/layout.tsx via
+ * next/font, so --font-fraunces/--font-public-sans only resolve inside
+ * that subtree — the utility classes below are safe to reference anywhere
+ * but only take visual effect under /school.
+ */
+@theme {
+  --color-school-forest: #1f4b3f;
+  --color-school-forest-dark: #16362d;
+  --color-school-marigold: #e8a33d;
+  --color-school-marigold-dark: #c98424;
+  --color-school-terracotta: #b85c38;
+  --color-school-cream: #fbf7ef;
+  --color-school-ink: #16241f;
+}
+
+@theme inline {
+  --font-fraunces: var(--font-fraunces);
+  --font-public-sans: var(--font-public-sans);
+}
+
 /* Devanagari font override for Nepali locale */
 html[lang="ne"] body {
   font-family: var(--font-devanagari), system-ui, sans-serif;

@@ -15,6 +15,7 @@ from .views import (
     SchoolProfileView,
     SystemStatusView,
     TenantCapabilitiesView,
+    SchoolPublicInfoView,
     TenantCheckView,
     TenantViewSet,
 )
@@ -41,6 +42,7 @@ urlpatterns = [
     path("jobs/<str:job_id>/", JobStatusView.as_view(), name="job-status"),
     path("system-status/", SystemStatusView.as_view(), name="system-status"),
     path("tenant-check/", TenantCheckView.as_view(), name="tenant-check"),
+    path("school-public-info/", SchoolPublicInfoView.as_view(), name="school-public-info"),
     path("capabilities/", TenantCapabilitiesView.as_view(), name="tenant-capabilities"),
     path("school-profile/", SchoolProfileView.as_view(), name="school-profile"),
     path("saas-kpi/", SaasKPIView.as_view(), name="saas-kpi"),

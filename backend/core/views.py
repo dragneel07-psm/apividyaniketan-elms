@@ -69,6 +69,51 @@ class TenantCheckView(APIView):
         return Response({"exists": False}, status=status.HTTP_404_NOT_FOUND)
 
 
+class SchoolPublicInfoRateThrottle(ScopedRateThrottle):
+    scope = "public_school_info"
+
+
+class SchoolPublicInfoView(APIView):
+    """GET /api/core/school-public-info/ — public projection of Tenant for
+    the marketing site (About/Contact/Home stats). No auth required; only
+    exposes fields already meant to be public-facing (name/address/contact/
+    logo), plus real, non-sensitive aggregate counts — never fabricated."""
+
+    permission_classes = [permissions.AllowAny]
+    throttle_classes = [SchoolPublicInfoRateThrottle]
+
+    def get(self, request):
+        tenant = getattr(request, "tenant", None)
+        if not tenant or tenant.schema_name == "public":
+            return Response({"exists": False}, status=status.HTTP_404_NOT_FOUND)
+
+        from academic.models import Student, Teacher
+
+        logo_url = None
+        if tenant.logo:
+            try:
+                logo_url = request.build_absolute_uri(tenant.logo.url)
+            except ValueError:
+                logo_url = None
+
+        return Response(
+            {
+                "exists": True,
+                "name": tenant.name,
+                "address": tenant.address or "",
+                "contact_email": tenant.contact_email or "",
+                "contact_phone": tenant.contact_phone or "",
+                "website": tenant.website or "",
+                "established_year": tenant.established_year,
+                "principal_name": tenant.principal_name or "",
+                "current_academic_year": tenant.current_academic_year,
+                "logo": logo_url,
+                "student_count": Student.objects.count(),
+                "teacher_count": Teacher.objects.count(),
+            }
+        )
+
+
 class TenantCapabilitiesView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 

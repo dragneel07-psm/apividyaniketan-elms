@@ -426,6 +426,13 @@ REST_FRAMEWORK = {
         # Pre-login school lookup: generous for shared-NAT login bursts but
         # capped so the endpoint cannot be swept to enumerate tenants.
         "tenant_check": os.environ.get("THROTTLE_TENANT_CHECK", "60/min"),
+        # Public school marketing site (/school/*) — generous reads, tight writes.
+        "public_school_info": os.environ.get("THROTTLE_PUBLIC_SCHOOL_INFO", "60/min"),
+        "public_notices": os.environ.get("THROTTLE_PUBLIC_NOTICES", "60/min"),
+        "public_events": os.environ.get("THROTTLE_PUBLIC_EVENTS", "60/min"),
+        "public_admission_enquiry": os.environ.get(
+            "THROTTLE_PUBLIC_ADMISSION_ENQUIRY", "5/hour"
+        ),
         "ai_tutor_chat": os.environ.get("THROTTLE_AI_TUTOR_CHAT", "30/min"),
     },
     "DEFAULT_PAGINATION_CLASS": "core.pagination.StandardResultsSetPagination",

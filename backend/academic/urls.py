@@ -53,6 +53,11 @@ from .views.admin_actions import (
     YearAlignmentCheckView,
 )
 from .views.analytics import SchoolAnalyticsDashboardView
+from .views.public import (
+    PublicAdmissionEnquiryView,
+    PublicEventListView,
+    PublicNoticeListView,
+)
 from .views.stats import AcademicStatsView
 
 router = DefaultRouter()
@@ -103,6 +108,9 @@ router.register(r"live-sessions", LiveSessionViewSet, basename="live-session")
 
 urlpatterns = [
     path("stats/", AcademicStatsView.as_view(), name="academic-stats"),
+    path("public-admissions/", PublicAdmissionEnquiryView.as_view(), name="public-admissions"),
+    path("public-notices/", PublicNoticeListView.as_view(), name="public-notices"),
+    path("public-events/", PublicEventListView.as_view(), name="public-events"),
     path("erp/overview/", SchoolERPOverviewView.as_view(), name="school-erp-overview"),
     path(
         "analytics/dashboard/",
