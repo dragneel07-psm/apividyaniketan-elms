@@ -2,6 +2,7 @@
 # Unauthorized copying, modification, or distribution of this file,
 # via any medium, is strictly prohibited. Proprietary and confidential.
 from django.core.management.base import BaseCommand, CommandError
+from django_tenants.utils import schema_context
 
 from core.models import Tenant
 from gamification.models import Badge
@@ -153,7 +154,7 @@ class Command(BaseCommand):
             if not tenants.exists():
                 raise CommandError(f"No tenant found with subdomain '{schema}'")
         else:
-            tenants = Tenant.objects.all()
+            tenants = Tenant.objects.exclude(schema_name="public")
 
         if not tenants.exists():
             self.stdout.write(
@@ -163,11 +164,6 @@ class Command(BaseCommand):
             )
             return
 
-        from django.conf import settings
-        from django.db import connections
-
-        from core.middleware.tenant import _thread_locals
-
         total_created = 0
         total_updated = 0
 
@@ -176,43 +172,28 @@ class Command(BaseCommand):
                 f"\nProcessing tenant: {tenant.name} ({tenant.subdomain})"
             )
 
-            # Set thread-local routing context
-            _thread_locals.tenant = tenant
-            _thread_locals.db_alias = tenant.db_alias
-
-            # Register DB alias dynamically if not already registered
-            if tenant.db_alias not in settings.DATABASES:
-                new_db_config = settings.DATABASES["default"].copy()
-                new_db_config["NAME"] = settings.BASE_DIR / tenant.db_name
-                settings.DATABASES[tenant.db_alias] = new_db_config
-                connections.databases[tenant.db_alias] = new_db_config
-
             try:
-                for badge_data in BADGES_DATA:
-                    badge, created = Badge.objects.get_or_create(
-                        tenant=tenant,
-                        name=badge_data["name"],
-                        defaults=badge_data,
-                    )
-                    if created:
-                        total_created += 1
-                        self.stdout.write(
-                            self.style.SUCCESS(f"  + Created: {badge.name}")
+                with schema_context(tenant.schema_name):
+                    for badge_data in BADGES_DATA:
+                        badge, created = Badge.objects.get_or_create(
+                            tenant=tenant,
+                            name=badge_data["name"],
+                            defaults=badge_data,
                         )
-                    else:
-                        # Update all fields so existing badges stay in sync with the catalog
-                        for key, value in badge_data.items():
-                            setattr(badge, key, value)
-                        badge.save()
-                        total_updated += 1
-                        self.stdout.write(f"  . Updated: {badge.name}")
+                        if created:
+                            total_created += 1
+                            self.stdout.write(
+                                self.style.SUCCESS(f"  + Created: {badge.name}")
+                            )
+                        else:
+                            # Update all fields so existing badges stay in sync with the catalog
+                            for key, value in badge_data.items():
+                                setattr(badge, key, value)
+                            badge.save()
+                            total_updated += 1
+                            self.stdout.write(f"  . Updated: {badge.name}")
             except Exception as e:
                 self.stdout.write(self.style.ERROR(f"  ✗ Error for {tenant.name}: {e}"))
-            finally:
-                if hasattr(_thread_locals, "tenant"):
-                    del _thread_locals.tenant
-                if hasattr(_thread_locals, "db_alias"):
-                    del _thread_locals.db_alias
 
         self.stdout.write(
             self.style.SUCCESS(
