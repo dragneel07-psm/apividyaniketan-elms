@@ -4,6 +4,7 @@
 import logging
 from datetime import date
 
+from django.db.models import Q
 from django.utils import timezone
 from rest_framework import serializers as drf_serializers
 from rest_framework import status, viewsets
@@ -80,16 +81,21 @@ class StudentLeaveViewSet(viewsets.ModelViewSet):
         if role in ("admin", "staff", "principal"):
             return qs.all()
         if role == "teacher":
-            # Teachers see leaves for students in their assigned classes
-            from academic.models import Student
+            # Teachers see leaves for students in classes they teach a
+            # subject in or are homeroom-assigned to — same taught-subject
+            # ∪ assigned-classes scope StudentViewSet/SubjectViewSet use.
+            from academic.models import Student, Subject
             from academic.models import Teacher as TeacherModel
 
             teacher = TeacherModel.objects.filter(user=user).first()
             if not teacher:
                 return qs.none()
-            students = Student.objects.filter(
-                academic_class__in=teacher.assigned_classes.all()
-            )
+            taught_class_ids = Subject.objects.filter(
+                Q(teacher=teacher) | Q(additional_teachers=teacher)
+            ).values_list("academic_class_id", flat=True)
+            assigned_class_ids = teacher.assigned_classes.values_list("id", flat=True)
+            class_ids = set(taught_class_ids) | set(assigned_class_ids)
+            students = Student.objects.filter(academic_class_id__in=class_ids)
             return qs.filter(student__in=students)
         if role == "parent":
             # Parents see their children's leaves
