@@ -360,6 +360,25 @@ class StudentViewSet(TenantScopedQuerysetMixin, viewsets.ModelViewSet):
         """Filter queryset by tenant and apply filters"""
         queryset = super().get_queryset()
 
+        # Teachers may only see students in classes they teach or are
+        # homeroom-assigned to — same taught-subject ∪ assigned-classes scope
+        # SubjectViewSet/AcademicClassViewSet (academic/views/academic.py) and
+        # the attendance views already use for "what's this teacher's class".
+        if getattr(self.request.user, "role", None) == "teacher":
+            teacher_profile = (
+                Teacher.objects.filter(user=self.request.user)
+                .prefetch_related("assigned_classes")
+                .first()
+            )
+            if not teacher_profile:
+                return queryset.none()
+            taught_class_ids = Subject.objects.filter(
+                Q(teacher=teacher_profile) | Q(additional_teachers=teacher_profile)
+            ).values_list("academic_class_id", flat=True)
+            assigned_class_ids = teacher_profile.assigned_classes.values_list("id", flat=True)
+            class_ids = set(taught_class_ids) | set(assigned_class_ids)
+            queryset = queryset.filter(academic_class_id__in=class_ids)
+
         # Filter by class
         class_id = self.request.query_params.get("class", None)
         if class_id:
@@ -390,27 +409,11 @@ class StudentViewSet(TenantScopedQuerysetMixin, viewsets.ModelViewSet):
                     {"detail": "You can only view your own profile."},
                     status=status.HTTP_403_FORBIDDEN,
                 )
-        # Teachers can only view students from their assigned classes.
+        # Teachers: get_object() already applied get_queryset()'s teacher
+        # scoping (taught subjects ∪ assigned classes), so an out-of-scope
+        # student_id 404s before reaching here — nothing further to check.
         elif requester_role == "teacher":
-            teacher_profile = (
-                Teacher.objects.prefetch_related("assigned_classes")
-                .filter(user=request.user)
-                .first()
-            )
-            student_class_id = getattr(student, "academic_class_id", None)
-            if not teacher_profile or not student_class_id:
-                return Response(
-                    {"detail": "Not allowed to view this student profile."},
-                    status=status.HTTP_403_FORBIDDEN,
-                )
-            assigned_class_ids = set(
-                teacher_profile.assigned_classes.values_list("id", flat=True)
-            )
-            if student_class_id not in assigned_class_ids:
-                return Response(
-                    {"detail": "Not allowed to view this student profile."},
-                    status=status.HTTP_403_FORBIDDEN,
-                )
+            pass
         # Parents can only view linked students.
         elif requester_role == "parent":
             parent_profile = (

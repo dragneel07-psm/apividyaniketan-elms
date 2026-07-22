@@ -302,7 +302,9 @@ export interface Student {
     first_name: string;
     last_name: string;
     academic_class: number | null;
+    class_name?: string | null;
     section: number | null;
+    section_name?: string | null;
     parent_email?: string;
     password?: string;
 
@@ -1677,7 +1679,10 @@ export const DATA_MUTATED_EVENT = 'elearn:data-mutated';
 const LAST_MUTATION_AT_KEY = 'elearn:last-mutation-at';
 const FRESH_FETCH_WINDOW_MS = 30_000;
 const ME_CACHE_WINDOW_MS = 5_000;
-type ApiRequestOptions = RequestInit & { skipAuthRedirectOn401?: boolean };
+type ApiRequestOptions = RequestInit & {
+    skipAuthRedirectOn401?: boolean;
+    suppressErrorStatuses?: number[];
+};
 
 function getRequestMethod(options: RequestInit): string {
     return (options.method || 'GET').toUpperCase();
@@ -1716,7 +1721,11 @@ export async function apiRequest<T>(
     endpoint: string,
     options: ApiRequestOptions = {}
 ): Promise<T> {
-    const { skipAuthRedirectOn401 = false, ...fetchOptions } = options;
+    const {
+        skipAuthRedirectOn401 = false,
+        suppressErrorStatuses = [],
+        ...fetchOptions
+    } = options;
     const method = getRequestMethod(fetchOptions);
 
     const headers: Record<string, string> = {
@@ -1763,14 +1772,19 @@ export async function apiRequest<T>(
                 console.warn("API response was not JSON", e);
             }
 
-            console.error('API Error Response:', response.status, errorMessage, errorDetails);
+            const suppressErrorLog = suppressErrorStatuses.includes(response.status);
+            if (!suppressErrorLog) {
+                console.error('API Error Response:', response.status, errorMessage, errorDetails);
+            }
 
             const error = new Error(errorMessage) as Error & {
                 status?: number;
                 details?: string;
+                suppressLog?: boolean;
             };
             error.status = response.status;
             error.details = errorDetails;
+            error.suppressLog = suppressErrorLog;
 
             if (response.status === 401 && !skipAuthRedirectOn401) {
                 if (typeof window !== 'undefined') {
@@ -1807,7 +1821,12 @@ export async function apiRequest<T>(
         return await response.json();
     } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error);
-        console.error('API request failed:', message);
+        const suppressLog = Boolean(
+            error && typeof error === 'object' && 'suppressLog' in error && error.suppressLog
+        );
+        if (!suppressLog) {
+            console.error('API request failed:', message);
+        }
         throw error;
     }
 }
@@ -3065,10 +3084,20 @@ export const aiAPI = {
         const suffix = query.toString() ? `?${query.toString()}` : '';
         return apiRequest<AiGeneratedArtifactRecord[]>(`/ai/artifacts/${suffix}`);
     },
-    getAtRiskStudents: (classId: string | number, notify: boolean = true) =>
-        apiRequest<AtRiskStudent[]>(
-            `/ai/analytics/at_risk_students/?class_id=${encodeURIComponent(String(classId))}&notify=${notify ? '1' : '0'}`
-        ),
+    getAtRiskStudents: async (classId: string | number, notify: boolean = true) => {
+        try {
+            return await apiRequest<AtRiskStudent[]>(
+                `/ai/analytics/at_risk_students/?class_id=${encodeURIComponent(String(classId))}&notify=${notify ? '1' : '0'}`,
+                { suppressErrorStatuses: [403] }
+            );
+        } catch (error: unknown) {
+            const status = error && typeof error === 'object' && 'status' in error
+                ? Number(error.status)
+                : undefined;
+            if (status === 403) return [];
+            throw error;
+        }
+    },
     listGradingRubrics: () => apiRequest<GradingRubric[]>('/ai/grading/rubrics/'),
     createGradingRubric: (data: {
         title: string;
