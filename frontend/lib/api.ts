@@ -1716,10 +1716,44 @@ function appendFreshQuery(endpoint: string, marker: number): string {
     return `${endpoint}${separator}_fresh=${marker}`;
 }
 
+// Access tokens are short-lived (as little as 15-20 min for admin/saas_admin
+// roles — see JWT_ROLE_TOKEN_LIFETIMES in backend/config/settings/base.py)
+// and nothing else in this codebase refreshes them proactively, so any call
+// made after that window 401s. This refreshes the httpOnly access-token
+// cookie via /api/auth/refresh (which itself reads the longer-lived
+// refresh-token cookie) and lets the caller retry once. Concurrent 401s
+// share one in-flight refresh — the backend rotates + blacklists refresh
+// tokens on use (ROTATE_REFRESH_TOKENS/BLACKLIST_AFTER_ROTATION), so firing
+// one refresh per simultaneous request would make all but the first fail.
+let refreshInFlight: Promise<boolean> | null = null;
+
+function refreshAccessToken(): Promise<boolean> {
+    if (typeof window === 'undefined') return Promise.resolve(false);
+    if (!refreshInFlight) {
+        refreshInFlight = fetch('/api/auth/refresh', {
+            method: 'POST',
+            headers: { 'x-tenant-id': getResolvedTenantId() },
+        })
+            .then((res) => res.ok)
+            .catch(() => false)
+            .finally(() => {
+                refreshInFlight = null;
+            });
+    }
+    return refreshInFlight;
+}
+
+// Mirrors services/api.ts's isAuthEndpoint guard — never attempt a refresh
+// (or its retry) for calls to the auth endpoints themselves.
+function isAuthEndpoint(endpoint: string): boolean {
+    return endpoint.includes('/auth/') || endpoint.includes('/users/login');
+}
+
 // Generic fetch wrapper with error handling
 export async function apiRequest<T>(
     endpoint: string,
-    options: ApiRequestOptions = {}
+    options: ApiRequestOptions = {},
+    _isRetryAfterRefresh = false
 ): Promise<T> {
     const {
         skipAuthRedirectOn401 = false,
@@ -1759,6 +1793,21 @@ export async function apiRequest<T>(
         });
 
         if (!response.ok) {
+            // Access token likely expired rather than the whole session —
+            // refresh it once (via the longer-lived refresh-token cookie)
+            // and retry before treating this as a real auth failure.
+            if (
+                response.status === 401 &&
+                !_isRetryAfterRefresh &&
+                typeof window !== 'undefined' &&
+                !isAuthEndpoint(endpoint)
+            ) {
+                const refreshed = await refreshAccessToken();
+                if (refreshed) {
+                    return apiRequest<T>(endpoint, options, true);
+                }
+            }
+
             const errorBody = await response.text();
             let errorMessage = `API Error: ${response.statusText}`;
             let errorDetails = errorBody;
@@ -1850,7 +1899,8 @@ export async function downloadReport(path: string, filename: string): Promise<vo
 // Fetch wrapper for Blobs (PDFs, Excel, etc.)
 async function apiRequestBlob(
     endpoint: string,
-    options: RequestInit = {}
+    options: RequestInit = {},
+    _isRetryAfterRefresh = false
 ): Promise<Blob> {
     const headers: Record<string, string> = {
         ...options.headers as Record<string, string>,
@@ -1867,6 +1917,18 @@ async function apiRequestBlob(
     });
 
     if (!response.ok) {
+        if (
+            response.status === 401 &&
+            !_isRetryAfterRefresh &&
+            typeof window !== 'undefined' &&
+            !isAuthEndpoint(endpoint)
+        ) {
+            const refreshed = await refreshAccessToken();
+            if (refreshed) {
+                return apiRequestBlob(endpoint, options, true);
+            }
+        }
+
         // Best-effort: extract a friendly message from the JSON body so the
         // caller can surface it via toast instead of saving the JSON as a file.
         let message = `Download failed (${response.status})`;
