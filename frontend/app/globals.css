@@ -128,7 +128,7 @@
 
 /*
  * Public school marketing site (/school/*) brand palette + type tokens.
- * Scoped to its own --color-school-*/--font-* namespace so it never
+ * Scoped to its own "school" color and font namespace so it never
  * touches the app-wide shadcn neutral theme used by the authenticated
  * LMS product. Fonts are loaded only in app/school/layout.tsx via
  * next/font, so --font-fraunces/--font-public-sans only resolve inside
