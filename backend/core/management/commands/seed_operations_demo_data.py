@@ -45,13 +45,22 @@ from users.models import UserAccount
 
 # Nepal school week: Sunday-Friday, Saturday off.
 WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
-PERIOD_TIMES = [
-    (time(10, 0), time(10, 45)),
-    (time(10, 45), time(11, 30)),
-    (time(11, 30), time(12, 15)),
-    (time(13, 0), time(13, 45)),  # after lunch break
-    (time(13, 45), time(14, 30)),
-    (time(14, 30), time(15, 15)),
+
+# Government-rule school day: 10:00-16:00 (6 hours), 45-minute periods, one
+# 30-minute lunch break, opening with the standard morning assembly. Each
+# slot is (start, end, kind); "assembly"/"break" are fixed non-subject
+# blocks, "period" is a real class. 1 assembly (15m) + 7 periods (45m each)
+# + 1 break (30m) = 360 minutes exactly, 10:00 -> 16:00.
+DAY_SCHEDULE = [
+    (time(10, 0), time(10, 15), "assembly"),
+    (time(10, 15), time(11, 0), "period"),
+    (time(11, 0), time(11, 45), "period"),
+    (time(11, 45), time(12, 30), "period"),
+    (time(12, 30), time(13, 15), "period"),
+    (time(13, 15), time(13, 45), "break"),
+    (time(13, 45), time(14, 30), "period"),
+    (time(14, 30), time(15, 15), "period"),
+    (time(15, 15), time(16, 0), "period"),
 ]
 FALLBACK_SUBJECTS = [
     "English", "Nepali", "Mathematics", "Science",
@@ -164,8 +173,9 @@ class Command(BaseCommand):
                 .order_by("student_id")
             )
             admin_user = UserAccount.objects.filter(tenant=tenant, role="admin").order_by("email").first()
+            year = ensure_current_academic_year()
 
-            self._seed_timetable(sections, teachers, admin_user)
+            self._seed_timetable(sections, teachers, admin_user, year)
             self._seed_calendar(tenant, admin_user)
             self._seed_transport(tenant, students, rng)
             self._seed_hostel(tenant, students, rng)
@@ -174,7 +184,7 @@ class Command(BaseCommand):
 
         self.stdout.write(self.style.SUCCESS(f"\nOperations demo data seeded into schema={schema}."))
 
-    def _seed_timetable(self, sections, teachers, admin_user):
+    def _seed_timetable(self, sections, teachers, admin_user, year):
         created = 0
         for section in sections:
             cls = section.academic_class
@@ -182,15 +192,21 @@ class Command(BaseCommand):
             room_number = f"Room {cls.order:02d}"
             cycle = 0
             for day in WEEKDAYS:
-                for start_time, end_time in PERIOD_TIMES:
-                    if subjects:
-                        subject = subjects[cycle % len(subjects)]
-                        subject_name = subject.name
-                        teacher = subject.teacher
+                for start_time, end_time, kind in DAY_SCHEDULE:
+                    if kind == "assembly":
+                        subject_name, teacher, room = "Morning Assembly", None, "School Ground"
+                    elif kind == "break":
+                        subject_name, teacher, room = "Lunch Break", None, "Dining Hall"
                     else:
-                        subject_name = FALLBACK_SUBJECTS[cycle % len(FALLBACK_SUBJECTS)]
-                        teacher = teachers[cycle % len(teachers)] if teachers else None
-                    cycle += 1
+                        if subjects:
+                            subject = subjects[cycle % len(subjects)]
+                            subject_name = subject.name
+                            teacher = subject.teacher
+                        else:
+                            subject_name = FALLBACK_SUBJECTS[cycle % len(FALLBACK_SUBJECTS)]
+                            teacher = teachers[cycle % len(teachers)] if teachers else None
+                        room = room_number
+                        cycle += 1
 
                     _, was_created = Timetable.objects.get_or_create(
                         academic_class=cls,
@@ -200,10 +216,11 @@ class Command(BaseCommand):
                             "end_time": end_time,
                             "subject_name": subject_name,
                             "teacher": teacher,
-                            "room_number": room_number,
+                            "room_number": room,
                             "entry_type": "main",
                             "status": "approved",
                             "created_by": admin_user,
+                            "academic_year": year,
                         },
                     )
                     if was_created:
