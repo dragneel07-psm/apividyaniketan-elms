@@ -15,6 +15,7 @@ from .views import (
     SchoolProfileView,
     SystemStatusView,
     TenantCapabilitiesView,
+    ContactMessageViewSet,
     SchoolPublicInfoView,
     TenantCheckView,
     TenantViewSet,
@@ -33,6 +34,7 @@ router.register(r"tenants", TenantViewSet)
 router.register(r"audit-logs", AuditLogViewSet)
 router.register(r"settings", GlobalSettingsViewSet, basename="settings")
 router.register(r"backups", BackupViewSet, basename="backups")
+router.register(r"contact-messages", ContactMessageViewSet, basename="contact-messages")
 
 urlpatterns = [
     path("", include(router.urls)),

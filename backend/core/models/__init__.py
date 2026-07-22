@@ -3,6 +3,7 @@
 # via any medium, is strictly prohibited. Proprietary and confidential.
 from .audit_log import AuditLog
 from .base import TimeStampedModel, UUIDModel
+from .contact_message import ContactMessage
 from .job import Job
 from .settings import GlobalSettings
 from .tenant import Tenant

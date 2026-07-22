@@ -11,7 +11,7 @@ from django.conf import settings
 from django.core.management import call_command
 from django.db import connection
 from django.http import FileResponse, Http404, HttpResponse
-from rest_framework import permissions, status, viewsets
+from rest_framework import permissions, serializers, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
@@ -25,7 +25,7 @@ class TenantCheckRateThrottle(ScopedRateThrottle):
     # burst during morning login.
     scope = "tenant_check"
 
-from .models import AuditLog, GlobalSettings, Tenant
+from .models import AuditLog, ContactMessage, GlobalSettings, Tenant
 from .serializers import (
     AuditLogSerializer,
     GlobalSettingsSerializer,
@@ -112,6 +112,60 @@ class SchoolPublicInfoView(APIView):
                 "teacher_count": Teacher.objects.count(),
             }
         )
+
+
+class ContactMessageRateThrottle(ScopedRateThrottle):
+    scope = "public_contact_message"
+
+
+class ContactMessageSerializer(serializers.ModelSerializer):
+    honeypot = serializers.CharField(required=False, allow_blank=True, write_only=True)
+
+    class Meta:
+        model = ContactMessage
+        fields = [
+            "message_id", "name", "email", "phone", "department",
+            "subject", "message", "is_read", "created_at", "honeypot",
+        ]
+        read_only_fields = ["message_id", "is_read", "created_at"]
+
+    def validate_honeypot(self, value):
+        if value:
+            raise serializers.ValidationError("Invalid submission.")
+        return value
+
+
+class ContactMessageViewSet(viewsets.ModelViewSet):
+    """POST is the public Contact form (AllowAny, throttled). List/retrieve/
+    mark-as-read is restricted to the school's own admins."""
+
+    serializer_class = ContactMessageSerializer
+    http_method_names = ["get", "post", "patch", "head", "options"]
+
+    def get_permissions(self):
+        if self.action == "create":
+            return [permissions.AllowAny()]
+        return [permissions.IsAuthenticated()]
+
+    def get_throttles(self):
+        if self.action == "create":
+            return [ContactMessageRateThrottle()]
+        return super().get_throttles()
+
+    def get_queryset(self):
+        if self.action == "create":
+            return ContactMessage.objects.none()
+        tenant = getattr(self.request.user, "tenant", None)
+        if not tenant:
+            return ContactMessage.objects.none()
+        return ContactMessage.objects.filter(tenant=tenant)
+
+    def perform_create(self, serializer):
+        tenant = getattr(self.request, "tenant", None)
+        if not tenant or tenant.schema_name == "public":
+            raise serializers.ValidationError({"detail": "Unable to resolve school for this request."})
+        serializer.validated_data.pop("honeypot", None)
+        serializer.save(tenant=tenant)
 
 
 class TenantCapabilitiesView(APIView):

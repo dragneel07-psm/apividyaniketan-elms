@@ -433,6 +433,7 @@ REST_FRAMEWORK = {
         "public_admission_enquiry": os.environ.get(
             "THROTTLE_PUBLIC_ADMISSION_ENQUIRY", "5/hour"
         ),
+        "public_contact_message": os.environ.get("THROTTLE_PUBLIC_CONTACT_MESSAGE", "5/hour"),
         "ai_tutor_chat": os.environ.get("THROTTLE_AI_TUTOR_CHAT", "30/min"),
     },
     "DEFAULT_PAGINATION_CLASS": "core.pagination.StandardResultsSetPagination",
