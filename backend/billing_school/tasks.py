@@ -9,7 +9,6 @@ from decimal import Decimal
 from celery import shared_task
 from django.db import transaction
 from django.db.models import Max, Sum
-from django_tenants.utils import get_tenant_model, schema_context
 
 logger = logging.getLogger(__name__)
 
@@ -17,21 +16,16 @@ logger = logging.getLogger(__name__)
 @shared_task(name="billing_school.send_fee_due_reminders", bind=True, max_retries=3)
 def send_fee_due_reminders(self):
     """
-    Runs daily at 8 AM. For each tenant, find fees due in 0, 3, or 7 days
-    and notify parents via in-app + SMS.
+    Runs daily at 8 AM. Finds fees due in 0, 3, or 7 days and notifies
+    parents via in-app + SMS.
     """
-    TenantModel = get_tenant_model()
-    for tenant in TenantModel.objects.exclude(schema_name="public"):
-        try:
-            with schema_context(tenant.schema_name):
-                _process_tenant_fee_reminders(tenant)
-        except Exception as exc:
-            logger.error(
-                "Fee reminder failed for tenant %s: %s", tenant.schema_name, exc
-            )
+    try:
+        _process_fee_reminders()
+    except Exception as exc:
+        logger.error("Fee reminder run failed: %s", exc)
 
 
-def _process_tenant_fee_reminders(tenant):
+def _process_fee_reminders():
     from billing.models_school import StudentFee
     from notifications.services import NotificationService
 
@@ -40,7 +34,6 @@ def _process_tenant_fee_reminders(tenant):
 
     fees = (
         StudentFee.objects.filter(
-            tenant=tenant,
             due_date__in=target_dates,
             status__in=["pending", "partial", "overdue"],
         )
@@ -74,7 +67,6 @@ def _process_tenant_fee_reminders(tenant):
                     recipient=parent.user,
                     title=title,
                     message=message,
-                    tenant=tenant,
                     link="/fees",
                     channels=["in_app", "sms"],
                 )
@@ -82,9 +74,7 @@ def _process_tenant_fee_reminders(tenant):
             except Exception as exc:
                 logger.warning("Could not notify parent %s: %s", parent.user_id, exc)
 
-    logger.info(
-        "Fee reminders: sent %d notifications for tenant %s", sent, tenant.schema_name
-    )
+    logger.info("Fee reminders: sent %d notifications", sent)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -95,12 +85,11 @@ def _process_tenant_fee_reminders(tenant):
 @shared_task(name="billing_school.post_annual_depreciation", bind=True, max_retries=3)
 def post_annual_depreciation(self, fiscal_year: str = None):
     """
-    Post annual depreciation journal entries for all active capital assets
-    across all tenants.
+    Post annual depreciation journal entries for all active capital assets.
 
     Run once per year (e.g. via Celery Beat at end of Ashadh / start of Shrawan).
-    Idempotent: skips tenants that already have a depreciation entry for the
-    given fiscal year.
+    Idempotent: skips if a depreciation entry already exists for the given
+    fiscal year.
 
     Args:
         fiscal_year: Nepali fiscal year string e.g. '2081/2082'. Defaults to
@@ -111,22 +100,14 @@ def post_annual_depreciation(self, fiscal_year: str = None):
     if not fiscal_year:
         fiscal_year = fiscal_year_bs()
 
-    TenantModel = get_tenant_model()
-    for tenant in TenantModel.objects.exclude(schema_name="public"):
-        try:
-            with schema_context(tenant.schema_name):
-                _post_tenant_depreciation(tenant, fiscal_year)
-        except Exception as exc:
-            logger.error(
-                "Depreciation posting failed for tenant %s FY %s: %s",
-                tenant.schema_name,
-                fiscal_year,
-                exc,
-            )
+    try:
+        _post_depreciation(fiscal_year)
+    except Exception as exc:
+        logger.error("Depreciation posting failed for FY %s: %s", fiscal_year, exc)
 
 
-def _post_tenant_depreciation(tenant, fiscal_year: str):
-    """Create and post a single depreciation journal entry for all assets of a tenant."""
+def _post_depreciation(fiscal_year: str):
+    """Create and post a single depreciation journal entry for all assets."""
     from billing_school.models_nas import (
         ChartOfAccount,
         InventoryItem,
@@ -137,22 +118,18 @@ def _post_tenant_depreciation(tenant, fiscal_year: str):
 
     # Idempotency: skip if a depreciation entry already exists for this FY
     already_posted = JournalEntry.objects.filter(
-        tenant=tenant,
         entry_type="depreciation",
         fiscal_year=fiscal_year,
         is_posted=True,
     ).exists()
     if already_posted:
         logger.info(
-            "Depreciation already posted for tenant %s FY %s — skipping",
-            tenant,
-            fiscal_year,
+            "Depreciation already posted for FY %s — skipping", fiscal_year
         )
         return
 
     # Active capital assets with depreciable methods
     assets = InventoryItem.objects.filter(
-        tenant=tenant,
         form_type="401",
         condition__in=["good", "fair", "poor"],
         depreciation_method__in=["straight_line", "diminishing"],
@@ -166,24 +143,20 @@ def _post_tenant_depreciation(tenant, fiscal_year: str):
 
     # Locate required accounts (must exist — created by seed_defaults)
     try:
-        dep_expense_acct = ChartOfAccount.objects.get(
-            tenant=tenant, account_code="5500"
-        )
-        accum_dep_acct = ChartOfAccount.objects.get(tenant=tenant, account_code="1590")
+        dep_expense_acct = ChartOfAccount.objects.get(account_code="5500")
+        accum_dep_acct = ChartOfAccount.objects.get(account_code="1590")
     except ChartOfAccount.DoesNotExist as exc:
         logger.warning(
-            "Cannot post depreciation for tenant %s: required account missing (%s)",
-            tenant,
-            exc,
+            "Cannot post depreciation: required account missing (%s)", exc
         )
         return
 
     today = date.today()
     with transaction.atomic():
         max_num = (
-            JournalEntry.objects.select_for_update()
-            .filter(tenant=tenant)
-            .aggregate(m=Max("entry_number"))["m"]
+            JournalEntry.objects.select_for_update().aggregate(
+                m=Max("entry_number")
+            )["m"]
         )
         seq = 1
         if max_num:
@@ -197,7 +170,6 @@ def _post_tenant_depreciation(tenant, fiscal_year: str):
         entry_number = f"JV-{y}-{seq:05d}"
 
         je = JournalEntry.objects.create(
-            tenant=tenant,
             entry_number=entry_number,
             date_ad=today,
             description=f"Annual Depreciation — FY {fiscal_year}",
@@ -228,8 +200,7 @@ def _post_tenant_depreciation(tenant, fiscal_year: str):
             item.save(update_fields=["accumulated_depreciation"])
 
     logger.info(
-        "Depreciation posted for tenant %s FY %s: NPR %s (%d assets)",
-        tenant,
+        "Depreciation posted for FY %s: NPR %s (%d assets)",
         fiscal_year,
         total_dep,
         assets.count(),

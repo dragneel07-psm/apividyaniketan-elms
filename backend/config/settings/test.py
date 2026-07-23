@@ -16,15 +16,10 @@ PASSWORD_HASHERS = [
 SECRET_KEY = "test-secret-key-for-ci-"
 
 # Test-specific settings.
-# django-tenants requires its own DB backend (schema switching) and PostgreSQL —
-# sqlite cannot run the tenant suite. Keep the tenant engine that base.py sets;
-# omitting it here silently drops schema support and every FastTenantTestCase
-# fails at test-DB creation with "'DatabaseWrapper' object has no attribute
-# 'set_schema'".
 DATABASES = {
     "default": dj_database_url.config(
         default="postgres://postgres:postgres@127.0.0.1:5432/elearning",
         conn_max_age=600,
-        engine="django_tenants.postgresql_backend",
+        engine="django.db.backends.postgresql",
     )
 }

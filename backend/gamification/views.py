@@ -23,7 +23,6 @@ class StudentBadgeViewSet(TenantScopedQuerysetMixin, viewsets.ReadOnlyModelViewS
     queryset = StudentBadge.objects.all()
     serializer_class = StudentBadgeSerializer
     permission_classes = [permissions.IsAuthenticated]
-    tenant_field = "tenant"
 
     def get_queryset(self):
         qs = super().get_queryset()
@@ -64,17 +63,10 @@ class LeaderboardViewSet(viewsets.ViewSet):
 
         scope = request.query_params.get("scope", "class")
         limit = min(int(request.query_params.get("limit", 20) or 20), 50)
-        tenant = getattr(request, "tenant", None) or getattr(
-            request.user, "tenant", None
-        )
 
         # 1. Fetch relevant students in scope
         if scope == "school":
-            student_qs = (
-                Student.objects.filter(user__tenant=tenant)
-                if tenant
-                else Student.objects.none()
-            )
+            student_qs = Student.objects.all()
         else:
             if not current_student:
                 return Response(
@@ -99,29 +91,20 @@ class LeaderboardViewSet(viewsets.ViewSet):
             )
         }
 
-        # 2. Fetch profiles, tenant-scoped, is_public=True, ordered by XP
+        # 2. Fetch profiles, is_public=True, ordered by XP
         profile_qs = GamificationProfile.objects.filter(
             student_id__in=student_ids,
             is_public=True,
         )
-        if tenant:
-            profile_qs = profile_qs.filter(tenant=tenant)
         profiles = list(profile_qs.order_by("-total_xp"))
 
         # 3. Badge counts in one query
-        badge_counts = (
-            {
-                str(row["student_id"]): row["count"]
-                for row in StudentBadge.objects.filter(
-                    student_id__in=student_ids,
-                    tenant=tenant,
-                )
-                .values("student_id")
-                .annotate(count=Count("id"))
-            }
-            if tenant
-            else {}
-        )
+        badge_counts = {
+            str(row["student_id"]): row["count"]
+            for row in StudentBadge.objects.filter(student_id__in=student_ids)
+            .values("student_id")
+            .annotate(count=Count("id"))
+        }
 
         # 4. Build ranked list
         results = []
@@ -172,7 +155,6 @@ class BadgeViewSet(TenantScopedQuerysetMixin, viewsets.ModelViewSet):
     queryset = Badge.objects.all()
     serializer_class = BadgeSerializer
     permission_classes = [permissions.IsAuthenticated]
-    tenant_field = "tenant"
 
     def initial(self, request, *args, **kwargs):
         super().initial(request, *args, **kwargs)
@@ -187,10 +169,7 @@ class BadgeViewSet(TenantScopedQuerysetMixin, viewsets.ModelViewSet):
             raise PermissionDenied("Only admins can manage badges.")
 
     def perform_create(self, serializer):
-        tenant = getattr(self.request, "tenant", None) or getattr(
-            self.request.user, "tenant", None
-        )
-        serializer.save(tenant=tenant)
+        serializer.save()
 
 
 from .models import GamificationProfile

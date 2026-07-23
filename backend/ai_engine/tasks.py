@@ -12,9 +12,6 @@ except Exception:
     from core.async_jobs import background_task as shared_task
 
 from django.contrib.auth import get_user_model
-from django_tenants.utils import schema_context
-
-from core.models import Tenant
 
 from .models import AIInteractionLog
 from .services.indexing_service import index_raw_content
@@ -24,11 +21,6 @@ from .services.tutor_service import AITutorService
 def _tenant_schema(value: str | None) -> str:
     schema = str(value or "").strip().lower()
     return schema or "public"
-
-
-def _resolve_tenant(schema_name: str) -> Tenant | None:
-    with schema_context("public"):
-        return Tenant.objects.filter(schema_name=schema_name).first()
 
 
 def _resolve_user(user_id: str | None):
@@ -99,23 +91,18 @@ def ai_index_content_task(
     source_id = str(payload.get("source_id") or "adhoc-content").strip()
 
     result = index_raw_content(
-        tenant_schema=schema_name,
         source_type=source_type,
         source_id=source_id,
         text=content,
         metadata=payload,
     )
 
-    with schema_context(schema_name):
-        tenant = _resolve_tenant(schema_name)
-        user = _resolve_user(user_id)
-        if tenant:
-            AIInteractionLog.objects.create(
-                tenant=tenant,
-                user=user,
-                feature_used="content_index",
-                total_tokens=0,
-            )
+    user = _resolve_user(user_id)
+    AIInteractionLog.objects.create(
+        user=user,
+        feature_used="content_index",
+        total_tokens=0,
+    )
 
     result["tenant_schema"] = schema_name
     return result
@@ -159,16 +146,12 @@ def generate_summary_task(
     parsed["bullet_points"] = [str(item) for item in bullet_points[:capped_points]]
     parsed["model"] = tutor.model
 
-    with schema_context(schema_name):
-        tenant = _resolve_tenant(schema_name)
-        user = _resolve_user(user_id)
-        if tenant:
-            AIInteractionLog.objects.create(
-                tenant=tenant,
-                user=user,
-                feature_used="summary_generation",
-                total_tokens=0,
-            )
+    user = _resolve_user(user_id)
+    AIInteractionLog.objects.create(
+        user=user,
+        feature_used="summary_generation",
+        total_tokens=0,
+    )
 
     return parsed
 
@@ -207,16 +190,12 @@ def generate_quiz_task(
     if len(questions) > capped_count:
         questions = questions[:capped_count]
 
-    with schema_context(schema_name):
-        tenant = _resolve_tenant(schema_name)
-        user = _resolve_user(user_id)
-        if tenant:
-            AIInteractionLog.objects.create(
-                tenant=tenant,
-                user=user,
-                feature_used="quiz_generation",
-                total_tokens=0,
-            )
+    user = _resolve_user(user_id)
+    AIInteractionLog.objects.create(
+        user=user,
+        feature_used="quiz_generation",
+        total_tokens=0,
+    )
 
     return {
         "question_count": len(questions),
@@ -254,50 +233,44 @@ def send_parent_digest_task(self, *, tenant_schema: str) -> dict[str, Any]:
     sent_count = 0
     skipped_count = 0
 
-    with schema_context(schema_name):
-        tenant = _resolve_tenant(schema_name)
-        if tenant is None:
-            return {"error": "Tenant not found", "schema": schema_name}
+    from academic.models.parent import Parent
+    from academic.models.student import Student
+    from ai_engine.services.parent_digest_service import ParentDigestService
+    from notifications.services import NotificationService
 
-        from academic.models.parent import Parent
-        from academic.models.student import Student
-        from ai_engine.services.parent_digest_service import ParentDigestService
-        from notifications.services import NotificationService
+    service = ParentDigestService()
 
-        service = ParentDigestService(tenant=tenant)
+    students = Student.objects.filter(academic_class__isnull=False).select_related(
+        "user"
+    )
 
-        students = Student.objects.filter(academic_class__isnull=False).select_related(
-            "user"
-        )
+    for student in students:
+        try:
+            # Find parent linked to this student
+            parents = Parent.objects.filter(student=student).select_related("user")
+            if not parents.exists():
+                continue
 
-        for student in students:
-            try:
-                # Find parent linked to this student
-                parents = Parent.objects.filter(student=student).select_related("user")
-                if not parents.exists():
-                    continue
-
-                digest = service.generate_digest(student)
-                if not digest:
-                    skipped_count += 1
-                    continue
-
-                for parent in parents:
-                    if parent.user:
-                        NotificationService.create_notification(
-                            recipient=parent.user,
-                            title=f"Daily Update: {student.user.get_full_name() if student.user else 'Your child'}",
-                            message=digest,
-                            tenant=tenant,
-                        )
-                        sent_count += 1
-            except Exception as exc:
-                import logging
-
-                logging.getLogger(__name__).warning(
-                    "ParentDigest failed for student %s: %s", student.student_id, exc
-                )
+            digest = service.generate_digest(student)
+            if not digest:
                 skipped_count += 1
+                continue
+
+            for parent in parents:
+                if parent.user:
+                    NotificationService.create_notification(
+                        recipient=parent.user,
+                        title=f"Daily Update: {student.user.get_full_name() if student.user else 'Your child'}",
+                        message=digest,
+                    )
+                    sent_count += 1
+        except Exception as exc:
+            import logging
+
+            logging.getLogger(__name__).warning(
+                "ParentDigest failed for student %s: %s", student.student_id, exc
+            )
+            skipped_count += 1
 
     return {"sent": sent_count, "skipped": skipped_count, "tenant": schema_name}
 
@@ -326,62 +299,57 @@ def transcribe_lesson_task(
     _log = _logging.getLogger(__name__)
 
     schema_name = _tenant_schema(tenant_schema)
-    with schema_context(schema_name):
-        tenant = _resolve_tenant(schema_name)
-        if tenant is None:
-            return {"error": "Tenant not found", "schema": schema_name}
 
-        from academic.models.lesson import Lesson
-        from ai_engine.services.indexing_service import index_raw_content
-        from ai_engine.services.video_transcript_service import VideoTranscriptService
+    from academic.models.lesson import Lesson
+    from ai_engine.services.indexing_service import index_raw_content
+    from ai_engine.services.video_transcript_service import VideoTranscriptService
 
-        lesson = Lesson.objects.filter(pk=lesson_id).first()
-        if lesson is None:
-            return {"error": f"Lesson {lesson_id} not found"}
+    lesson = Lesson.objects.filter(pk=lesson_id).first()
+    if lesson is None:
+        return {"error": f"Lesson {lesson_id} not found"}
 
-        service = VideoTranscriptService(tenant=tenant)
-        transcript = service.transcribe_lesson(lesson)
+    service = VideoTranscriptService()
+    transcript = service.transcribe_lesson(lesson)
 
-        if not transcript:
-            return {
-                "lesson_id": lesson_id,
-                "status": "skipped",
-                "reason": "no transcript generated",
-            }
-
-        # Re-index lesson so transcript is included in RAG retrieval
-        full_text = " ".join(
-            filter(
-                None,
-                [
-                    lesson.title,
-                    lesson.content or "",
-                    transcript,
-                ],
-            )
-        )
-        try:
-            index_raw_content(
-                tenant_schema=schema_name,
-                source_type="lesson",
-                source_id=str(lesson_id),
-                text=full_text,
-                metadata={
-                    "lesson_id": lesson_id,
-                    "title": lesson.title,
-                    "has_transcript": True,
-                },
-            )
-        except Exception as exc:
-            _log.warning(
-                "transcribe_lesson_task: re-index failed for lesson %s: %s",
-                lesson_id,
-                exc,
-            )
-
+    if not transcript:
         return {
             "lesson_id": lesson_id,
-            "status": "ok",
-            "transcript_chars": len(transcript),
-            "tenant": schema_name,
+            "status": "skipped",
+            "reason": "no transcript generated",
         }
+
+    # Re-index lesson so transcript is included in RAG retrieval
+    full_text = " ".join(
+        filter(
+            None,
+            [
+                lesson.title,
+                lesson.content or "",
+                transcript,
+            ],
+        )
+    )
+    try:
+        index_raw_content(
+            source_type="lesson",
+            source_id=str(lesson_id),
+            text=full_text,
+            metadata={
+                "lesson_id": lesson_id,
+                "title": lesson.title,
+                "has_transcript": True,
+            },
+        )
+    except Exception as exc:
+        _log.warning(
+            "transcribe_lesson_task: re-index failed for lesson %s: %s",
+            lesson_id,
+            exc,
+        )
+
+    return {
+        "lesson_id": lesson_id,
+        "status": "ok",
+        "transcript_chars": len(transcript),
+        "tenant": schema_name,
+    }

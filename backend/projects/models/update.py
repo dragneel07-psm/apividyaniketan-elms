@@ -6,7 +6,6 @@ import uuid as uuid_lib
 from django.conf import settings
 from django.db import models
 
-from core.models.tenant import Tenant
 
 
 class ProjectUpdate(models.Model):
@@ -22,7 +21,6 @@ class ProjectUpdate(models.Model):
     update_id = models.UUIDField(
         primary_key=True, default=uuid_lib.uuid4, editable=False
     )
-    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, db_constraint=False)
     project = models.ForeignKey(
         "projects.Project", on_delete=models.CASCADE, related_name="updates"
     )

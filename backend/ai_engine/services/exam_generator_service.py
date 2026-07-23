@@ -19,10 +19,9 @@ class ExamPaperGenerationError(Exception):
 
 
 class ExamPaperGeneratorService:
-    def __init__(self, *, tenant, user=None):
-        self.tenant = tenant
+    def __init__(self, *, user=None):
         self.user = user
-        self.rag = RAGTutorService(tenant=tenant)
+        self.rag = RAGTutorService()
 
     @staticmethod
     def _extract_json(raw_text: str) -> dict[str, Any] | None:
@@ -151,7 +150,7 @@ class ExamPaperGeneratorService:
             lesson_ids.extend([int(lesson.id) for lesson in chapter.lessons.all()])
         lesson_id_strings = [str(lesson_id) for lesson_id in lesson_ids]
 
-        queryset = ContentChunk.objects.filter(tenant=self.tenant).filter(
+        queryset = ContentChunk.objects.filter(
             Q(source_type="chapter", source_id__in=chapter_id_strings)
             | Q(source_type="lesson", source_id__in=lesson_id_strings)
             | Q(source_type="lesson", metadata__chapter_id__in=chapter_ids)
@@ -459,7 +458,6 @@ class ExamPaperGeneratorService:
         }
 
         AiGeneratedArtifact.objects.create(
-            tenant=self.tenant,
             artifact_type="exam_paper",
             source_type="subject",
             source_id=str(subject.id),
@@ -474,7 +472,6 @@ class ExamPaperGeneratorService:
             prompt_tokens = int(usage.get("prompt_tokens") or 0)
             completion_tokens = int(usage.get("completion_tokens") or 0)
             AIInteractionLog.objects.create(
-                tenant=self.tenant,
                 user=self.user,
                 feature_used="exam_paper_generator_rag",
                 prompt_tokens=prompt_tokens,

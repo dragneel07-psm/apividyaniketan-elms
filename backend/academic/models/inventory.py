@@ -50,12 +50,6 @@ STOCK_UNIT_CHOICES = [
 
 class Asset(models.Model):
     asset_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    tenant = models.ForeignKey(
-        "core.Tenant",
-        on_delete=models.CASCADE,
-        related_name="assets",
-        db_constraint=False,
-    )
     name = models.CharField(max_length=200)
     asset_tag = models.CharField(max_length=60, blank=True)  # e.g. "COMP-0042"
     category = models.CharField(
@@ -84,8 +78,8 @@ class Asset(models.Model):
     class Meta:
         ordering = ["category", "name"]
         indexes = [
-            models.Index(fields=["tenant", "category"], name="asset_tenant_cat_idx"),
-            models.Index(fields=["tenant", "status"], name="asset_tenant_status_idx"),
+            models.Index(fields=["category"], name="asset_tenant_cat_idx"),
+            models.Index(fields=["status"], name="asset_tenant_status_idx"),
         ]
 
     def __str__(self):
@@ -132,12 +126,6 @@ class AssetAssignment(models.Model):
 
 class MaintenanceRequest(models.Model):
     request_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    tenant = models.ForeignKey(
-        "core.Tenant",
-        on_delete=models.CASCADE,
-        related_name="maintenance_requests",
-        db_constraint=False,
-    )
     asset = models.ForeignKey(
         Asset,
         on_delete=models.CASCADE,
@@ -181,7 +169,7 @@ class MaintenanceRequest(models.Model):
     class Meta:
         ordering = ["-reported_date", "-created_at"]
         indexes = [
-            models.Index(fields=["tenant", "status"], name="maint_tenant_status_idx"),
+            models.Index(fields=["status"], name="maint_tenant_status_idx"),
         ]
 
     def __str__(self):
@@ -190,12 +178,6 @@ class MaintenanceRequest(models.Model):
 
 class ConsumableStock(models.Model):
     stock_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    tenant = models.ForeignKey(
-        "core.Tenant",
-        on_delete=models.CASCADE,
-        related_name="consumable_stocks",
-        db_constraint=False,
-    )
     name = models.CharField(max_length=200)
     category = models.CharField(
         max_length=20, choices=ASSET_CATEGORY_CHOICES, default="other"
@@ -214,7 +196,6 @@ class ConsumableStock(models.Model):
     class Meta:
         ordering = ["category", "name"]
         indexes = [
-            models.Index(fields=["tenant"], name="stock_tenant_idx"),
         ]
 
     @property

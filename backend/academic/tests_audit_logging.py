@@ -1,8 +1,11 @@
 # Copyright (c) 2024-2026 Pramod Singh Manyal. All rights reserved.
 # Unauthorized copying, modification, or distribution of this file,
 # via any medium, is strictly prohibited. Proprietary and confidential.
+from datetime import timedelta
+
 from django.contrib.auth import get_user_model
-from django_tenants.test.cases import FastTenantTestCase
+from django.test import TestCase
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APIClient
 
@@ -19,39 +22,27 @@ from core.models import AuditLog
 User = get_user_model()
 
 
-class AcademicAuditLoggingTests(FastTenantTestCase):
-    @classmethod
-    def setup_tenant(cls, tenant):
-        tenant.name = "Academic Audit School"
-
-    @classmethod
-    def setup_domain(cls, domain):
-        domain.is_primary = True
-
+class AcademicAuditLoggingTests(TestCase):
     def setUp(self):
-        self.client = APIClient(
-            HTTP_HOST=self.get_test_tenant_domain(),
-            HTTP_X_TENANT_ID=self.tenant.schema_name,
-        )
+        self.client = APIClient()
         self.admin_user = User.objects.create_user(
             username="academic_audit_admin",
             email="academic_audit_admin@example.com",
             password="Admin@1234",
             role="admin",
-            tenant=self.tenant,
         )
         self.student_user = User.objects.create_user(
             username="academic_audit_student",
             email="academic_audit_student@example.com",
             password="Student@1234",
             role="student",
-            tenant=self.tenant,
         )
+        today = timezone.localdate()
         self.year, _ = AcademicYear.objects.get_or_create(
             name="2025-2026",
             defaults={
-                "start_date": "2025-04-01",
-                "end_date": "2026-03-31",
+                "start_date": today - timedelta(days=30),
+                "end_date": today + timedelta(days=335),
                 "is_current": True,
             },
         )

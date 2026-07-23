@@ -7,61 +7,48 @@ RBAC + visibility tests for the RubricTemplate API.
 Run with: python manage.py test projects.tests_rubric_templates
 """
 
-from django_tenants.test.cases import FastTenantTestCase
+from django.test import TestCase
 from rest_framework import status
 from rest_framework.test import APIClient
 
+from core.models import SchoolProfile
 from projects.models import RubricTemplate
 from users.models import UserAccount
 
 
-def _enable_projects(tenant):
-    tenant.features = {**(tenant.features or {}), "projects": True}
-    tenant.save(update_fields=["features"])
+def _enable_projects():
+    profile = SchoolProfile.get_solo()
+    profile.features = {**(profile.features or {}), "projects": True}
+    profile.save(update_fields=["features"])
 
 
-class RubricTemplateApiTests(FastTenantTestCase):
-    @classmethod
-    def setup_tenant(cls, tenant):
-        tenant.name = "Rubric Template School"
-
-    @classmethod
-    def setup_domain(cls, domain):
-        domain.is_primary = True
-
+class RubricTemplateApiTests(TestCase):
     def setUp(self):
-        _enable_projects(self.tenant)
-        self.client = APIClient(
-            HTTP_HOST=self.get_test_tenant_domain(),
-            HTTP_X_TENANT_ID=self.tenant.schema_name,
-        )
+        _enable_projects()
+        self.client = APIClient()
         self.teacher_a = UserAccount.objects.create_user(
             username="rt_teacher_a",
             email="rt_teacher_a@example.com",
             password="Pass@1234",
             role="teacher",
-            tenant=self.tenant,
         )
         self.teacher_b = UserAccount.objects.create_user(
             username="rt_teacher_b",
             email="rt_teacher_b@example.com",
             password="Pass@1234",
             role="teacher",
-            tenant=self.tenant,
         )
         self.admin = UserAccount.objects.create_user(
             username="rt_admin",
             email="rt_admin@example.com",
             password="Pass@1234",
             role="admin",
-            tenant=self.tenant,
         )
         self.student = UserAccount.objects.create_user(
             username="rt_student",
             email="rt_student@example.com",
             password="Pass@1234",
             role="student",
-            tenant=self.tenant,
         )
 
     def _login(self, user):
@@ -69,7 +56,6 @@ class RubricTemplateApiTests(FastTenantTestCase):
 
     def _make_template(self, *, owner, name="T", criteria=None) -> RubricTemplate:
         return RubricTemplate.objects.create(
-            tenant=self.tenant,
             owner=owner,
             name=name,
             criteria_json=criteria or [{"criterion": "Test", "max": 10}],

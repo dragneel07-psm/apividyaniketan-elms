@@ -21,10 +21,9 @@ class AssistedGradingError(Exception):
 
 
 class AssistedGradingService:
-    def __init__(self, *, tenant, user=None):
-        self.tenant = tenant
+    def __init__(self, *, user=None):
         self.user = user
-        self.rag = RAGTutorService(tenant=tenant)
+        self.rag = RAGTutorService()
 
     @staticmethod
     def _extract_json(raw_text: str) -> dict[str, Any] | None:
@@ -318,7 +317,7 @@ class AssistedGradingService:
         if submission is None:
             raise AssistedGradingError("submission not found.")
 
-        rubric = GradingRubric.objects.filter(id=rubric_id, tenant=self.tenant).first()
+        rubric = GradingRubric.objects.filter(id=rubric_id).first()
         if rubric is None:
             raise AssistedGradingError("rubric not found.")
 
@@ -326,7 +325,6 @@ class AssistedGradingService:
         if not str(submission.content or "").strip():
             fallback = self._fallback_grade("", criteria, int(rubric.total_points))
             draft = AIGradingDraft.objects.create(
-                tenant=self.tenant,
                 submission=submission,
                 rubric=rubric,
                 score=float(fallback["score"]),
@@ -372,7 +370,6 @@ class AssistedGradingService:
             usage = {"model": "fallback", "prompt_tokens": 0, "completion_tokens": 0}
 
         draft = AIGradingDraft.objects.create(
-            tenant=self.tenant,
             submission=submission,
             rubric=rubric,
             score=float(normalized["score"]),
@@ -388,7 +385,6 @@ class AssistedGradingService:
             prompt_tokens = int(usage.get("prompt_tokens") or 0)
             completion_tokens = int(usage.get("completion_tokens") or 0)
             AIInteractionLog.objects.create(
-                tenant=self.tenant,
                 user=self.user,
                 feature_used="ai_subjective_grading_draft",
                 prompt_tokens=prompt_tokens,
@@ -419,7 +415,7 @@ class AssistedGradingService:
                 "submission__assessment",
                 "submission__student",
             )
-            .filter(id=draft_id, tenant=self.tenant)
+            .filter(id=draft_id)
             .first()
         )
         if draft is None:

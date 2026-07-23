@@ -7,7 +7,6 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
 
-from core.models.tenant import Tenant
 
 
 class Project(models.Model):
@@ -30,7 +29,6 @@ class Project(models.Model):
     project_id = models.UUIDField(
         primary_key=True, default=uuid_lib.uuid4, editable=False
     )
-    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, db_constraint=False)
 
     title = models.CharField(max_length=200)
     description = models.TextField(blank=True)
@@ -97,7 +95,7 @@ class Project(models.Model):
     class Meta:
         ordering = ["-created_at"]
         indexes = [
-            models.Index(fields=["tenant", "status"], name="proj_tenant_status_idx"),
+            models.Index(fields=["status"], name="proj_tenant_status_idx"),
             models.Index(fields=["mentor", "status"], name="proj_mentor_status_idx"),
         ]
 

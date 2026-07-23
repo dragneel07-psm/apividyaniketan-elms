@@ -24,10 +24,9 @@ class QuizGeneratorService:
     VALID_SOURCE_TYPES = {"lesson", "chapter"}
     VALID_DIFFICULTIES = {"easy", "medium", "hard"}
 
-    def __init__(self, *, tenant, user):
-        self.tenant = tenant
+    def __init__(self, *, user):
         self.user = user
-        self.rag = RAGTutorService(tenant=tenant)
+        self.rag = RAGTutorService()
 
     @staticmethod
     def _extract_json(raw_text: str) -> dict[str, Any] | None:
@@ -387,7 +386,6 @@ class QuizGeneratorService:
 
         try:
             AIInteractionLog.objects.create(
-                tenant=self.tenant,
                 user=self.user,
                 feature_used="quiz_generator_rag",
                 prompt_tokens=int(usage.get("prompt_tokens") or 0),

@@ -19,7 +19,7 @@ import {
 } from "recharts";
 import { SafeResponsiveContainer } from "@/components/ui/safe-responsive-container";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { useTheme } from "next-themes";
+import { useTheme } from "@/components/providers/theme-provider";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BrainCircuit, DollarSign } from "lucide-react";
 
@@ -47,8 +47,8 @@ const schoolData = [
 ];
 
 export function TokenUsageChart() {
-    const { theme } = useTheme();
-    const isDark = theme === "dark";
+    const { resolvedTheme } = useTheme();
+    const isDark = resolvedTheme === "dark";
 
     // Colors matching "Deep Space" theme
     const colors = {

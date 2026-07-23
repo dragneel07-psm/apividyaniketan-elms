@@ -214,9 +214,7 @@ def _on_update_saved(sender, instance: ProjectUpdate, created, **kwargs):
 # --- Notifications ---
 
 
-def _emit_notification(
-    *, recipient, title: str, message: str, link: str, tenant
-) -> None:
+def _emit_notification(*, recipient, title: str, message: str, link: str) -> None:
     """Create a Notification row. Errors are swallowed — best-effort delivery."""
     if recipient is None:
         return
@@ -224,7 +222,6 @@ def _emit_notification(
         from notifications.models import Notification
 
         Notification.objects.create(
-            tenant=tenant,
             recipient=recipient,
             title=title,
             message=message,
@@ -250,7 +247,6 @@ def _notify_task_assigned(task: ProjectTask) -> None:
         title=f"New task: {task.title}",
         message=f"You have been assigned a task in '{task.project.title}'.",
         link=f"/student/projects/{task.project_id}",
-        tenant=task.tenant,
     )
 
 
@@ -271,7 +267,6 @@ def _notify_project_graded(project: Project) -> None:
             title=title,
             message=message,
             link=f"/student/projects/{project.pk}",
-            tenant=project.tenant,
         )
     # Also notify parents-of-members (use academic.Parent.students M2M).
     try:
@@ -288,7 +283,6 @@ def _notify_project_graded(project: Project) -> None:
                 title=title,
                 message=message,
                 link=f"/parent/projects/{project.pk}",
-                tenant=project.tenant,
             )
     except Exception:
         logger.exception("Failed to notify parents for graded project=%s", project.pk)

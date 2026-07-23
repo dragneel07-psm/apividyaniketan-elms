@@ -23,7 +23,6 @@ class AdmissionEnquirySerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "enquiry_id",
-            "tenant",
             "first_name",
             "last_name",
             "guardian_name",
@@ -44,7 +43,6 @@ class AdmissionEnquirySerializer(serializers.ModelSerializer):
             "updated_at",
         ]
         read_only_fields = [
-            "tenant",
             "converted_student",
             "handled_by",
             "created_at",

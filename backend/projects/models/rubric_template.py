@@ -6,7 +6,6 @@ import uuid as uuid_lib
 from django.conf import settings
 from django.db import models
 
-from core.models.tenant import Tenant
 
 
 class RubricTemplate(models.Model):
@@ -21,7 +20,6 @@ class RubricTemplate(models.Model):
     template_id = models.UUIDField(
         primary_key=True, default=uuid_lib.uuid4, editable=False
     )
-    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, db_constraint=False)
 
     name = models.CharField(max_length=200)
     description = models.TextField(blank=True)
@@ -54,7 +52,7 @@ class RubricTemplate(models.Model):
     class Meta:
         ordering = ["-updated_at"]
         indexes = [
-            models.Index(fields=["tenant", "owner"], name="proj_rubric_owner_idx"),
+            models.Index(fields=["owner"], name="proj_rubric_owner_idx"),
         ]
 
     def __str__(self):

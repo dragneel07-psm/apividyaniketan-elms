@@ -2,14 +2,13 @@
 # Unauthorized copying, modification, or distribution of this file,
 # via any medium, is strictly prohibited. Proprietary and confidential.
 """
-Seeds non-destructive dummy data into an existing school tenant for testing:
-staff (each with a different staff_role), teachers, and students spread
-across Nursery/LKG/UKG and Grade 1-8. Idempotent (get_or_create throughout)
-and scoped to a single tenant schema — never touches other tenants.
+Seeds non-destructive dummy data into the school: staff (each with a
+different staff_role), teachers, and students spread across Nursery/LKG/UKG
+and Grade 1-8. Idempotent (get_or_create throughout).
 
 Usage:
-  python manage.py seed_school_demo_data --schema apividyaniketan
-  python manage.py seed_school_demo_data --schema apividyaniketan --students 50 --teachers 5 --staff 3
+  python manage.py seed_school_demo_data
+  python manage.py seed_school_demo_data --students 50 --teachers 5 --staff 3
 """
 
 import random
@@ -19,13 +18,13 @@ from decimal import Decimal
 from django.core.management.base import BaseCommand, CommandError
 from django.db.models.signals import post_save, pre_save
 from django.utils import timezone
-from django_tenants.utils import schema_context
 
 from academic.models import AcademicClass, Section, Student, Teacher
 from academic.signals import sync_student_groups, track_section_change
-from core.models import Tenant
 from hr_payroll.models import Employee, PayrollPeriod, SalarySlip
 from users.models import UserAccount
+
+DEMO_EMAIL_DOMAIN = "school.local"
 
 STAFF_DESIGNATIONS = {
     "accountant": ("Accountant", Decimal("50000")),
@@ -108,45 +107,36 @@ def _random_name(rng: random.Random) -> tuple[str, str]:
 
 
 class Command(BaseCommand):
-    help = "Seed dummy staff/teacher/student data into an existing tenant for testing."
+    help = "Seed dummy staff/teacher/student data for testing."
 
     def add_arguments(self, parser):
-        parser.add_argument("--schema", required=True, help="Tenant schema to seed into.")
         parser.add_argument("--students", type=int, default=200)
         parser.add_argument("--teachers", type=int, default=10)
         parser.add_argument("--staff", type=int, default=5)
         parser.add_argument("--seed", type=int, default=42, help="RNG seed for reproducible names.")
 
     def handle(self, *args, **options):
-        schema = str(options["schema"]).strip().lower()
         n_students = int(options["students"])
         n_teachers = int(options["teachers"])
         n_staff = int(options["staff"])
         rng = random.Random(int(options["seed"]))
 
-        if not schema or schema == "public":
-            raise CommandError("--schema must be a non-public tenant schema.")
         if n_staff > len(STAFF_ROLES):
             raise CommandError(f"--staff cannot exceed {len(STAFF_ROLES)} (one per distinct staff_role).")
 
-        tenant = Tenant.objects.filter(schema_name=schema).first()
-        if not tenant:
-            raise CommandError(f"Tenant schema '{schema}' not found.")
+        classes = self._ensure_classes()
+        self._seed_staff(n_staff)
+        self._seed_teachers(n_teachers, rng)
+        self._seed_students(n_students, classes, rng)
+        self._seed_hr_records()
+        self._seed_academic_assignments(classes)
+        self._seed_finance_records(classes, rng)
 
-        with schema_context(schema):
-            classes = self._ensure_classes()
-            self._seed_staff(tenant, n_staff)
-            self._seed_teachers(tenant, n_teachers, rng)
-            self._seed_students(tenant, n_students, classes, rng)
-            self._seed_hr_records(tenant)
-            self._seed_academic_assignments(classes)
-            self._seed_finance_records(tenant, classes, rng)
-
-        self.stdout.write(self.style.SUCCESS(f"\nDemo data seeded into schema={schema}."))
+        self.stdout.write(self.style.SUCCESS("\nDemo data seeded."))
         self.stdout.write("Credentials (shared per role tier):")
-        self.stdout.write(f"  Staff:    staff_<role>@{schema}.local / {STAFF_PASSWORD}")
-        self.stdout.write(f"  Teachers: teacher1..{n_teachers}@{schema}.local / {TEACHER_PASSWORD}")
-        self.stdout.write(f"  Students: student1..{n_students}@{schema}.local / {STUDENT_PASSWORD}")
+        self.stdout.write(f"  Staff:    staff_<role>@{DEMO_EMAIL_DOMAIN} / {STAFF_PASSWORD}")
+        self.stdout.write(f"  Teachers: teacher1..{n_teachers}@{DEMO_EMAIL_DOMAIN} / {TEACHER_PASSWORD}")
+        self.stdout.write(f"  Students: student1..{n_students}@{DEMO_EMAIL_DOMAIN} / {STUDENT_PASSWORD}")
 
     def _ensure_classes(self) -> list[Section]:
         sections = []
@@ -159,10 +149,10 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(f"Ensured {len(sections)} classes (Nursery/LKG/UKG + Grade 1-8)."))
         return sections
 
-    def _seed_staff(self, tenant: Tenant, count: int) -> None:
+    def _seed_staff(self, count: int) -> None:
         created = 0
         for staff_role in STAFF_ROLES[:count]:
-            email = f"staff_{staff_role}@{tenant.schema_name}.local"
+            email = f"staff_{staff_role}@{DEMO_EMAIL_DOMAIN}"
             first, last = staff_role.replace("_", " ").title().split(" ", 1) if "_" in staff_role else (staff_role.title(), "Staff")
             user, was_created = UserAccount.objects.get_or_create(
                 email=email,
@@ -174,7 +164,6 @@ class Command(BaseCommand):
                     "staff_role": staff_role,
                     "is_staff": True,
                     "is_active": True,
-                    "tenant_id": tenant.id,
                 },
             )
             if was_created:
@@ -183,10 +172,10 @@ class Command(BaseCommand):
                 created += 1
         self.stdout.write(self.style.SUCCESS(f"Staff: {created} created, {count - created} already existed."))
 
-    def _seed_teachers(self, tenant: Tenant, count: int, rng: random.Random) -> None:
+    def _seed_teachers(self, count: int, rng: random.Random) -> None:
         created = 0
         for i in range(1, count + 1):
-            email = f"teacher{i}@{tenant.schema_name}.local"
+            email = f"teacher{i}@{DEMO_EMAIL_DOMAIN}"
             first, last = _random_name(rng)
             user, was_created = UserAccount.objects.get_or_create(
                 email=email,
@@ -196,7 +185,6 @@ class Command(BaseCommand):
                     "last_name": last,
                     "role": "teacher",
                     "is_active": True,
-                    "tenant_id": tenant.id,
                 },
             )
             if was_created:
@@ -206,17 +194,16 @@ class Command(BaseCommand):
             Teacher.objects.get_or_create(user=user)
         self.stdout.write(self.style.SUCCESS(f"Teachers: {created} created, {count - created} already existed."))
 
-    def _seed_students(self, tenant: Tenant, count: int, sections: list[Section], rng: random.Random) -> None:
+    def _seed_students(self, count: int, sections: list[Section], rng: random.Random) -> None:
         # Disconnect the section-change/group-sync signals during bulk seeding
-        # — same guard setup_qa_tenant.py uses, avoids per-row conversation
-        # group syncing overhead and cross-schema signal side effects.
+        # to avoid per-row conversation group syncing overhead.
         post_save.disconnect(sync_student_groups, sender=Student)
         pre_save.disconnect(track_section_change, sender=Student)
         created = 0
         try:
             for i in range(1, count + 1):
                 section = sections[(i - 1) % len(sections)]
-                email = f"student{i}@{tenant.schema_name}.local"
+                email = f"student{i}@{DEMO_EMAIL_DOMAIN}"
                 first, last = _random_name(rng)
                 user, was_created = UserAccount.objects.get_or_create(
                     email=email,
@@ -226,7 +213,6 @@ class Command(BaseCommand):
                         "last_name": last,
                         "role": "student",
                         "is_active": True,
-                        "tenant_id": tenant.id,
                     },
                 )
                 if was_created:
@@ -242,7 +228,7 @@ class Command(BaseCommand):
             pre_save.connect(track_section_change, sender=Student)
         self.stdout.write(self.style.SUCCESS(f"Students: {created} created, {count - created} already existed."))
 
-    def _seed_hr_records(self, tenant: Tenant) -> None:
+    def _seed_hr_records(self) -> None:
         # hr_payroll.Employee/PayrollPeriod/SalarySlip are a separate data
         # model from users.UserAccount + academic.Teacher — creating an
         # account doesn't create an HR profile. Backfill one for every
@@ -250,7 +236,6 @@ class Command(BaseCommand):
         # slip in a shared finalized period so the payroll module (and the
         # teacher self-service payslip page) actually has data to show.
         period, _ = PayrollPeriod.objects.get_or_create(
-            tenant=tenant,
             month=3,
             year=2026,
             defaults={
@@ -263,7 +248,7 @@ class Command(BaseCommand):
 
         employees_created = 0
         slips_created = 0
-        for user in UserAccount.objects.filter(tenant=tenant, role__in=["teacher", "staff"]):
+        for user in UserAccount.objects.filter(role__in=["teacher", "staff"]):
             if user.role == "teacher":
                 designation, basic_salary = TEACHER_DESIGNATION
             else:
@@ -272,7 +257,6 @@ class Command(BaseCommand):
             employee, was_created = Employee.objects.get_or_create(
                 user=user,
                 defaults={
-                    "tenant": tenant,
                     "designation": designation,
                     "join_date": EMPLOYEE_JOIN_DATE,
                 },
@@ -284,7 +268,6 @@ class Command(BaseCommand):
                 employee=employee,
                 payroll_period=period,
                 defaults={
-                    "tenant": tenant,
                     "basic_salary": basic_salary,
                     "hra": (basic_salary * Decimal("0.1")).quantize(Decimal("1")),
                     "status": SalarySlip.STATUS_FINALIZED,
@@ -352,7 +335,7 @@ class Command(BaseCommand):
             )
         )
 
-    def _seed_finance_records(self, tenant: Tenant, classes: list[Section], rng: random.Random) -> None:
+    def _seed_finance_records(self, classes: list[Section], rng: random.Random) -> None:
         # Fee structures/payments/expenses are the simple layer; Trial Balance
         # and the NAS Financial Statements read ONLY from posted
         # JournalEntry/JournalLine rows (not Payment/Expense directly), so a
@@ -362,23 +345,25 @@ class Command(BaseCommand):
         from billing.models_school import Expense, FeeStructure, Payment, StudentFee
         from billing_school.models_nas import ChartOfAccount, FundAccount, JournalEntry, JournalLine
         from billing_school.views_nas import _seed_default_coa
+        from core.models import SchoolProfile
 
-        tenant_fields_changed = []
-        if not tenant.fiscal_year_bs:
-            tenant.fiscal_year_bs = "2082/83"
-            tenant_fields_changed.append("fiscal_year_bs")
-        if not tenant.pan_number:
-            tenant.pan_number = "301234567"
-            tenant_fields_changed.append("pan_number")
-        if not tenant.vat_number:
-            tenant.vat_number = "600987654"
-            tenant_fields_changed.append("vat_number")
-        if tenant_fields_changed:
-            tenant.save(update_fields=tenant_fields_changed)
+        profile = SchoolProfile.get_solo()
+        profile_fields_changed = []
+        if not profile.fiscal_year_bs:
+            profile.fiscal_year_bs = "2082/83"
+            profile_fields_changed.append("fiscal_year_bs")
+        if not profile.pan_number:
+            profile.pan_number = "301234567"
+            profile_fields_changed.append("pan_number")
+        if not profile.vat_number:
+            profile.vat_number = "600987654"
+            profile_fields_changed.append("vat_number")
+        if profile_fields_changed:
+            profile.save(update_fields=profile_fields_changed)
 
-        coa_created = _seed_default_coa(tenant)
-        accounts = {a.account_code: a for a in ChartOfAccount.objects.filter(tenant=tenant)}
-        admin_user = UserAccount.objects.filter(tenant=tenant, role="admin").order_by("email").first()
+        coa_created = _seed_default_coa()
+        accounts = {a.account_code: a for a in ChartOfAccount.objects.all()}
+        admin_user = UserAccount.objects.filter(role="admin").order_by("email").first()
 
         def tier_for(cls_name: str) -> str:
             if cls_name in {"Nursery", "LKG", "UKG"}:
@@ -395,7 +380,7 @@ class Command(BaseCommand):
             class_fee_structures[cls.id] = {}
             for name, frequency, _coa_code in FEE_TYPES:
                 fs, created = FeeStructure.objects.get_or_create(
-                    tenant=tenant, name=name, academic_class=cls,
+                    name=name, academic_class=cls,
                     defaults={"amount": amounts[name], "frequency": frequency},
                 )
                 class_fee_structures[cls.id][name] = fs
@@ -410,7 +395,7 @@ class Command(BaseCommand):
 
         students = list(
             Student.objects.select_related("user", "academic_class")
-            .filter(user__tenant=tenant, academic_class__isnull=False)
+            .filter(academic_class__isnull=False)
         )
         for idx, student in enumerate(students):
             cls_fees = class_fee_structures.get(student.academic_class_id)
@@ -429,7 +414,7 @@ class Command(BaseCommand):
                     amount_paid = Decimal("0")
 
                 student_fee, created = StudentFee.objects.get_or_create(
-                    tenant=tenant, student=student, fee_structure=fs,
+                    student=student, fee_structure=fs,
                     defaults={
                         "amount_due": amount_due, "amount_paid": amount_paid,
                         "due_date": due_date, "status": status,
@@ -442,10 +427,10 @@ class Command(BaseCommand):
 
                 method = rng.choice(["cash", "bank_transfer", "online"])
                 payment = Payment.objects.create(
-                    tenant=tenant, student=student, student_fee=student_fee,
+                    student=student, student_fee=student_fee,
                     amount=amount_paid, method=method, recorded_by=admin_user,
                 )
-                payment.bill_number = allocate_bill_number(tenant)
+                payment.bill_number = allocate_bill_number()
                 backdated = timezone.now() - timedelta(days=rng.randint(0, 90))
                 Payment.objects.filter(pk=payment.pk).update(
                     bill_number=payment.bill_number, payment_date=backdated
@@ -458,7 +443,7 @@ class Command(BaseCommand):
         expense_rows_for_journal = []
         for title, category, amount in EXPENSE_ROWS:
             expense, created = Expense.objects.get_or_create(
-                tenant=tenant, title=title, category=category,
+                title=title, category=category,
                 defaults={
                     "amount": amount,
                     "date": today - timedelta(days=rng.randint(1, 90)),
@@ -476,7 +461,6 @@ class Command(BaseCommand):
             if not debit_account or not credit_account:
                 continue
             entry = JournalEntry.objects.create(
-                tenant=tenant,
                 date_ad=payment.payment_date.date(),
                 description=f"Fee receipt - {payment.student.user.get_full_name()}",
                 entry_type="fee_receipt",
@@ -493,7 +477,7 @@ class Command(BaseCommand):
             if not debit_account or not credit_account:
                 continue
             entry = JournalEntry.objects.create(
-                tenant=tenant, date_ad=expense.date, description=expense.title, entry_type="expense",
+                date_ad=expense.date, description=expense.title, entry_type="expense",
             )
             JournalLine.objects.create(entry=entry, account=debit_account, debit=expense.amount, credit=Decimal("0"))
             JournalLine.objects.create(entry=entry, account=credit_account, debit=Decimal("0"), credit=expense.amount)
@@ -509,7 +493,7 @@ class Command(BaseCommand):
             if not coa:
                 continue
             _, created = FundAccount.objects.get_or_create(
-                tenant=tenant, name=name,
+                name=name,
                 defaults={"fund_type": fund_type, "linked_account": coa, "opening_balance": opening},
             )
             fund_created += int(created)

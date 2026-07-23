@@ -18,12 +18,7 @@ from gamification.models import (
 class GamificationService:
     @staticmethod
     def get_or_create_profile(student):
-        profile, created = GamificationProfile.objects.get_or_create(
-            student=student,
-            defaults={
-                "tenant": student.user.tenant
-            },  # Always use user tenant as source of truth
-        )
+        profile, created = GamificationProfile.objects.get_or_create(student=student)
         return profile
 
     @staticmethod
@@ -31,11 +26,8 @@ class GamificationService:
         """
         Record a point transaction and update profile stats.
         """
-        tenant = student.user.tenant
-
         # 1. Create Transaction Record
         PointTransaction.objects.create(
-            tenant=tenant,
             student=student,
             points=points,
             description=description,
@@ -81,8 +73,7 @@ class GamificationService:
         Check and award badges based on student progress.
         """
         profile = GamificationService.get_or_create_profile(student)
-        tenant = profile.tenant
-        available_badges = Badge.objects.filter(tenant=tenant)
+        available_badges = Badge.objects.all()
         earned_badge_ids = set(
             StudentBadge.objects.filter(student=student).values_list(
                 "badge_id", flat=True
@@ -116,9 +107,7 @@ class GamificationService:
                     should_award = True
 
             if should_award:
-                sb = StudentBadge.objects.create(
-                    tenant=tenant, student=student, badge=badge
-                )
+                sb = StudentBadge.objects.create(student=student, badge=badge)
                 new_badges.append(sb)
                 # Award XP reward for badge
                 GamificationService.award_points(

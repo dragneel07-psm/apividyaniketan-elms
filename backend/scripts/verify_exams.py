@@ -6,8 +6,6 @@ import sys
 import uuid
 
 import django
-from django.conf import settings
-from django.db import connections
 
 # Setup Django environment
 sys.path.append(os.getcwd())
@@ -24,20 +22,7 @@ from academic.models import (
     Subject,
 )
 from academic.services.exam_service import ExamService
-from core.middleware.tenant import clear_current_tenant, set_current_tenant
-from core.models.tenant import Tenant
 from users.models import UserAccount
-
-
-def setup_tenant_db(tenant):
-    """Ensure the tenant database is registered in Django settings."""
-    if tenant.db_alias not in settings.DATABASES:
-        db_config = settings.DATABASES["default"].copy()
-        db_path = settings.BASE_DIR / tenant.db_name
-        db_config["NAME"] = str(db_path)
-        settings.DATABASES[tenant.db_alias] = db_config
-        connections.databases[tenant.db_alias] = db_config
-    return tenant.db_alias
 
 
 def ensure_test_data(db_alias):
@@ -109,15 +94,7 @@ def ensure_test_data(db_alias):
 def verify_seating_allocation():
     print("🧪 Starting Exam Seating Allocation Verification...")
 
-    try:
-        tenant = Tenant.objects.get(subdomain="demo")
-        db_alias = setup_tenant_db(tenant)
-        set_current_tenant(tenant, db_alias)
-        print(f"✅ Context: {tenant.name} | DB: {db_alias}")
-
-    except Tenant.DoesNotExist:
-        print("❌ Demo tenant not found.")
-        return
+    db_alias = "default"
 
     try:
         # 1. Ensure Data
@@ -167,9 +144,6 @@ def verify_seating_allocation():
         import traceback
 
         traceback.print_exc()
-    finally:
-        clear_current_tenant()
-        print("\n🧹 Cleaned up.")
 
 
 if __name__ == "__main__":

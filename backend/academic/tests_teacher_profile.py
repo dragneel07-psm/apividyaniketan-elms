@@ -2,29 +2,19 @@
 # Unauthorized copying, modification, or distribution of this file,
 # via any medium, is strictly prohibited. Proprietary and confidential.
 from django.contrib.auth import get_user_model
-from django_tenants.test.cases import FastTenantTestCase
+from django.test import TestCase
 from rest_framework import status
 from rest_framework.test import APIClient
 
 from academic.models import AcademicClass, Chapter, Lesson, Section, Subject, Teacher
+from academic.services.academic_year_service import ensure_current_academic_year
 
 User = get_user_model()
 
 
-class TeacherProfileOverviewTests(FastTenantTestCase):
-    @classmethod
-    def setup_tenant(cls, tenant):
-        tenant.name = "Teacher Profile Test School"
-
-    @classmethod
-    def setup_domain(cls, domain):
-        domain.is_primary = True
-
+class TeacherProfileOverviewTests(TestCase):
     def setUp(self):
-        self.client = APIClient(
-            HTTP_HOST=self.get_test_tenant_domain(),
-            HTTP_X_TENANT_ID=self.tenant.schema_name,
-        )
+        self.client = APIClient()
 
         self.admin_user = User.objects.create_user(
             username="school_admin",
@@ -33,7 +23,6 @@ class TeacherProfileOverviewTests(FastTenantTestCase):
             role="admin",
             first_name="School",
             last_name="Admin",
-            tenant=self.tenant,
         )
         self.teacher_user = User.objects.create_user(
             username="teacher_profile",
@@ -42,7 +31,6 @@ class TeacherProfileOverviewTests(FastTenantTestCase):
             role="teacher",
             first_name="Asha",
             last_name="Sharma",
-            tenant=self.tenant,
         )
 
         self.teacher_profile = Teacher.objects.create(
@@ -58,11 +46,13 @@ class TeacherProfileOverviewTests(FastTenantTestCase):
         self.teacher_profile.assigned_classes.add(
             self.class_grade_7, self.class_grade_8
         )
+        self.year = ensure_current_academic_year()
 
         lead_subject = Subject.objects.create(
             name="Mathematics",
             code="MTH-7",
             academic_class=self.class_grade_7,
+            academic_year=self.year,
             teacher=self.teacher_profile,
             is_active=True,
         )
@@ -70,6 +60,7 @@ class TeacherProfileOverviewTests(FastTenantTestCase):
             name="Science",
             code="SCI-7",
             academic_class=self.class_grade_7,
+            academic_year=self.year,
             is_active=True,
         )
         support_subject.additional_teachers.add(self.teacher_profile)
@@ -81,7 +72,6 @@ class TeacherProfileOverviewTests(FastTenantTestCase):
             role="teacher",
             first_name="Other",
             last_name="Teacher",
-            tenant=self.tenant,
         )
         other_teacher = Teacher.objects.create(
             user=other_teacher_user, designation="subject_teacher"
@@ -90,6 +80,7 @@ class TeacherProfileOverviewTests(FastTenantTestCase):
             name="English",
             code="ENG-8",
             academic_class=self.class_grade_8,
+            academic_year=self.year,
             teacher=other_teacher,
             is_active=True,
         )

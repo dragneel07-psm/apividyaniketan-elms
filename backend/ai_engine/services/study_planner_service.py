@@ -67,7 +67,6 @@ class StudyPlannerService:
         from ai_engine.models import StudyEvent
 
         today = timezone.now().date()
-        tenant = student.user.tenant
         daily_goal = (
             getattr(student, "daily_study_goal", DEFAULT_DAILY_GOAL_MINUTES)
             or DEFAULT_DAILY_GOAL_MINUTES
@@ -121,7 +120,6 @@ class StudyPlannerService:
                 if exam_soon:
                     exam = exam_soon[0]
                     event = self._create_event(
-                        tenant=tenant,
                         student=student,
                         title=f"Exam Prep: {exam.subject.name if exam.subject else exam.title}",
                         description=(
@@ -143,7 +141,6 @@ class StudyPlannerService:
                     review_idx += 1
                     subject = getattr(node.learning_path, "subject", None)
                     event = self._create_event(
-                        tenant=tenant,
                         student=student,
                         title=f"Review: {node.title}",
                         description=(
@@ -169,7 +166,6 @@ class StudyPlannerService:
                     subject = getattr(mastery.skill_tag, "subject", None)
                     pct = round(mastery.p_mastery * 100)
                     event = self._create_event(
-                        tenant=tenant,
                         student=student,
                         title=f"Skill Practice: {mastery.skill_tag.name}",
                         description=(
@@ -192,7 +188,6 @@ class StudyPlannerService:
                     content_idx += 1
                     subject = getattr(node.learning_path, "subject", None)
                     event = self._create_event(
-                        tenant=tenant,
                         student=student,
                         title=f"Study: {node.title}",
                         description=(
@@ -216,7 +211,6 @@ class StudyPlannerService:
                 if subjects:
                     sub = subjects[day_offset % len(subjects)]
                     event = self._create_event(
-                        tenant=tenant,
                         student=student,
                         title=f"Study: {sub.name}",
                         description=f"General study session for {sub.name}.",
@@ -375,7 +369,6 @@ class StudyPlannerService:
 
     def _create_event(
         self,
-        tenant,
         student,
         title: str,
         description: str,
@@ -390,7 +383,6 @@ class StudyPlannerService:
         from ai_engine.models import StudyEvent
 
         return StudyEvent.objects.using(self.db_alias).create(
-            tenant=tenant,
             student=student,
             title=title,
             description=description,

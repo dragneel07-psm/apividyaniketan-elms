@@ -11,12 +11,6 @@ class Route(models.Model):
     route_id = models.UUIDField(
         primary_key=True, default=uuid_lib.uuid4, editable=False
     )
-    tenant = models.ForeignKey(
-        "core.Tenant",
-        on_delete=models.CASCADE,
-        related_name="transport_routes",
-        db_constraint=False,
-    )
     name = models.CharField(max_length=100)
     description = models.TextField(blank=True)
     stops = models.JSONField(
@@ -38,12 +32,6 @@ class Route(models.Model):
 class Vehicle(models.Model):
     vehicle_id = models.UUIDField(
         primary_key=True, default=uuid_lib.uuid4, editable=False
-    )
-    tenant = models.ForeignKey(
-        "core.Tenant",
-        on_delete=models.CASCADE,
-        related_name="transport_vehicles",
-        db_constraint=False,
     )
     plate_number = models.CharField(max_length=20)
     model = models.CharField(max_length=80, blank=True)
@@ -70,12 +58,6 @@ class Vehicle(models.Model):
 class StudentTransportAssignment(models.Model):
     assignment_id = models.UUIDField(
         primary_key=True, default=uuid_lib.uuid4, editable=False
-    )
-    tenant = models.ForeignKey(
-        "core.Tenant",
-        on_delete=models.CASCADE,
-        related_name="transport_assignments",
-        db_constraint=False,
     )
     student = models.OneToOneField(
         "academic.Student",
@@ -108,7 +90,7 @@ class StudentTransportAssignment(models.Model):
         ordering = ["-created_at"]
         indexes = [
             models.Index(
-                fields=["tenant", "is_active"], name="transport_assign_active_idx"
+                fields=["is_active"], name="transport_assign_active_idx"
             ),
         ]
 

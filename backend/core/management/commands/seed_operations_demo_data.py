@@ -2,17 +2,15 @@
 # Unauthorized copying, modification, or distribution of this file,
 # via any medium, is strictly prohibited. Proprietary and confidential.
 """
-Seeds non-destructive demo data into an existing school tenant for:
-Timetable, Calendar (SchoolEvent), Transport, Hostel, Communication
-(Notice/Notification/Conversation), and Inventory. Idempotent
-(get_or_create throughout) and scoped to a single tenant schema.
+Seeds non-destructive demo data for: Timetable, Calendar (SchoolEvent),
+Transport, Hostel, Communication (Notice/Notification/Conversation), and
+Inventory. Idempotent (get_or_create throughout).
 
-Assumes `seed_school_demo_data` has already been run for the target schema
-— this command reads its Students/Sections/Teachers/Subjects rather than
-creating its own.
+Assumes `seed_school_demo_data` has already been run — this command reads
+its Students/Sections/Teachers/Subjects rather than creating its own.
 
 Usage:
-  python manage.py seed_operations_demo_data --schema apividyaniketan
+  python manage.py seed_operations_demo_data
 """
 
 import random
@@ -20,7 +18,6 @@ from datetime import date, time, timedelta
 from decimal import Decimal
 
 from django.core.management.base import BaseCommand, CommandError
-from django_tenants.utils import schema_context
 
 from academic.models import (
     Asset,
@@ -37,7 +34,6 @@ from academic.models import (
 )
 from academic.services.academic_year_service import ensure_current_academic_year
 from conversations.models import Conversation, ConversationParticipant, Message
-from core.models import Tenant
 from hostel.models import HostelAllotment, HostelBlock, HostelRoom
 from notifications.models import Notification, NotificationTemplate
 from transport.models import Route, StudentTransportAssignment, Vehicle
@@ -141,48 +137,35 @@ NOTIFICATION_TEMPLATES_DATA = [
 class Command(BaseCommand):
     help = (
         "Seed demo data for Timetable, Calendar, Transport, Hostel, "
-        "Communication, and Inventory into an existing tenant. "
-        "Run seed_school_demo_data first."
+        "Communication, and Inventory. Run seed_school_demo_data first."
     )
 
     def add_arguments(self, parser):
-        parser.add_argument("--schema", required=True, help="Tenant schema to seed into.")
         parser.add_argument("--seed", type=int, default=42, help="RNG seed for reproducible sampling.")
 
     def handle(self, *args, **options):
-        schema = str(options["schema"]).strip().lower()
         rng = random.Random(int(options["seed"]))
 
-        if not schema or schema == "public":
-            raise CommandError("--schema must be a non-public tenant schema.")
+        sections = list(Section.objects.select_related("academic_class").order_by("academic_class__order", "name"))
+        if not sections:
+            raise CommandError("No classes/sections found. Run seed_school_demo_data first.")
+        teachers = list(Teacher.objects.select_related("user").order_by("user__email"))
+        students = list(
+            Student.objects.select_related("user", "academic_class", "section")
+            .filter(academic_class__isnull=False)
+            .order_by("student_id")
+        )
+        admin_user = UserAccount.objects.filter(role="admin").order_by("email").first()
+        year = ensure_current_academic_year()
 
-        tenant = Tenant.objects.filter(schema_name=schema).first()
-        if not tenant:
-            raise CommandError(f"Tenant schema '{schema}' not found.")
+        self._seed_timetable(sections, teachers, admin_user, year)
+        self._seed_calendar(admin_user)
+        self._seed_transport(students, rng)
+        self._seed_hostel(students, rng)
+        self._seed_communication(students, teachers, admin_user)
+        self._seed_inventory(teachers, admin_user)
 
-        with schema_context(schema):
-            sections = list(Section.objects.select_related("academic_class").order_by("academic_class__order", "name"))
-            if not sections:
-                raise CommandError(
-                    f"No classes/sections found in schema '{schema}'. Run seed_school_demo_data first."
-                )
-            teachers = list(Teacher.objects.select_related("user").order_by("user__email"))
-            students = list(
-                Student.objects.select_related("user", "academic_class", "section")
-                .filter(user__tenant=tenant, academic_class__isnull=False)
-                .order_by("student_id")
-            )
-            admin_user = UserAccount.objects.filter(tenant=tenant, role="admin").order_by("email").first()
-            year = ensure_current_academic_year()
-
-            self._seed_timetable(sections, teachers, admin_user, year)
-            self._seed_calendar(tenant, admin_user)
-            self._seed_transport(tenant, students, rng)
-            self._seed_hostel(tenant, students, rng)
-            self._seed_communication(tenant, students, teachers, admin_user)
-            self._seed_inventory(tenant, teachers, admin_user)
-
-        self.stdout.write(self.style.SUCCESS(f"\nOperations demo data seeded into schema={schema}."))
+        self.stdout.write(self.style.SUCCESS("\nOperations demo data seeded."))
 
     def _seed_timetable(self, sections, teachers, admin_user, year):
         created = 0
@@ -227,7 +210,7 @@ class Command(BaseCommand):
                         created += 1
         self.stdout.write(self.style.SUCCESS(f"Timetable: {created} periods created across {len(sections)} sections."))
 
-    def _seed_calendar(self, tenant, admin_user):
+    def _seed_calendar(self, admin_user):
         year = ensure_current_academic_year()
         anchor = year.start_date if year else date.today()
 
@@ -249,7 +232,6 @@ class Command(BaseCommand):
             start_date = anchor + timedelta(days=offset)
             end_date = start_date + timedelta(days=duration - 1)
             _, was_created = SchoolEvent.objects.get_or_create(
-                tenant=tenant,
                 title=title,
                 start_date=start_date,
                 defaults={
@@ -266,11 +248,10 @@ class Command(BaseCommand):
                 created += 1
         self.stdout.write(self.style.SUCCESS(f"Calendar: {created} school events created."))
 
-    def _seed_transport(self, tenant, students, rng):
+    def _seed_transport(self, students, rng):
         routes = []
         for route_data in ROUTES_DATA:
             route, _ = Route.objects.get_or_create(
-                tenant=tenant,
                 name=route_data["name"],
                 defaults={"description": route_data["description"], "stops": route_data["stops"]},
             )
@@ -279,7 +260,6 @@ class Command(BaseCommand):
         vehicles = []
         for i, vehicle_data in enumerate(VEHICLES_DATA):
             vehicle, _ = Vehicle.objects.get_or_create(
-                tenant=tenant,
                 plate_number=vehicle_data["plate_number"],
                 defaults={
                     "model": vehicle_data["model"],
@@ -300,7 +280,6 @@ class Command(BaseCommand):
             _, was_created = StudentTransportAssignment.objects.get_or_create(
                 student=student,
                 defaults={
-                    "tenant": tenant,
                     "route": route,
                     "vehicle": vehicle,
                     "pickup_stop": stop,
@@ -317,11 +296,10 @@ class Command(BaseCommand):
             )
         )
 
-    def _seed_hostel(self, tenant, students, rng):
+    def _seed_hostel(self, students, rng):
         blocks = []
         for block_data in HOSTEL_BLOCKS_DATA:
             block, _ = HostelBlock.objects.get_or_create(
-                tenant=tenant,
                 name=block_data["name"],
                 defaults={
                     "gender": block_data["gender"],
@@ -338,7 +316,6 @@ class Command(BaseCommand):
             rooms = []
             for room_number, room_type, capacity, monthly_fee, floor in ROOM_SPECS:
                 room, _ = HostelRoom.objects.get_or_create(
-                    tenant=tenant,
                     block=block,
                     room_number=room_number,
                     defaults={
@@ -370,7 +347,6 @@ class Command(BaseCommand):
             _, was_created = HostelAllotment.objects.get_or_create(
                 student=student,
                 defaults={
-                    "tenant": tenant,
                     "room": room,
                     "check_in_date": date.today() - timedelta(days=60),
                     "is_active": True,
@@ -385,7 +361,7 @@ class Command(BaseCommand):
             )
         )
 
-    def _seed_communication(self, tenant, students, teachers, admin_user):
+    def _seed_communication(self, students, teachers, admin_user):
         notices_created = 0
         first_section_students = [s for s in students if s.academic_class_id]
         sample_class = first_section_students[0].academic_class if first_section_students else None
@@ -420,14 +396,14 @@ class Command(BaseCommand):
             })
         for row in notice_rows:
             title = row.pop("title")
-            _, was_created = Notice.objects.get_or_create(tenant=tenant, title=title, defaults=row)
+            _, was_created = Notice.objects.get_or_create(title=title, defaults=row)
             if was_created:
                 notices_created += 1
 
         templates_created = 0
         for template_data in NOTIFICATION_TEMPLATES_DATA:
             _, was_created = NotificationTemplate.objects.get_or_create(
-                tenant=tenant, name=template_data["name"], defaults=template_data
+                name=template_data["name"], defaults=template_data
             )
             if was_created:
                 templates_created += 1
@@ -435,7 +411,6 @@ class Command(BaseCommand):
         notifications_created = 0
         for student in students[:5]:
             _, was_created = Notification.objects.get_or_create(
-                tenant=tenant,
                 recipient=student.user,
                 title="Fee Due Reminder",
                 defaults={
@@ -447,7 +422,6 @@ class Command(BaseCommand):
                 notifications_created += 1
         for teacher in teachers[:2]:
             _, was_created = Notification.objects.get_or_create(
-                tenant=tenant,
                 recipient=teacher.user,
                 title="Assignment Grading Pending",
                 defaults={
@@ -463,7 +437,7 @@ class Command(BaseCommand):
         staff_participants = ([admin_user] if admin_user else []) + [t.user for t in teachers[:5]]
         if staff_participants:
             conv, was_created = Conversation.objects.get_or_create(
-                tenant=tenant, type="group", title="Staff Room",
+                type="group", title="Staff Room",
                 defaults={"context_type": None, "metadata": {}},
             )
             if was_created:
@@ -482,7 +456,7 @@ class Command(BaseCommand):
             teacher_user = teachers[0].user
             title = f"{teacher_user.get_full_name()} & {sample_student.user.get_full_name()}"
             conv, was_created = Conversation.objects.get_or_create(
-                tenant=tenant, type="direct", title=title,
+                type="direct", title=title,
                 defaults={"context_type": None, "metadata": {}},
             )
             if was_created:
@@ -505,12 +479,11 @@ class Command(BaseCommand):
             )
         )
 
-    def _seed_inventory(self, tenant, teachers, admin_user):
+    def _seed_inventory(self, teachers, admin_user):
         assets = []
         assets_created = 0
         for i, asset_data in enumerate(ASSETS_DATA, start=1):
             asset, was_created = Asset.objects.get_or_create(
-                tenant=tenant,
                 name=asset_data["name"],
                 defaults={
                     **asset_data,
@@ -542,7 +515,6 @@ class Command(BaseCommand):
         maintenance_asset = next((a for a in assets if a.status == "maintenance"), None)
         if maintenance_asset:
             _, was_created = MaintenanceRequest.objects.get_or_create(
-                tenant=tenant,
                 asset=maintenance_asset,
                 title=f"{maintenance_asset.name} not working",
                 defaults={
@@ -557,7 +529,6 @@ class Command(BaseCommand):
         resolved_asset = next((a for a in assets if a.status == "available"), None)
         if resolved_asset:
             _, was_created = MaintenanceRequest.objects.get_or_create(
-                tenant=tenant,
                 asset=resolved_asset,
                 title=f"{resolved_asset.name} annual servicing",
                 defaults={
@@ -575,7 +546,6 @@ class Command(BaseCommand):
         stock_created = 0
         for stock_data in CONSUMABLES_DATA:
             _, was_created = ConsumableStock.objects.get_or_create(
-                tenant=tenant,
                 name=stock_data["name"],
                 defaults={**stock_data, "last_restocked": date.today() - timedelta(days=20)},
             )

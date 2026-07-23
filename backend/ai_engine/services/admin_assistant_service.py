@@ -23,8 +23,7 @@ from .rag_tutor_service import RAGTutorService
 class AdminAssistantService:
     ALLOWED_QUERY_TYPES = {"attendance", "fees", "students", "performance", "overview"}
 
-    def __init__(self, *, tenant, user=None):
-        self.tenant = tenant
+    def __init__(self, *, user=None):
         self.user = user
         self.lookback_days = int(
             getattr(settings, "AI_ADMIN_ASSISTANT_LOOKBACK_DAYS", 30)
@@ -35,7 +34,7 @@ class AdminAssistantService:
         self.use_llm_response = self._as_bool(
             getattr(settings, "AI_ADMIN_ASSISTANT_USE_LLM_RESPONSE", False)
         )
-        self.rag = RAGTutorService(tenant=tenant)
+        self.rag = RAGTutorService()
 
     @staticmethod
     def _as_amount(value: Any) -> float:
@@ -176,9 +175,7 @@ class AdminAssistantService:
         return self._rule_classify(question)
 
     def _tool_students(self) -> dict[str, Any]:
-        base_qs = Student.objects.filter(user__tenant=self.tenant).select_related(
-            "academic_class"
-        )
+        base_qs = Student.objects.select_related("academic_class")
         total_students = base_qs.count()
         students_without_class = base_qs.filter(academic_class__isnull=True).count()
         new_students_last_30_days = base_qs.filter(
@@ -215,7 +212,6 @@ class AdminAssistantService:
         attendance_qs = Attendance.objects.filter(
             date__gte=start_date,
             date__lte=end_date,
-            student__user__tenant=self.tenant,
         )
         total_records = attendance_qs.count()
         present_like = attendance_qs.filter(status__in=present_like_statuses).count()
@@ -270,7 +266,7 @@ class AdminAssistantService:
     def _tool_fees(self) -> dict[str, Any]:
         today = timezone.localdate()
         now = timezone.now()
-        base_fees = StudentFee.objects.filter(tenant=self.tenant)
+        base_fees = StudentFee.objects.all()
         due_agg = base_fees.aggregate(
             total_due=Coalesce(Sum("amount_due"), Decimal("0.00")),
             total_paid=Coalesce(Sum("amount_paid"), Decimal("0.00")),
@@ -289,14 +285,14 @@ class AdminAssistantService:
         paid_count = base_fees.filter(status="paid").count()
 
         payments_30d = Payment.objects.filter(
-            tenant=self.tenant, payment_date__gte=now - timedelta(days=30)
+            payment_date__gte=now - timedelta(days=30)
         ).aggregate(total_collected=Coalesce(Sum("amount"), Decimal("0.00"))).get(
             "total_collected"
         ) or Decimal(
             "0.00"
         )
         expenses_30d = Expense.objects.filter(
-            tenant=self.tenant, date__gte=today - timedelta(days=30)
+            date__gte=today - timedelta(days=30)
         ).aggregate(total_expense=Coalesce(Sum("amount"), Decimal("0.00"))).get(
             "total_expense"
         ) or Decimal(
@@ -319,7 +315,6 @@ class AdminAssistantService:
     def _tool_performance(self) -> dict[str, Any]:
         since = timezone.now() - timedelta(days=self.lookback_days)
         results_qs = Result.objects.filter(
-            student__user__tenant=self.tenant,
             submitted_at__gte=since,
         ).select_related("assessment", "student__user")
 

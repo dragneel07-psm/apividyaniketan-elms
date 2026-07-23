@@ -64,7 +64,7 @@ def handle_ai_response(conversation_id, user_message_content, user):
             message=user_message_content, conversation_history=history_formatted
         )
 
-        # Get or create AI Assistant user for this tenant
+        # Get or create AI Assistant user
         ai_user, _ = UserAccount.objects.get_or_create(
             email="ai-assistant@apeesys.com",
             defaults={
@@ -72,7 +72,6 @@ def handle_ai_response(conversation_id, user_message_content, user):
                 "first_name": "AI",
                 "last_name": "Assistant",
                 "role": "admin",
-                "tenant": conversation.tenant,
             },
         )
 
@@ -81,7 +80,6 @@ def handle_ai_response(conversation_id, user_message_content, user):
             conversation=conversation,
             sender=ai_user,
             content=response_data["response"],
-            tenant=conversation.tenant,
         )
 
         return ai_message

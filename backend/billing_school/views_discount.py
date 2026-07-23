@@ -58,18 +58,14 @@ class FeeDiscountViewSet(viewsets.ModelViewSet):
     permission_classes = [IsSchoolFinanceManager]
 
     def get_queryset(self):
-        tenant = getattr(self.request.user, "tenant", None)
-        if not tenant:
-            return FeeDiscount.objects.none()
-        qs = FeeDiscount.objects.filter(tenant=tenant)
+        qs = FeeDiscount.objects.all()
         active = self.request.query_params.get("active")
         if active == "true":
             qs = qs.filter(is_active=True)
         return qs
 
     def perform_create(self, serializer):
-        tenant = getattr(self.request.user, "tenant", None)
-        serializer.save(tenant=tenant)
+        serializer.save()
 
     @action(detail=True, methods=["post"], url_path="apply/(?P<student_fee_id>[^/.]+)")
     def apply(self, request, pk=None, student_fee_id=None):
@@ -78,7 +74,7 @@ class FeeDiscountViewSet(viewsets.ModelViewSet):
         if not discount.is_active:
             return Response({"error": "This discount is inactive."}, status=400)
         try:
-            fee = StudentFee.objects.get(pk=student_fee_id, tenant=request.user.tenant)
+            fee = StudentFee.objects.get(pk=student_fee_id)
         except StudentFee.DoesNotExist:
             return Response({"error": "StudentFee not found."}, status=404)
 

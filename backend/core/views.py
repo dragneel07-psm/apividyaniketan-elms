@@ -17,27 +17,14 @@ from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
+from core.permissions import IsAdminOrStaff
 
-class TenantCheckRateThrottle(ScopedRateThrottle):
-    # Public, pre-login endpoint — cap per-IP requests so the school-code /
-    # subdomain lookup cannot be swept to enumerate every tenant. Rate is
-    # env-tunable (THROTTLE_TENANT_CHECK) since schools behind shared NAT can
-    # burst during morning login.
-    scope = "tenant_check"
-
-from .models import AuditLog, ContactMessage, GlobalSettings, Tenant
-from .serializers import (
-    AuditLogSerializer,
-    GlobalSettingsSerializer,
-    TenantCreateSerializer,
-    TenantSerializer,
-)
-from .utils.tenant_db import get_tenant_db_alias, provision_tenant_db
-from .utils.tenant_users import create_tenant_admin
+from .models import AuditLog, ContactMessage, GlobalSettings, SchoolProfile
+from .serializers import AuditLogSerializer, GlobalSettingsSerializer
 
 logger = logging.getLogger(__name__)
 import glob
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from django.utils import timezone
 from prometheus_client import CONTENT_TYPE_LATEST
@@ -45,28 +32,6 @@ from prometheus_client import CONTENT_TYPE_LATEST
 from core.async_jobs import get_job_status
 from core.metrics import prometheus_metrics_payload
 from core.utils.audit import record_audit_event
-from core.utils.plan_enforcement import (
-    record_subscription_plan_history,
-    sync_tenant_with_plan,
-)
-
-
-class TenantCheckView(APIView):
-    permission_classes = [permissions.AllowAny]
-    throttle_classes = [TenantCheckRateThrottle]
-
-    def get(self, request):
-        # We only consider it a "School Code" match if it resolved to a non-public tenant
-        if request.tenant and request.tenant.schema_name != "public":
-            return Response(
-                {
-                    "exists": True,
-                    "name": request.tenant.name,
-                    "schema_name": request.tenant.schema_name,
-                    "id": str(request.tenant.id),
-                }
-            )
-        return Response({"exists": False}, status=status.HTTP_404_NOT_FOUND)
 
 
 class SchoolPublicInfoRateThrottle(ScopedRateThrottle):
@@ -74,39 +39,38 @@ class SchoolPublicInfoRateThrottle(ScopedRateThrottle):
 
 
 class SchoolPublicInfoView(APIView):
-    """GET /api/core/school-public-info/ — public projection of Tenant for
-    the marketing site (About/Contact/Home stats). No auth required; only
-    exposes fields already meant to be public-facing (name/address/contact/
-    logo), plus real, non-sensitive aggregate counts — never fabricated."""
+    """GET /api/core/school-public-info/ — public projection of the school
+    profile for the marketing site (About/Contact/Home stats). No auth
+    required; only exposes fields already meant to be public-facing
+    (name/address/contact/logo), plus real, non-sensitive aggregate counts —
+    never fabricated."""
 
     permission_classes = [permissions.AllowAny]
     throttle_classes = [SchoolPublicInfoRateThrottle]
 
     def get(self, request):
-        tenant = getattr(request, "tenant", None)
-        if not tenant or tenant.schema_name == "public":
-            return Response({"exists": False}, status=status.HTTP_404_NOT_FOUND)
+        school = SchoolProfile.get_solo()
 
         from academic.models import Student, Teacher
 
         logo_url = None
-        if tenant.logo:
+        if school.logo:
             try:
-                logo_url = request.build_absolute_uri(tenant.logo.url)
+                logo_url = request.build_absolute_uri(school.logo.url)
             except ValueError:
                 logo_url = None
 
         return Response(
             {
                 "exists": True,
-                "name": tenant.name,
-                "address": tenant.address or "",
-                "contact_email": tenant.contact_email or "",
-                "contact_phone": tenant.contact_phone or "",
-                "website": tenant.website or "",
-                "established_year": tenant.established_year,
-                "principal_name": tenant.principal_name or "",
-                "current_academic_year": tenant.current_academic_year,
+                "name": school.name,
+                "address": school.address or "",
+                "contact_email": school.contact_email or "",
+                "contact_phone": school.contact_phone or "",
+                "website": school.website or "",
+                "established_year": school.established_year,
+                "principal_name": school.principal_name or "",
+                "current_academic_year": school.current_academic_year,
                 "logo": logo_url,
                 "student_count": Student.objects.count(),
                 "teacher_count": Teacher.objects.count(),
@@ -140,6 +104,7 @@ class ContactMessageViewSet(viewsets.ModelViewSet):
     mark-as-read is restricted to the school's own admins."""
 
     serializer_class = ContactMessageSerializer
+    queryset = ContactMessage.objects.all()
     http_method_names = ["get", "post", "patch", "head", "options"]
 
     def get_permissions(self):
@@ -155,42 +120,22 @@ class ContactMessageViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         if self.action == "create":
             return ContactMessage.objects.none()
-        tenant = getattr(self.request.user, "tenant", None)
-        if not tenant:
-            return ContactMessage.objects.none()
-        return ContactMessage.objects.filter(tenant=tenant)
+        return ContactMessage.objects.all()
 
     def perform_create(self, serializer):
-        tenant = getattr(self.request, "tenant", None)
-        if not tenant or tenant.schema_name == "public":
-            raise serializers.ValidationError({"detail": "Unable to resolve school for this request."})
         serializer.validated_data.pop("honeypot", None)
-        serializer.save(tenant=tenant)
+        serializer.save()
 
 
 class TenantCapabilitiesView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
-        tenant = getattr(request.user, "tenant", None) or getattr(
-            request, "tenant", None
-        )
-        if tenant is None:
-            return Response(
-                {
-                    "tenant": "public",
-                    "tenant_id": None,
-                    "status": "active",
-                    "features": {},
-                }
-            )
-
+        school = SchoolProfile.get_solo()
         return Response(
             {
-                "tenant": tenant.schema_name,
-                "tenant_id": str(getattr(tenant, "id", "")),
-                "status": getattr(tenant, "status", "active"),
-                "features": getattr(tenant, "features", {}) or {},
+                "status": "active",
+                "features": school.features or {},
             }
         )
 
@@ -212,23 +157,13 @@ class ReadyzView(APIView):
     permission_classes = [permissions.AllowAny]
 
     def get(self, request):
-        checks = {
-            "database": False,
-            "public_tenant": False,
-        }
+        checks = {"database": False}
         try:
             with connection.cursor() as cursor:
                 cursor.execute("SELECT 1")
             checks["database"] = True
         except Exception:
             checks["database"] = False
-
-        try:
-            checks["public_tenant"] = Tenant.objects.filter(
-                schema_name="public"
-            ).exists()
-        except Exception:
-            checks["public_tenant"] = False
 
         ready = all(checks.values())
         payload = {
@@ -282,47 +217,17 @@ class JobStatusView(APIView):
             return Response(
                 {"detail": "Job not found."}, status=status.HTTP_404_NOT_FOUND
             )
-
-        request_tenant_schema = (
-            str(getattr(getattr(request, "tenant", None), "schema_name", "public"))
-            .strip()
-            .lower()
-        )
-        payload_tenant_schema = (
-            str(payload.get("tenant_schema") or "public").strip().lower()
-        )
-        is_saas_admin = bool(
-            getattr(request.user, "is_staff", False)
-            or getattr(request.user, "is_superuser", False)
-        ) and not getattr(request.user, "tenant", None)
-
-        if (
-            not is_saas_admin
-            and payload_tenant_schema
-            and payload_tenant_schema != request_tenant_schema
-        ):
-            return Response(
-                {"detail": "Job not found."}, status=status.HTTP_404_NOT_FOUND
-            )
-
         return Response(payload)
-
-
-from .views_saas import IsSaaSAdmin
 
 
 class SchoolProfileView(APIView):
     """
-    GET / PATCH a school admin's own tenant profile (Phase A: Nepali billing identity).
-
-    Scoped to the authenticated user's tenant — school admins manage their own
-    school's PAN, address, logo, signatories, and bill book settings here
-    without needing SaaS-admin privileges.
+    GET / PATCH the school's own profile (Nepali billing identity, contact
+    info, logo, signatories, and bill book settings).
     """
 
     permission_classes = [permissions.IsAuthenticated]
 
-    # Whitelist of fields a school admin may update from this endpoint.
     EDITABLE_FIELDS = {
         "name",
         "address",
@@ -341,15 +246,7 @@ class SchoolProfileView(APIView):
         "bill_prefix",
     }
 
-    READABLE_FIELDS = EDITABLE_FIELDS | {"id", "schema_name", "logo"}
-
-    def _resolve_tenant(self, request):
-        tenant = getattr(request.user, "tenant", None)
-        if tenant is None:
-            tenant = getattr(request, "tenant", None)
-        if tenant is None or getattr(tenant, "schema_name", "public") == "public":
-            return None
-        return tenant
+    READABLE_FIELDS = EDITABLE_FIELDS | {"id", "logo"}
 
     def _is_admin(self, request) -> bool:
         role = (getattr(request.user, "role", "") or "").lower()
@@ -359,14 +256,10 @@ class SchoolProfileView(APIView):
         )
 
     def get(self, request):
-        tenant = self._resolve_tenant(request)
-        if tenant is None:
-            return Response(
-                {"detail": "No tenant in scope."}, status=status.HTTP_404_NOT_FOUND
-            )
-        data = {f: getattr(tenant, f, "") for f in self.READABLE_FIELDS - {"logo"}}
+        school = SchoolProfile.get_solo()
+        data = {f: getattr(school, f, "") for f in self.READABLE_FIELDS - {"logo"}}
         try:
-            data["logo"] = tenant.logo.url if tenant.logo else ""
+            data["logo"] = school.logo.url if school.logo else ""
         except Exception:
             data["logo"] = ""
         return Response(data)
@@ -377,15 +270,11 @@ class SchoolProfileView(APIView):
                 {"detail": "Only school admins may update the profile."},
                 status=status.HTTP_403_FORBIDDEN,
             )
-        tenant = self._resolve_tenant(request)
-        if tenant is None:
-            return Response(
-                {"detail": "No tenant in scope."}, status=status.HTTP_404_NOT_FOUND
-            )
+        school = SchoolProfile.get_solo()
 
         updates = {k: v for k, v in request.data.items() if k in self.EDITABLE_FIELDS}
         for key, value in updates.items():
-            setattr(tenant, key, value)
+            setattr(school, key, value)
 
         # Logo via multipart upload (separate field name). Direct FILES
         # assignment bypasses serializer validation, so validate explicitly.
@@ -400,12 +289,12 @@ class SchoolProfileView(APIView):
                 return Response(
                     {"logo": exc.messages}, status=status.HTTP_400_BAD_REQUEST
                 )
-            tenant.logo = request.FILES["logo"]
+            school.logo = request.FILES["logo"]
 
-        tenant.save()
+        school.save()
 
         record_audit_event(
-            action="tenant.school_profile_updated",
+            action="core.school_profile_updated",
             user=request.user,
             request=request,
             details={
@@ -414,212 +303,6 @@ class SchoolProfileView(APIView):
             },
         )
         return self.get(request)
-
-
-class TenantViewSet(viewsets.ModelViewSet):
-    queryset = Tenant.objects.select_related("subscription__plan").exclude(
-        schema_name="public"
-    )
-    permission_classes = [IsSaaSAdmin]
-    throttle_classes = []
-
-    def get_queryset(self):
-        return Tenant.objects.select_related("subscription__plan").exclude(
-            schema_name="public"
-        )
-
-    def get_serializer_class(self):
-        if self.action == "create":
-            return TenantCreateSerializer
-        return TenantSerializer
-
-    def perform_create(self, serializer):
-        logger.info("Creating Tenant...")
-        from django_tenants.utils import schema_context
-
-        from .models.tenant import Domain
-
-        # 1. Prepare Data
-        subdomain = serializer.validated_data.get("subdomain")
-        admin_email = serializer.validated_data.get("admin_email")
-        admin_pass = serializer.validated_data.get("password")
-        first = serializer.validated_data.get("admin_first_name")
-        last = serializer.validated_data.get("admin_last_name")
-        selected_plan = serializer.validated_data.get("plan")
-
-        # 2. Save Tenant (schema_name is mandatory for TenantMixin)
-        # We use the subdomain as the schema name for consistency
-        tenant = serializer.save(schema_name=subdomain)
-        logger.info(
-            "Tenant '%s' saved with schema '%s'", tenant.name, tenant.schema_name
-        )
-
-        try:
-            # 3. Create Domain
-            # For local dev, we use .localhost. For prod, we should use the actual base domain.
-            # Domain resolution in django-tenants handles the routing.
-            base_domain = os.environ.get("BASE_DOMAIN", "localhost")
-            domain_url = f"{subdomain}.{base_domain}"
-
-            Domain.objects.create(domain=domain_url, tenant=tenant, is_primary=True)
-            logger.info("Domain '%s' created for tenant.", domain_url)
-
-            # 4. Create a default Trial Subscription for the new tenant
-            try:
-                from billing.models_saas import Subscription, SubscriptionPlan
-
-                # Required by serializer, but keep a safe fallback.
-                plan = (
-                    selected_plan
-                    or SubscriptionPlan.objects.filter(is_active=True)
-                    .order_by("name")
-                    .first()
-                )
-                if not plan:
-                    raise ValueError("No active subscription plan found.")
-
-                subscription = Subscription.objects.create(
-                    tenant=tenant,
-                    plan=plan,
-                    status="trial",
-                    billing_cycle="monthly",
-                    end_date=timezone.now().date() + timedelta(days=15),
-                    student_limit=plan.student_limit,
-                    storage_limit_gb=plan.storage_limit_gb,
-                    ai_token_limit=plan.ai_token_limit,
-                )
-                sync_tenant_with_plan(tenant, plan=plan, save=True)
-                record_subscription_plan_history(
-                    subscription,
-                    previous_plan=None,
-                    previous_status="",
-                    previous_billing_cycle="",
-                    reason="Initial 15-day trial assignment",
-                    changed_by=getattr(self.request, "user", None),
-                )
-                logger.info(
-                    "15-day trial subscription created for %s on plan %s",
-                    tenant.name,
-                    plan.name,
-                )
-            except Exception as sub_err:
-                raise RuntimeError(
-                    f"Failed to create trial subscription for {tenant.name}: {sub_err}"
-                )
-
-            # 4. Create Admin User inside the new tenant schema
-            if admin_email and admin_pass:
-                with schema_context(tenant.schema_name):
-                    create_tenant_admin(tenant, admin_email, admin_pass, first, last)
-
-                logger.info(
-                    "Tenant provisioned: %s | domain=%s | admin=%s",
-                    tenant.name,
-                    domain_url,
-                    admin_email,
-                )
-                record_audit_event(
-                    action="core.tenant_created",
-                    user=getattr(self.request, "user", None),
-                    request=self.request,
-                    details={
-                        "tenant_id": str(tenant.id),
-                        "tenant_schema": tenant.schema_name,
-                        "tenant_name": tenant.name,
-                        "domain": domain_url,
-                        "plan": selected_plan.name if selected_plan else None,
-                    },
-                )
-
-        except Exception as e:
-            logger.error("Provisioning failed for %s: %s", subdomain, e)
-            # Cleanup to avoid partial tenant setup
-            try:
-                tenant.delete()
-            except Exception as delete_error:
-                logger.error("Failed to cleanup tenant record: %s", delete_error)
-            raise e
-
-    def perform_update(self, serializer):
-        before = serializer.instance
-        before_state = {
-            "status": before.status,
-            "type": before.type,
-            "features": dict(before.features or {}),
-            "contact_email": before.contact_email,
-        }
-        tenant = serializer.save()
-        record_audit_event(
-            action="core.tenant_updated",
-            user=getattr(self.request, "user", None),
-            request=self.request,
-            details={
-                "tenant_id": str(tenant.id),
-                "tenant_schema": tenant.schema_name,
-                "before": before_state,
-                "after": {
-                    "status": tenant.status,
-                    "type": tenant.type,
-                    "features": tenant.features,
-                    "contact_email": tenant.contact_email,
-                },
-            },
-        )
-
-    def destroy(self, request, *args, **kwargs):
-        instance = self.get_object()
-
-        if str(getattr(instance, "schema_name", "")).strip().lower() == "public":
-            return Response(
-                {"error": "The public tenant cannot be deleted."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
-        # Only allow deletion of suspended tenants
-        if instance.status != "suspended":
-            return Response(
-                {
-                    "error": "Only suspended tenants can be deleted. Suspend the tenant first."
-                },
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        # Require SaaS admin password confirmation
-        password = request.data.get("password", "")
-        if not password:
-            return Response(
-                {"error": "Password is required to confirm tenant deletion."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        if not request.user.check_password(password):
-            return Response(
-                {"error": "Incorrect password. Deletion cancelled."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
-        self.perform_destroy(instance)
-        return Response(status=status.HTTP_204_NO_CONTENT)
-
-    def perform_destroy(self, instance):
-        payload = {
-            "tenant_id": str(instance.id),
-            "tenant_schema": instance.schema_name,
-            "tenant_name": instance.name,
-            "status": instance.status,
-            "type": instance.type,
-        }
-        # Tenant deletion must run from the public schema. If the request is served while
-        # another tenant schema is active, django-tenants can reject the drop or leave the
-        # connection on a schema that no longer exists after deletion.
-        connection.set_schema_to_public()
-        instance.delete(force_drop=True)
-        connection.set_schema_to_public()
-        record_audit_event(
-            action="core.tenant_deleted",
-            user=getattr(self.request, "user", None),
-            request=self.request,
-            details=payload,
-        )
 
 
 class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
@@ -635,14 +318,13 @@ class GlobalSettingsViewSet(viewsets.ViewSet):
     The 'create' or 'update' action (POST/PUT) updates that single instance.
     """
 
-    permission_classes = [IsSaaSAdmin]
+    permission_classes = [IsAdminOrStaff]
 
     @staticmethod
     def _snapshot(settings_obj):
         return {
             "site_name": settings_obj.site_name,
             "maintenance_mode": settings_obj.maintenance_mode,
-            "allow_registration": settings_obj.allow_registration,
             "support_email": settings_obj.support_email,
             "default_language": settings_obj.default_language,
             "ai_enabled": settings_obj.ai_enabled,
@@ -701,8 +383,6 @@ class GlobalSettingsViewSet(viewsets.ViewSet):
 
         Body (all optional — when omitted, uses the persisted GlobalSettings):
           api_key, base_url, provider_name, model
-
-        This lets the SaaS UI test a key the admin has typed but not yet saved.
         """
         from ai_engine.services.provider_config import (
             build_provider_headers,
@@ -795,7 +475,6 @@ class SystemStatusView(APIView):
     permission_classes = [permissions.IsAdminUser]
 
     def get(self, request):
-        # 1. Check Database Status
         try:
             start = time.perf_counter()
             with connection.cursor() as cursor:
@@ -806,7 +485,6 @@ class SystemStatusView(APIView):
             db_status = "Degraded"
             latency_ms = -1
 
-        # 2. Disk Usage
         total, used, free = shutil.disk_usage("/")
         total_gb = total // (2**30)
         used_gb = used // (2**30)
@@ -851,40 +529,14 @@ class BackupViewSet(viewsets.ViewSet):
         return Response(backups)
 
     def create(self, request):
-        # Trigger backup for current tenant or all?
-        # For simplicity, let's backup ALL or allow param.
-        # User might be on a tenant domain -> backup that tenant.
-
-        schema = request.data.get("schema")
-
         try:
-            if schema:
-                call_command("backup_tenant", schema=schema)
-            elif request.tenant.schema_name != "public":
-                call_command("backup_tenant", schema=request.tenant.schema_name)
-            else:
-                if request.data.get("all"):
-                    call_command("backup_tenant", all=True)
-                else:
-                    return Response(
-                        {
-                            "error": "Provide 'schema' for a tenant backup or set 'all': true for all tenants."
-                        },
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
+            call_command("backup_db")
             record_audit_event(
                 action="core.backup_created",
                 user=request.user,
                 request=request,
-                details={
-                    "requested_schema": schema,
-                    "request_tenant_schema": getattr(
-                        request.tenant, "schema_name", None
-                    ),
-                    "all": bool(request.data.get("all")),
-                },
+                details={},
             )
-
             return Response({"status": "Backup created successfully"})
         except Exception as e:
             return Response(

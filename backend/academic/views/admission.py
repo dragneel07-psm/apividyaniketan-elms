@@ -8,19 +8,17 @@ from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.response import Response
 
-from core.mixins import TenantScopedQuerysetMixin
 from users.models import UserAccount
 
 from ..models import AcademicClass, AdmissionEnquiry, Section, Student
 from ..serializers.admission import AdmissionEnquirySerializer
 
 
-class AdmissionEnquiryViewSet(TenantScopedQuerysetMixin, viewsets.ModelViewSet):
+class AdmissionEnquiryViewSet(viewsets.ModelViewSet):
     queryset = AdmissionEnquiry.objects.select_related(
         "desired_class",
         "converted_student__user",
         "handled_by",
-        "tenant",
     ).all()
     serializer_class = AdmissionEnquirySerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -60,12 +58,7 @@ class AdmissionEnquiryViewSet(TenantScopedQuerysetMixin, viewsets.ModelViewSet):
         return queryset
 
     def perform_create(self, serializer):
-        tenant = self.get_tenant()
-        if tenant is None:
-            raise ValidationError(
-                {"tenant": "Tenant context is required to create admissions."}
-            )
-        serializer.save(tenant=tenant, handled_by=self.request.user)
+        serializer.save(handled_by=self.request.user)
 
     def perform_update(self, serializer):
         serializer.save(handled_by=self.request.user)
@@ -102,12 +95,6 @@ class AdmissionEnquiryViewSet(TenantScopedQuerysetMixin, viewsets.ModelViewSet):
                     "student_id": str(enquiry.converted_student_id),
                 },
                 status=status.HTTP_200_OK,
-            )
-
-        tenant = self.get_tenant()
-        if tenant is None:
-            raise ValidationError(
-                {"tenant": "Tenant context is required for conversion."}
             )
 
         email = (request.data.get("email") or enquiry.email or "").strip().lower()
@@ -163,10 +150,6 @@ class AdmissionEnquiryViewSet(TenantScopedQuerysetMixin, viewsets.ModelViewSet):
             user = UserAccount.objects.filter(email__iexact=email).first()
 
             if user:
-                if user.tenant_id and user.tenant_id != tenant.pk:
-                    raise ValidationError(
-                        {"email": "Email belongs to a different school tenant."}
-                    )
                 if user.role != "student":
                     raise ValidationError(
                         {"email": f"Email already belongs to a {user.role} account."}
@@ -175,8 +158,6 @@ class AdmissionEnquiryViewSet(TenantScopedQuerysetMixin, viewsets.ModelViewSet):
                 user.first_name = first_name
                 user.last_name = last_name
                 user.phone_number = phone_number
-                if not user.tenant_id:
-                    user.tenant = tenant
                 if request.data.get("password"):
                     user.set_password(password)
                 user.save()
@@ -192,7 +173,6 @@ class AdmissionEnquiryViewSet(TenantScopedQuerysetMixin, viewsets.ModelViewSet):
                     last_name=last_name,
                     phone_number=phone_number,
                     role="student",
-                    tenant=tenant,
                 )
 
             student = Student.objects.filter(user=user).first()

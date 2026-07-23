@@ -368,15 +368,6 @@ class SeedDemoDataView(APIView):
         from academic.models.notice import Notice
         from academic.models.student_leave import StudentLeave
         from academic.models.timetable import Timetable
-        from core.models.tenant import Tenant
-
-        tenant_schema = connection.schema_name
-        tenant = None
-        try:
-            tenant = Tenant.objects.get(schema_name=tenant_schema)
-        except Exception:
-            pass
-
         counts = {}
         errors = {}
         today = date.today()
@@ -422,7 +413,7 @@ class SeedDemoDataView(APIView):
         # ── Events ───────────────────────────────────────────────────────────
         try:
             ev_created = 0
-            if tenant:
+            if True:
                 events_data = [
                     (
                         "Annual Sports Day",
@@ -496,12 +487,9 @@ class SeedDemoDataView(APIView):
                     ),
                 ]
                 for title, desc, etype, audience, offset_days in events_data:
-                    if not SchoolEvent.objects.filter(
-                        tenant=tenant, title=title
-                    ).exists():
+                    if not SchoolEvent.objects.filter(title=title).exists():
                         start = today + timedelta(days=offset_days)
                         SchoolEvent.objects.create(
-                            tenant=tenant,
                             title=title,
                             description=desc,
                             event_type=etype,
@@ -589,7 +577,6 @@ class SeedDemoDataView(APIView):
                         category=cat,
                         priority=priority,
                         target_audience="school",
-                        **({"tenant": tenant} if tenant else {}),
                     )
                     not_created += 1
             counts["notices"] = not_created
@@ -688,7 +675,6 @@ class SeedDemoDataView(APIView):
                 _, created = Complaint.objects.get_or_create(
                     title=title,
                     defaults={
-                        "tenant_schema": tenant_schema,
                         "submitted_by": request.user,
                         "category": cat,
                         "description": desc,

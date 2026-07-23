@@ -9,37 +9,28 @@ Run with: python manage.py test projects.tests_api
 from datetime import timedelta
 
 from django.utils import timezone
-from django_tenants.test.cases import FastTenantTestCase
+from django.test import TestCase
 from rest_framework import status
 from rest_framework.test import APIClient
 
 from academic.models import AcademicClass, Parent, Section, Student
+from core.models import SchoolProfile
 from projects.models import Project, ProjectMember, ProjectTask
 from users.models import UserAccount
 
 
-def _enable_projects(tenant):
-    tenant.features = {**(tenant.features or {}), "projects": True}
-    tenant.save(update_fields=["features"])
+def _enable_projects():
+    profile = SchoolProfile.get_solo()
+    profile.features = {**(profile.features or {}), "projects": True}
+    profile.save(update_fields=["features"])
 
 
-class ProjectsApiBaseTestCase(FastTenantTestCase):
-    """Common setup: tenant, users for each role, students, parent link."""
-
-    @classmethod
-    def setup_tenant(cls, tenant):
-        tenant.name = "Projects API Test School"
-
-    @classmethod
-    def setup_domain(cls, domain):
-        domain.is_primary = True
+class ProjectsApiBaseTestCase(TestCase):
+    """Common setup: users for each role, students, parent link."""
 
     def setUp(self):
-        _enable_projects(self.tenant)
-        self.client = APIClient(
-            HTTP_HOST=self.get_test_tenant_domain(),
-            HTTP_X_TENANT_ID=self.tenant.schema_name,
-        )
+        _enable_projects()
+        self.client = APIClient()
 
         # Class + section
         self.acad_class = AcademicClass.objects.create(name="Grade 10", order=10)
@@ -51,7 +42,6 @@ class ProjectsApiBaseTestCase(FastTenantTestCase):
             email="mentor@example.com",
             password="Pass@1234",
             role="teacher",
-            tenant=self.tenant,
         )
         # Other teacher (non-mentor)
         self.other_teacher = UserAccount.objects.create_user(
@@ -59,7 +49,6 @@ class ProjectsApiBaseTestCase(FastTenantTestCase):
             email="other_teacher@example.com",
             password="Pass@1234",
             role="teacher",
-            tenant=self.tenant,
         )
         # Admin
         self.admin_user = UserAccount.objects.create_user(
@@ -67,7 +56,6 @@ class ProjectsApiBaseTestCase(FastTenantTestCase):
             email="admin1@example.com",
             password="Pass@1234",
             role="admin",
-            tenant=self.tenant,
         )
         # Student leader
         self.leader_user = UserAccount.objects.create_user(
@@ -75,7 +63,6 @@ class ProjectsApiBaseTestCase(FastTenantTestCase):
             email="leader@example.com",
             password="Pass@1234",
             role="student",
-            tenant=self.tenant,
         )
         self.leader_student = Student.objects.create(
             user=self.leader_user,
@@ -88,7 +75,6 @@ class ProjectsApiBaseTestCase(FastTenantTestCase):
             email="member1@example.com",
             password="Pass@1234",
             role="student",
-            tenant=self.tenant,
         )
         self.member_student = Student.objects.create(
             user=self.member_user,
@@ -101,7 +87,6 @@ class ProjectsApiBaseTestCase(FastTenantTestCase):
             email="outsider@example.com",
             password="Pass@1234",
             role="student",
-            tenant=self.tenant,
         )
         self.outsider_student = Student.objects.create(
             user=self.outsider_user,
@@ -114,7 +99,6 @@ class ProjectsApiBaseTestCase(FastTenantTestCase):
             email="parent1@example.com",
             password="Pass@1234",
             role="parent",
-            tenant=self.tenant,
         )
         self.parent = Parent.objects.create(user=self.parent_user)
         self.parent.students.add(self.leader_student)
@@ -124,7 +108,6 @@ class ProjectsApiBaseTestCase(FastTenantTestCase):
 
     def _make_project(self, **overrides):
         defaults = dict(
-            tenant=self.tenant,
             title="Capstone",
             mentor=self.mentor_user,
             is_group=True,
@@ -138,13 +121,11 @@ class ProjectsApiBaseTestCase(FastTenantTestCase):
         defaults.update(overrides)
         project = Project.objects.create(**defaults)
         ProjectMember.objects.create(
-            tenant=self.tenant,
             project=project,
             student=self.leader_student,
             role="leader",
         )
         ProjectMember.objects.create(
-            tenant=self.tenant,
             project=project,
             student=self.member_student,
             role="member",
@@ -154,8 +135,9 @@ class ProjectsApiBaseTestCase(FastTenantTestCase):
 
 class FeatureFlagTests(ProjectsApiBaseTestCase):
     def test_flag_off_blocks_list(self):
-        self.tenant.features = {}
-        self.tenant.save(update_fields=["features"])
+        profile = SchoolProfile.get_solo()
+        profile.features = {}
+        profile.save(update_fields=["features"])
         self._login(self.mentor_user)
         resp = self.client.get("/api/projects/projects/")
         self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
@@ -265,7 +247,6 @@ class TaskRBACTests(ProjectsApiBaseTestCase):
 
     def test_member_can_update_own_task_status(self):
         task = ProjectTask.objects.create(
-            tenant=self.tenant,
             project=self.project,
             title="Build slides",
             assignee=self.member_student,
@@ -283,7 +264,6 @@ class TaskRBACTests(ProjectsApiBaseTestCase):
 
     def test_member_cannot_change_someone_elses_task(self):
         task = ProjectTask.objects.create(
-            tenant=self.tenant,
             project=self.project,
             title="Leader's task",
             assignee=self.leader_student,
@@ -298,7 +278,6 @@ class TaskRBACTests(ProjectsApiBaseTestCase):
 
     def test_member_cannot_change_title_of_own_task(self):
         task = ProjectTask.objects.create(
-            tenant=self.tenant,
             project=self.project,
             title="Original",
             assignee=self.member_student,
@@ -360,7 +339,6 @@ class MembershipActionTests(ProjectsApiBaseTestCase):
             email="extra@example.com",
             password="Pass@1234",
             role="student",
-            tenant=self.tenant,
         )
         s4 = Student.objects.create(
             user=u4, academic_class=self.acad_class, section=self.section

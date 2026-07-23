@@ -5,8 +5,7 @@ from unittest.mock import patch
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from django_tenants.test.cases import FastTenantTestCase
-from django_tenants.utils import tenant_context
+from django.test import TestCase
 from rest_framework import status
 from rest_framework.test import APIClient
 
@@ -17,15 +16,7 @@ from ai_engine.serializers import LessonArtifactResponseSerializer
 User = get_user_model()
 
 
-class LessonArtifactSerializerTests(FastTenantTestCase):
-    @classmethod
-    def setup_tenant(cls, tenant):
-        tenant.name = "Lesson Artifact Serializer School"
-
-    @classmethod
-    def setup_domain(cls, domain):
-        domain.is_primary = True
-
+class LessonArtifactSerializerTests(TestCase):
     def test_response_serializer_validates_shape(self):
         serializer = LessonArtifactResponseSerializer(
             data={
@@ -38,51 +29,40 @@ class LessonArtifactSerializerTests(FastTenantTestCase):
         self.assertTrue(serializer.is_valid(), serializer.errors)
 
 
-class LessonArtifactEndpointTests(FastTenantTestCase):
-    @classmethod
-    def setup_tenant(cls, tenant):
-        tenant.name = "Lesson Artifact API School"
-
-    @classmethod
-    def setup_domain(cls, domain):
-        domain.is_primary = True
-
+class LessonArtifactEndpointTests(TestCase):
     def setUp(self):
-        with tenant_context(self.tenant):
-            self.user = User.objects.create_user(
-                username="artifact_user",
-                email="artifact_user@example.com",
-                password="Artifact@123",
-                role="student",
-                tenant=self.tenant,
-            )
-            academic_class = AcademicClass.objects.create(name="Grade 9")
-            subject = Subject.objects.create(
-                name="Science", academic_class=academic_class, is_active=True
-            )
-            chapter = Chapter.objects.create(
-                subject=subject, title="Motion", order=1, is_published=True
-            )
-            self.lesson = Lesson.objects.create(
-                chapter=chapter,
-                title="Newton's Laws",
-                content_type="text",
-                content="Force equals mass multiplied by acceleration.",
-                order=1,
-                is_published=True,
-                duration_minutes=40,
-            )
-            ContentChunk.objects.create(
-                tenant=self.tenant,
-                source_type="lesson",
-                source_id=str(self.lesson.id),
-                text="Newton's first law says objects keep their state unless net external force acts.",
-                metadata={"lesson_id": self.lesson.id},
-                embedding=[0.01]
-                * max(1, int(getattr(settings, "AI_EMBEDDING_DIMENSIONS", 1536))),
-            )
+        self.user = User.objects.create_user(
+            username="artifact_user",
+            email="artifact_user@example.com",
+            password="Artifact@123",
+            role="student",
+        )
+        academic_class = AcademicClass.objects.create(name="Grade 9")
+        subject = Subject.objects.create(
+            name="Science", academic_class=academic_class, is_active=True
+        )
+        chapter = Chapter.objects.create(
+            subject=subject, title="Motion", order=1, is_published=True
+        )
+        self.lesson = Lesson.objects.create(
+            chapter=chapter,
+            title="Newton's Laws",
+            content_type="text",
+            content="Force equals mass multiplied by acceleration.",
+            order=1,
+            is_published=True,
+            duration_minutes=40,
+        )
+        ContentChunk.objects.create(
+            source_type="lesson",
+            source_id=str(self.lesson.id),
+            text="Newton's first law says objects keep their state unless net external force acts.",
+            metadata={"lesson_id": self.lesson.id},
+            embedding=[0.01]
+            * max(1, int(getattr(settings, "AI_EMBEDDING_DIMENSIONS", 1536))),
+        )
 
-        self.client = APIClient(HTTP_HOST=self.get_test_tenant_domain())
+        self.client = APIClient()
         self.client.force_authenticate(user=self.user)
 
     @patch("ai_engine.services.lesson_summary_service.LessonSummaryService._call_model")
@@ -104,7 +84,6 @@ class LessonArtifactEndpointTests(FastTenantTestCase):
         self.assertEqual(response.data["practice_questions"], ["Define inertia."])
 
         artifact = AiGeneratedArtifact.objects.filter(
-            tenant=self.tenant,
             artifact_type="summary",
             source_type="lesson",
             source_id=str(self.lesson.id),

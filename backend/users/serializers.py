@@ -16,63 +16,16 @@ from rest_framework_simplejwt.tokens import AccessToken
 from rest_framework_simplejwt.tokens import RefreshToken as _RefreshToken
 
 from core.utils.audit import record_audit_event
-from core.utils.plan_enforcement import (
-    build_plan_entitled_features,
-    compute_effective_features,
-    get_tenant_plan,
-)
 
 from .models import UserAccount
 from .token_policy import role_token_lifetimes
 
 
-def _resolved_tenant(user):
-    try:
-        tenant = getattr(user, "tenant", None)
-    except Exception:
-        tenant = None
+def _school_features() -> dict:
+    """Feature flags for optional modules — used in JWT claims and /users/me."""
+    from core.models import SchoolProfile
 
-    return tenant
-
-
-def _ensure_valid_login_tenant(user) -> None:
-    role = (getattr(user, "role", "") or "").strip().lower()
-    if role in ("saas_admin", "saas_staff"):
-        return
-
-    if _resolved_tenant(user) is None:
-        raise AuthenticationFailed(
-            "Account tenant configuration is invalid. Please contact your administrator."
-        )
-
-
-def _safe_tenant_features(user) -> dict:
-    """Return the *effective* feature dict (plan baseline merged with the
-    tenant's per-school overrides) for use in JWT claims and /users/me.
-    """
-    tenant = _resolved_tenant(user)
-
-    if not tenant:
-        return {}
-
-    overrides = getattr(tenant, "feature_overrides", None) or {}
-    try:
-        return compute_effective_features(get_tenant_plan(tenant), overrides)
-    except Exception:
-        return compute_effective_features(None, overrides)
-
-
-def _tenant_claims(user) -> dict:
-    tenant = _resolved_tenant(user)
-    if not tenant:
-        return {
-            "tenant_schema": "public",
-            "tenant_id": None,
-        }
-    return {
-        "tenant_schema": getattr(tenant, "schema_name", "public"),
-        "tenant_id": str(getattr(tenant, "id", "")) or None,
-    }
+    return dict(SchoolProfile.get_solo().features or {})
 
 
 class UserAccountSerializer(serializers.ModelSerializer):
@@ -88,14 +41,13 @@ class UserAccountSerializer(serializers.ModelSerializer):
             "last_name",
             "role",
             "staff_role",
-            "tenant",
             "is_active",
             "tenant_features",
         ]
-        read_only_fields = ["user_id", "email", "role", "tenant", "tenant_features"]
+        read_only_fields = ["user_id", "email", "role", "tenant_features"]
 
     def get_tenant_features(self, obj):
-        return _safe_tenant_features(obj)
+        return _school_features()
 
 
 from django.contrib.auth.models import Group, Permission
@@ -140,47 +92,10 @@ def _apply_role_token_lifetimes(data: dict, *, user) -> dict:
     return data
 
 
-def _get_client_ip(request) -> str:
-    """Extract real client IP, respecting X-Forwarded-For from trusted proxies."""
-    if request is None:
-        return ""
-    xff = request.META.get("HTTP_X_FORWARDED_FOR", "")
-    if xff:
-        return xff.split(",")[0].strip()
-    return request.META.get("REMOTE_ADDR", "")
-
-
-def _check_saas_admin_ip(request) -> None:
-    """Raise AuthenticationFailed if caller IP is not in the SaaS admin allowlist."""
-    allowed = getattr(settings, "SAAS_ADMIN_ALLOWED_IPS", [])
-    if not allowed:
-        return  # empty list = no restriction (dev/staging)
-    client_ip = _get_client_ip(request)
-    if client_ip not in allowed:
-        raise AuthenticationFailed(
-            "Access denied: login from this IP is not permitted."
-        )
-
-
-def _verify_totp(user, totp_code: str) -> bool:
-    import pyotp
-
-    secret = getattr(user, "two_factor_secret", "") or ""
-    if not secret:
-        return False
-    totp = pyotp.TOTP(secret)
-    return totp.verify(totp_code, valid_window=1)
-
-
 class MyTokenObtainPairSerializer(TokenObtainPairSerializer):
     # Tell SimpleJWT to use 'email' as the login field
     # (matches UserAccount.USERNAME_FIELD = 'email')
     username_field = "email"
-
-    # Optional TOTP field — required for saas_admin when 2FA is enabled
-    totp_code = serializers.CharField(
-        required=False, write_only=True, allow_blank=True, default=""
-    )
 
     @classmethod
     def get_token(cls, user):
@@ -194,8 +109,6 @@ class MyTokenObtainPairSerializer(TokenObtainPairSerializer):
         token["email"] = user.email
         token["first_name"] = user.first_name
         token["last_name"] = user.last_name
-        token["tenant_schema"] = _tenant_claims(user).get("tenant_schema")
-        token["tenant_id"] = _tenant_claims(user).get("tenant_id")
         return token
 
     def validate(self, attrs):
@@ -203,63 +116,11 @@ class MyTokenObtainPairSerializer(TokenObtainPairSerializer):
         if email:
             existing_user = UserAccount.objects.filter(email__iexact=email).first()
             if existing_user and not existing_user.is_active:
-                if (
-                    getattr(existing_user, "role", "") == "saas_admin"
-                    and getattr(existing_user, "tenant_id", None) is None
-                ):
-                    raise AuthenticationFailed(
-                        "Email not verified. Please verify your email before signing in."
-                    )
                 raise AuthenticationFailed(
                     "Account is inactive. Please contact your administrator."
                 )
 
-        try:
-            data = super().validate(attrs)
-        except Exception as e:
-            # Login failure (401) is handled by super()
-            raise e
-
-        _ensure_valid_login_tenant(self.user)
-
-        # ── SaaS admin extra security ──────────────────────────────────────
-        if getattr(self.user, "role", "") == "saas_admin":
-            request = self.context.get("request")
-
-            # 1. IP allowlist
-            _check_saas_admin_ip(request)
-
-            # 2. Enforce TOTP (must have 2FA enabled and supply a valid code)
-            if not getattr(self.user, "is_2fa_enabled", False):
-                raise AuthenticationFailed(
-                    "2FA is not yet set up for this account. "
-                    "Please set up your authenticator app before signing in."
-                )
-            totp_code = (attrs.get("totp_code") or "").strip()
-            if not totp_code:
-                raise AuthenticationFailed(
-                    "TOTP code is required for SaaS admin login."
-                )
-            if not _verify_totp(self.user, totp_code):
-                raise AuthenticationFailed("Invalid or expired TOTP code.")
-
-            # 3. Async login alert email (fire-and-forget, never block login)
-            try:
-                import threading
-
-                from .emailing import send_saas_admin_login_alert
-
-                ip = _get_client_ip(request)
-                ua = request.META.get("HTTP_USER_AGENT", "") if request else ""
-                threading.Thread(
-                    target=send_saas_admin_login_alert,
-                    kwargs={"user": self.user, "ip_address": ip, "user_agent": ua},
-                    daemon=True,
-                ).start()
-            except Exception:
-                pass  # alert failure must never break login
-        # ──────────────────────────────────────────────────────────────────
-
+        data = super().validate(attrs)
         data = _apply_role_token_lifetimes(data, user=self.user)
 
         # Attach the user profile to every login response
@@ -274,9 +135,7 @@ class MyTokenObtainPairSerializer(TokenObtainPairSerializer):
                 "last_name": getattr(user, "last_name", ""),
                 "role": getattr(user, "role", "student"),
                 "staff_role": getattr(user, "staff_role", ""),
-                "tenant": str(getattr(getattr(user, "tenant", None), "id", "") or ""),
-                "tenant_schema": _tenant_claims(user).get("tenant_schema"),
-                "tenant_features": _safe_tenant_features(user),
+                "tenant_features": _school_features(),
             }
         except Exception as e:
             import sys
@@ -287,7 +146,7 @@ class MyTokenObtainPairSerializer(TokenObtainPairSerializer):
                 file=sys.stderr,
             )
             traceback.print_exc(file=sys.stderr)
-            # We don't want to crash the whole login if just plan features fail,
+            # We don't want to crash the whole login if just feature lookup fails,
             # but here it's better to log the exact cause of 500.
 
         return data
@@ -313,9 +172,7 @@ class RoleAwareTokenRefreshSerializer(TokenRefreshSerializer):
             raise InvalidToken("Refresh token is missing user identity.")
 
         try:
-            user = user_model.objects.select_related("tenant").get(
-                **{user_id_field: user_id}
-            )
+            user = user_model.objects.get(**{user_id_field: user_id})
         except user_model.DoesNotExist as exc:
             raise InvalidToken("User not found for refresh token.") from exc
 
@@ -391,36 +248,11 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         return attrs
 
     def create(self, validated_data):
-        """Blocked — SaaS admin accounts must be provisioned via the CLI."""
+        """Blocked — accounts must be provisioned by a school administrator."""
         raise serializers.ValidationError(
-            "Public registration is disabled. "
-            "SaaS admin accounts must be created by a platform operator "
-            "using the 'create_saas_admin' management command."
+            "Public registration is disabled. Contact your school administrator "
+            "to have an account created."
         )
-
-    def _create_blocked(self, validated_data):
-        """Kept for reference only — not called."""
-        validated_data.pop("password_confirm")
-
-        # PUBLIC REGISTRATION IS FOR SAAS ADMINS ONLY
-        role = "saas_admin"
-
-        from django.db import transaction
-
-        with transaction.atomic():
-            user = UserAccount.objects.create_user(
-                email=validated_data["email"],
-                username=validated_data.get("username", validated_data["email"]),
-                password=validated_data["password"],
-                first_name=validated_data.get("first_name", ""),
-                last_name=validated_data.get("last_name", ""),
-                role=role,
-                tenant=None,  # SaaS Admin is global
-                is_staff=True,
-                is_superuser=True,
-                is_active=False,
-            )
-        return user
 
 
 class UserManagementSerializer(serializers.ModelSerializer):
@@ -439,7 +271,6 @@ class UserManagementSerializer(serializers.ModelSerializer):
             "last_name",
             "role",
             "staff_role",
-            "tenant",
             "is_active",
         ]
 
@@ -457,21 +288,18 @@ class UserManagementSerializer(serializers.ModelSerializer):
                 user.set_unusable_password()
             user.save()
 
-            # Create corresponding profile if it's a tenant-scoped role
-            tenant = validated_data.get("tenant")
-            if tenant:
-                if role == "student":
-                    from academic.models import Student
+            if role == "student":
+                from academic.models import Student
 
-                    Student.objects.get_or_create(user=user)
-                elif role == "teacher":
-                    from academic.models import Teacher
+                Student.objects.get_or_create(user=user)
+            elif role == "teacher":
+                from academic.models import Teacher
 
-                    Teacher.objects.get_or_create(user=user)
-                elif role == "parent":
-                    from academic.models import Parent
+                Teacher.objects.get_or_create(user=user)
+            elif role == "parent":
+                from academic.models import Parent
 
-                    Parent.objects.get_or_create(user=user)
+                Parent.objects.get_or_create(user=user)
         return user
 
     def update(self, instance, validated_data):
@@ -487,7 +315,7 @@ class UserManagementSerializer(serializers.ModelSerializer):
 
         instance = super().update(instance, validated_data)
 
-        if role_changed and instance.tenant:
+        if role_changed:
             # Handle profile creation if role changed
             if new_role == "student":
                 from academic.models import Student
@@ -608,67 +436,3 @@ class PasswordResetConfirmSerializer(serializers.Serializer):
         self.user.set_password(self.validated_data["new_password"])
         self.user.save()
         return self.user
-
-
-class SaasStaffSerializer(serializers.ModelSerializer):
-    """Read serializer for saas_staff accounts (used by the super admin)."""
-
-    class Meta:
-        model = UserAccount
-        fields = [
-            "user_id",
-            "email",
-            "first_name",
-            "last_name",
-            "saas_staff_role",
-            "is_active",
-            "date_joined",
-            "last_login",
-        ]
-        read_only_fields = ["user_id", "email", "date_joined", "last_login"]
-
-
-class SaasStaffCreateSerializer(serializers.Serializer):
-    """Write serializer — super admin creates a saas_staff account via the API."""
-
-    email = serializers.EmailField()
-    first_name = serializers.CharField(max_length=150)
-    last_name = serializers.CharField(max_length=150)
-    password = serializers.CharField(write_only=True, min_length=8)
-    saas_staff_role = serializers.ChoiceField(
-        choices=["", "support", "billing", "schools_manager", "reports"],
-        default="",
-        required=False,
-    )
-
-    def validate_email(self, value):
-        value = value.strip().lower()
-        if UserAccount.objects.filter(email=value).exists():
-            raise serializers.ValidationError("A user with this email already exists.")
-        return value
-
-    def create(self, validated_data):
-        from django.contrib.auth.password_validation import validate_password
-        from django.core.exceptions import ValidationError as DjangoValidationError
-
-        password = validated_data["password"]
-        try:
-            validate_password(password)
-        except DjangoValidationError as exc:
-            raise serializers.ValidationError({"password": list(exc.messages)})
-
-        email = validated_data["email"]
-        user = UserAccount.objects.create_user(
-            email=email,
-            username=email,
-            password=password,
-            first_name=validated_data["first_name"],
-            last_name=validated_data["last_name"],
-            role="saas_staff",
-            saas_staff_role=validated_data.get("saas_staff_role", ""),
-            tenant=None,
-            is_staff=False,
-            is_superuser=False,
-            is_active=True,
-        )
-        return user

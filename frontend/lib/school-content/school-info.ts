@@ -4,6 +4,18 @@
 import { headers } from 'next/headers';
 import { resolveBackendOrigin } from '@/lib/server/auth-session';
 import { getTenantFromSubdomain } from '@/lib/tenant';
+import type {
+    AdmissionFaq,
+    CoreValue,
+    FieldTrip,
+    GalleryItem,
+    HistoryMilestone,
+    NewsArticle,
+    Program,
+    StudentLifeActivity,
+    Testimonial,
+    WellbeingSupport,
+} from '@/lib/api';
 
 export interface SchoolPublicInfo {
     exists: boolean;
@@ -105,4 +117,61 @@ export function getPublicNotices() {
 
 export function getPublicEvents() {
     return fetchTenantScoped<PublicSchoolEvent[]>('/api/academic/public-events/', []);
+}
+
+export async function getPublicEvent(eventId: string): Promise<PublicSchoolEvent | null> {
+    const events = await fetchTenantScoped<PublicSchoolEvent[]>(
+        `/api/academic/public-events/?id=${encodeURIComponent(eventId)}`,
+        [],
+    );
+    return events[0] ?? null;
+}
+
+// Admin-managed marketing site content (see /admin/school-site/*).
+export function getPrograms() {
+    return fetchTenantScoped<Program[]>('/api/academic/public-programs/', []);
+}
+
+export function getTestimonials() {
+    return fetchTenantScoped<Testimonial[]>('/api/academic/public-testimonials/', []);
+}
+
+export function getCoreValues() {
+    return fetchTenantScoped<CoreValue[]>('/api/academic/public-core-values/', []);
+}
+
+export function getHistoryMilestones() {
+    return fetchTenantScoped<HistoryMilestone[]>('/api/academic/public-history-milestones/', []);
+}
+
+export function getNewsArticles() {
+    return fetchTenantScoped<NewsArticle[]>('/api/academic/public-news-articles/', []);
+}
+
+export async function getNewsArticle(slug: string): Promise<NewsArticle | null> {
+    const articles = await fetchTenantScoped<NewsArticle[]>(
+        `/api/academic/public-news-articles/?slug=${encodeURIComponent(slug)}`,
+        [],
+    );
+    return articles[0] ?? null;
+}
+
+export function getGalleryItems() {
+    return fetchTenantScoped<GalleryItem[]>('/api/academic/public-gallery-items/', []);
+}
+
+export function getStudentLifeActivities() {
+    return fetchTenantScoped<StudentLifeActivity[]>('/api/academic/public-student-life-activities/', []);
+}
+
+export function getFieldTrips() {
+    return fetchTenantScoped<FieldTrip[]>('/api/academic/public-field-trips/', []);
+}
+
+export function getWellbeingSupport() {
+    return fetchTenantScoped<WellbeingSupport[]>('/api/academic/public-wellbeing-support/', []);
+}
+
+export function getAdmissionFaqs() {
+    return fetchTenantScoped<AdmissionFaq[]>('/api/academic/public-admission-faqs/', []);
 }

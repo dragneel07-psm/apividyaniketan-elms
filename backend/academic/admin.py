@@ -7,20 +7,30 @@ from .models import (
     AcademicClass,
     AcademicYear,
     AdmissionEnquiry,
+    AdmissionFaq,
     Assessment,
     Attendance,
     Chapter,
+    CoreValue,
+    FieldTrip,
+    GalleryItem,
+    HistoryMilestone,
     Lesson,
     LessonMaterial,
     LessonProgress,
+    NewsArticle,
     Notice,
     Parent,
+    Program,
     Result,
     Section,
     Student,
+    StudentLifeActivity,
     Subject,
     Teacher,
+    Testimonial,
     Timetable,
+    WellbeingSupport,
 )
 
 
@@ -161,3 +171,71 @@ class AdmissionEnquiryAdmin(admin.ModelAdmin):
         "email",
         "phone_number",
     )
+
+
+class SiteContentAdmin(admin.ModelAdmin):
+    list_filter = ("is_active",)
+    ordering = ("order", "id")
+
+
+@admin.register(NewsArticle)
+class NewsArticleAdmin(SiteContentAdmin):
+    list_display = ("title", "category", "published_date", "order", "is_active")
+    list_filter = ("category", "is_active")
+    search_fields = ("title", "slug", "excerpt")
+
+
+@admin.register(GalleryItem)
+class GalleryItemAdmin(SiteContentAdmin):
+    list_display = ("caption", "category", "order", "is_active")
+    list_filter = ("category", "is_active")
+    search_fields = ("caption",)
+
+
+@admin.register(Testimonial)
+class TestimonialAdmin(SiteContentAdmin):
+    list_display = ("name", "role", "order", "is_active")
+    search_fields = ("name", "role", "quote")
+
+
+@admin.register(Program)
+class ProgramAdmin(SiteContentAdmin):
+    list_display = ("title", "icon", "order", "is_active")
+    search_fields = ("title",)
+
+
+@admin.register(CoreValue)
+class CoreValueAdmin(SiteContentAdmin):
+    list_display = ("title", "order", "is_active")
+    search_fields = ("title",)
+
+
+@admin.register(HistoryMilestone)
+class HistoryMilestoneAdmin(SiteContentAdmin):
+    list_display = ("year", "title", "order", "is_active")
+    search_fields = ("year", "title")
+
+
+@admin.register(StudentLifeActivity)
+class StudentLifeActivityAdmin(SiteContentAdmin):
+    list_display = ("name", "category", "order", "is_active")
+    list_filter = ("category", "is_active")
+    search_fields = ("name",)
+
+
+@admin.register(FieldTrip)
+class FieldTripAdmin(SiteContentAdmin):
+    list_display = ("title", "grade_band", "order", "is_active")
+    search_fields = ("title", "grade_band")
+
+
+@admin.register(WellbeingSupport)
+class WellbeingSupportAdmin(SiteContentAdmin):
+    list_display = ("title", "order", "is_active")
+    search_fields = ("title",)
+
+
+@admin.register(AdmissionFaq)
+class AdmissionFaqAdmin(SiteContentAdmin):
+    list_display = ("question", "order", "is_active")
+    search_fields = ("question", "answer")

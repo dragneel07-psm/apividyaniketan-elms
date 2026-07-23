@@ -5,8 +5,7 @@ from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.test import override_settings
-from django_tenants.test.cases import FastTenantTestCase
-from django_tenants.utils import tenant_context
+from django.test import TestCase
 from rest_framework.test import APIClient
 
 from notifications.models import Notification
@@ -15,25 +14,15 @@ from notifications.services import NotificationService
 User = get_user_model()
 
 
-class NotificationAsyncDeliveryTests(FastTenantTestCase):
-    @classmethod
-    def setup_tenant(cls, tenant):
-        tenant.name = "Notification Async School"
-
-    @classmethod
-    def setup_domain(cls, domain):
-        domain.is_primary = True
-
+class NotificationAsyncDeliveryTests(TestCase):
     def setUp(self):
-        with tenant_context(self.tenant):
-            self.user = User.objects.create_user(
-                username="notify_user",
-                email="notify_user@example.com",
-                password="Notify@1234",
-                role="student",
-                tenant=self.tenant,
-                phone_number="+9779800000001",
-            )
+        self.user = User.objects.create_user(
+            username="notify_user",
+            email="notify_user@example.com",
+            password="Notify@1234",
+            role="student",
+            phone_number="+9779800000001",
+        )
         self.client = APIClient()
         self.client.force_authenticate(user=self.user)
 
@@ -81,17 +70,11 @@ class NotificationAsyncDeliveryTests(FastTenantTestCase):
                 "message": "Complete your assignment.",
             },
             format="json",
-            HTTP_HOST=self.get_test_tenant_domain(),
-            HTTP_X_TENANT_ID=self.tenant.schema_name,
         )
         self.assertEqual(response.status_code, 202)
         job_id = response.data.get("job_id")
         self.assertTrue(job_id)
 
-        status_response = self.client.get(
-            f"/api/core/jobs/{job_id}/",
-            HTTP_HOST=self.get_test_tenant_domain(),
-            HTTP_X_TENANT_ID=self.tenant.schema_name,
-        )
+        status_response = self.client.get(f"/api/core/jobs/{job_id}/")
         self.assertEqual(status_response.status_code, 200)
         self.assertEqual(status_response.data.get("status"), "success")

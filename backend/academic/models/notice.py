@@ -5,23 +5,14 @@ from django.conf import settings
 from django.db import models
 
 from core.upload_validation import notice_upload_validators
-from core.utils.storage_paths import (
-    schema_from_current_connection,
-    tenant_scoped_upload_path,
-)
+from core.utils.storage_paths import scoped_upload_path
 
 from .class_section import AcademicClass
 from .student import Student
 
 
 def notice_attachment_upload_to(instance, filename):
-    tenant = getattr(instance, "tenant", None)
-    schema_name = (
-        getattr(tenant, "schema_name", None)
-        if tenant
-        else schema_from_current_connection()
-    )
-    return tenant_scoped_upload_path(schema_name, "notices", filename)
+    return scoped_upload_path("notices", filename)
 
 
 class Notice(models.Model):
@@ -37,14 +28,6 @@ class Notice(models.Model):
         ("student", "Specific Student"),
     ]
 
-    tenant = models.ForeignKey(
-        "core.Tenant",
-        on_delete=models.CASCADE,
-        related_name="notices",
-        null=True,
-        blank=True,
-        db_constraint=False,
-    )
     title = models.CharField(max_length=255)
     content = models.TextField()
     category = models.CharField(
@@ -92,14 +75,6 @@ class Notice(models.Model):
 class NoticeRead(models.Model):
     """Tracks which users have opened which notices."""
 
-    tenant = models.ForeignKey(
-        "core.Tenant",
-        on_delete=models.CASCADE,
-        related_name="notice_reads",
-        null=True,
-        blank=True,
-        db_constraint=False,
-    )
     notice = models.ForeignKey(Notice, on_delete=models.CASCADE, related_name="reads")
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,

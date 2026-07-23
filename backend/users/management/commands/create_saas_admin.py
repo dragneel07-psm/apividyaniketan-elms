@@ -93,7 +93,6 @@ class Command(BaseCommand):
             first_name=first_name,
             last_name=last_name,
             role="saas_admin",
-            tenant=None,  # SaaS admin is global, not tenant-scoped
             is_staff=True,
             is_superuser=True,
             is_active=True,  # CLI creation — no email verification flow

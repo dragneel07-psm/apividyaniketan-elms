@@ -4,9 +4,14 @@
 'use client';
 
 import Link from 'next/link';
-import { User, GraduationCap, ShieldCheck, ArrowRight, Building2 } from 'lucide-react';
+import nextDynamic from 'next/dynamic';
+import { User, GraduationCap, ShieldCheck, ArrowRight } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { useTenantIdentity } from '@/hooks/use-tenant-identity';
+
+const TenantLoginBadge = nextDynamic(
+    () => import('@/components/auth/tenant-login-badge'),
+    { ssr: false },
+);
 
 // Tenant login roles — SaaS admin has its own dedicated page at /saas-login
 const roles = [
@@ -42,8 +47,6 @@ const roles = [
 export const dynamic = 'force-dynamic';
 
 export default function LoginPortalPage() {
-    const { tenantName, tenantSchema, isTenantContext } = useTenantIdentity();
-
     return (
         <div className="relative flex items-center justify-center min-h-screen overflow-hidden bg-[#0a0a0c] p-4">
             {/* Ambient Background Effects */}
@@ -68,14 +71,7 @@ export default function LoginPortalPage() {
                     <p className="text-slate-400 text-lg max-w-lg mx-auto">
                         Choose your account type to securely sign in to your dashboard
                     </p>
-                    {isTenantContext && (
-                        <div className="inline-flex items-center gap-2 rounded-full border border-cyan-400/30 bg-cyan-500/10 px-4 py-2 text-sm text-cyan-100">
-                            <Building2 className="h-4 w-4" />
-                            <span>
-                                Tenant: <strong>{tenantName || tenantSchema || 'Unknown'}</strong>
-                            </span>
-                        </div>
-                    )}
+                    <TenantLoginBadge />
                 </div>
 
                 <div className={`grid grid-cols-1 gap-6 ${roles.length > 1 ? 'md:grid-cols-2 lg:grid-cols-3' : 'max-w-sm mx-auto'}`}>

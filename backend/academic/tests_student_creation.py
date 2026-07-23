@@ -2,7 +2,7 @@
 # Unauthorized copying, modification, or distribution of this file,
 # via any medium, is strictly prohibited. Proprietary and confidential.
 from django.contrib.auth import get_user_model
-from django_tenants.test.cases import FastTenantTestCase
+from django.test import TestCase
 from rest_framework import status
 from rest_framework.test import APIClient
 
@@ -11,20 +11,9 @@ from academic.models import AcademicClass, Section, Student
 User = get_user_model()
 
 
-class StudentCreationTests(FastTenantTestCase):
-    @classmethod
-    def setup_tenant(cls, tenant):
-        tenant.name = "Student Creation Test School"
-
-    @classmethod
-    def setup_domain(cls, domain):
-        domain.is_primary = True
-
+class StudentCreationTests(TestCase):
     def setUp(self):
-        self.client = APIClient(
-            HTTP_HOST=self.get_test_tenant_domain(),
-            HTTP_X_TENANT_ID=self.tenant.schema_name,
-        )
+        self.client = APIClient()
         self.admin_user = User.objects.create_user(
             username="student_creation_admin",
             email="student_creation_admin@example.com",
@@ -32,7 +21,6 @@ class StudentCreationTests(FastTenantTestCase):
             role="admin",
             first_name="Admin",
             last_name="User",
-            tenant=self.tenant,
         )
         self.client.force_authenticate(user=self.admin_user)
 
@@ -61,7 +49,6 @@ class StudentCreationTests(FastTenantTestCase):
             role="student",
             first_name="Old",
             last_name="Name",
-            tenant=self.tenant,
         )
 
         users_before = User.objects.count()
@@ -81,7 +68,6 @@ class StudentCreationTests(FastTenantTestCase):
             role="teacher",
             first_name="Tea",
             last_name="Cher",
-            tenant=self.tenant,
         )
 
         response = self.client.post(
@@ -91,8 +77,8 @@ class StudentCreationTests(FastTenantTestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("email", response.data)
-        self.assertIn("teacher account", str(response.data["email"][0]).lower())
+        self.assertIn("email", response.data["field_errors"])
+        self.assertIn("teacher account", str(response.data["field_errors"]["email"][0]).lower())
 
     def test_create_student_rejects_existing_student_profile_with_location_hint(self):
         existing_user = User.objects.create_user(
@@ -102,7 +88,6 @@ class StudentCreationTests(FastTenantTestCase):
             role="student",
             first_name="Stu",
             last_name="Dent",
-            tenant=self.tenant,
         )
         Student.objects.create(
             user=existing_user,
@@ -119,8 +104,8 @@ class StudentCreationTests(FastTenantTestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("email", response.data)
-        msg = str(response.data["email"][0])
+        self.assertIn("email", response.data["field_errors"])
+        msg = str(response.data["field_errors"]["email"][0])
         self.assertIn("already exists in this school", msg.lower())
         self.assertIn("Grade 8", msg)
         self.assertIn("A", msg)
@@ -133,7 +118,6 @@ class StudentCreationTests(FastTenantTestCase):
             role="student",
             first_name="Linked",
             last_name="Learner",
-            tenant=self.tenant,
         )
         student = Student.objects.create(
             user=linked_user,

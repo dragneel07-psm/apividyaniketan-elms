@@ -24,7 +24,6 @@ class LearningPathService:
         from ai_engine.models import SkillMastery
         from ai_engine.services.bkt_service import BKTService
 
-        tenant = student.user.tenant
         db_alias = (
             getattr(student, "_state", None).db
             if hasattr(student, "_state")
@@ -39,7 +38,6 @@ class LearningPathService:
         )
 
         path = LearningPath.objects.using(db_alias).create(
-            tenant=tenant,
             student=student,
             subject=subject,
             title=title,

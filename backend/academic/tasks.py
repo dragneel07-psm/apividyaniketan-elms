@@ -24,7 +24,6 @@ def check_daily_attendance():
     count = 0
     for record in absent_records:
         student = record.student
-        tenant = record.tenant
 
         # In a real app, we'd notify the PARENT, not the student.
         # But for demo, we notify the student user + mock SMS to "Parent".
@@ -37,7 +36,6 @@ def check_daily_attendance():
             recipient=student.user,  # targeting student user for now as primary contact
             title=title,
             message=message,
-            tenant=tenant,
             channels=["sms", "app"],
         )
         count += 1
@@ -84,14 +82,6 @@ def check_upcoming_exams():
                 recipient=student.user,
                 title=title,
                 message=message,
-                # tenant=None, # Inferred from context or user?
-                # NotificationService creates for tenant if passed?
-                # The model doesn't explicitly store tenant on Assessment?
-                # Wait, does Assessment have tenant?
-                # Let's check Assessment model again.
-                # If not, we rely on Student's tenant?
-                # NotificationService needs tenant.
-                tenant=student.user.tenant,
                 channels=["app", "email"],
             )
             count += 1

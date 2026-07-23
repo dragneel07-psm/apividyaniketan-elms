@@ -11,21 +11,17 @@ from typing import Any
 
 from django.conf import settings
 from django.db import transaction
-from django.db.models import Q
-from django_tenants.utils import schema_context
 from openai import OpenAI
 
 from academic.models import Chapter, Lesson, LessonMaterial
 from ai_engine.models import ContentChunk
 from ai_engine.services.provider_config import get_ai_provider_config
-from core.models.tenant import Domain, Tenant
 
 logger = logging.getLogger(__name__)
 
 
 @dataclass
 class IndexingSummary:
-    tenant_schema: str
     source_documents: int = 0
     chunks_indexed: int = 0
     provider: str = "stub"
@@ -54,26 +50,6 @@ def _chunk_overlap_words() -> int:
     except (TypeError, ValueError):
         overlap = 30
     return min(overlap, _chunk_words() - 1)
-
-
-def _resolve_tenant(tenant_identifier: str) -> Tenant | None:
-    value = str(tenant_identifier or "").strip().lower()
-    if not value:
-        return None
-
-    with schema_context("public"):
-        by_schema = Tenant.objects.filter(schema_name__iexact=value).first()
-        if by_schema:
-            return by_schema
-        by_subdomain = Tenant.objects.filter(subdomain__iexact=value).first()
-        if by_subdomain:
-            return by_subdomain
-        domain_hit = (
-            Domain.objects.select_related("tenant")
-            .filter(Q(domain__iexact=value) | Q(domain__istartswith=f"{value}."))
-            .first()
-        )
-        return getattr(domain_hit, "tenant", None)
 
 
 def _normalize_text(raw: str | None) -> str:
@@ -229,71 +205,58 @@ def _source_documents() -> list[dict[str, Any]]:
     return docs
 
 
-def index_content_for_tenant(tenant_identifier: str) -> IndexingSummary:
-    tenant = _resolve_tenant(tenant_identifier)
-    if not tenant:
-        raise ValueError("Tenant not found.")
+def index_all_content() -> IndexingSummary:
+    summary = IndexingSummary()
 
-    summary = IndexingSummary(tenant_schema=tenant.schema_name)
+    documents = _source_documents()
+    summary.source_documents = len(documents)
 
-    with schema_context(tenant.schema_name):
-        documents = _source_documents()
-        summary.source_documents = len(documents)
-
-        with transaction.atomic():
-            for document in documents:
-                source_type = document["source_type"]
-                source_id = str(document["source_id"])
-                chunks = _chunk_text(document["text"])
-                if not chunks:
-                    ContentChunk.objects.filter(
-                        tenant_id=tenant.id,
-                        source_type=source_type,
-                        source_id=source_id,
-                    ).delete()
-                    continue
-
-                vectors, provider = _generate_embeddings(chunks)
-                summary.provider = provider
-
+    with transaction.atomic():
+        for document in documents:
+            source_type = document["source_type"]
+            source_id = str(document["source_id"])
+            chunks = _chunk_text(document["text"])
+            if not chunks:
                 ContentChunk.objects.filter(
-                    tenant_id=tenant.id,
                     source_type=source_type,
                     source_id=source_id,
                 ).delete()
+                continue
 
-                rows = []
-                for idx, chunk in enumerate(chunks):
-                    chunk_metadata = dict(document.get("metadata") or {})
-                    chunk_metadata["chunk_index"] = idx
-                    rows.append(
-                        ContentChunk(
-                            tenant_id=tenant.id,
-                            source_type=source_type,
-                            source_id=source_id,
-                            text=chunk,
-                            metadata=chunk_metadata,
-                            embedding=vectors[idx],
-                        )
+            vectors, provider = _generate_embeddings(chunks)
+            summary.provider = provider
+
+            ContentChunk.objects.filter(
+                source_type=source_type,
+                source_id=source_id,
+            ).delete()
+
+            rows = []
+            for idx, chunk in enumerate(chunks):
+                chunk_metadata = dict(document.get("metadata") or {})
+                chunk_metadata["chunk_index"] = idx
+                rows.append(
+                    ContentChunk(
+                        source_type=source_type,
+                        source_id=source_id,
+                        text=chunk,
+                        metadata=chunk_metadata,
+                        embedding=vectors[idx],
                     )
-                ContentChunk.objects.bulk_create(rows, batch_size=200)
-                summary.chunks_indexed += len(rows)
+                )
+            ContentChunk.objects.bulk_create(rows, batch_size=200)
+            summary.chunks_indexed += len(rows)
 
     return summary
 
 
 def index_raw_content(
     *,
-    tenant_schema: str,
     source_type: str,
     source_id: str,
     text: str,
     metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    tenant = _resolve_tenant(tenant_schema)
-    if not tenant:
-        raise ValueError("Tenant not found.")
-
     normalized_source_type = str(source_type or "").strip().lower()
     if normalized_source_type not in {"lesson", "chapter", "material"}:
         raise ValueError("source_type must be one of lesson/chapter/material.")
@@ -303,36 +266,33 @@ def index_raw_content(
         raise ValueError("source_id is required.")
 
     chunks = _chunk_text(text)
-    with schema_context(tenant.schema_name):
-        ContentChunk.objects.filter(
-            tenant_id=tenant.id,
-            source_type=normalized_source_type,
-            source_id=normalized_source_id,
-        ).delete()
+    ContentChunk.objects.filter(
+        source_type=normalized_source_type,
+        source_id=normalized_source_id,
+    ).delete()
 
-        if not chunks:
-            return {
-                "indexed": False,
-                "chunks_indexed": 0,
-                "provider": "stub",
-            }
+    if not chunks:
+        return {
+            "indexed": False,
+            "chunks_indexed": 0,
+            "provider": "stub",
+        }
 
-        vectors, provider = _generate_embeddings(chunks)
-        rows = []
-        for idx, chunk in enumerate(chunks):
-            chunk_metadata = dict(metadata or {})
-            chunk_metadata["chunk_index"] = idx
-            rows.append(
-                ContentChunk(
-                    tenant_id=tenant.id,
-                    source_type=normalized_source_type,
-                    source_id=normalized_source_id,
-                    text=chunk,
-                    metadata=chunk_metadata,
-                    embedding=vectors[idx],
-                )
+    vectors, provider = _generate_embeddings(chunks)
+    rows = []
+    for idx, chunk in enumerate(chunks):
+        chunk_metadata = dict(metadata or {})
+        chunk_metadata["chunk_index"] = idx
+        rows.append(
+            ContentChunk(
+                source_type=normalized_source_type,
+                source_id=normalized_source_id,
+                text=chunk,
+                metadata=chunk_metadata,
+                embedding=vectors[idx],
             )
-        ContentChunk.objects.bulk_create(rows, batch_size=200)
+        )
+    ContentChunk.objects.bulk_create(rows, batch_size=200)
     return {
         "indexed": True,
         "chunks_indexed": len(chunks),

@@ -5,8 +5,8 @@
 from datetime import date
 
 from django.contrib.auth import get_user_model
+from django.test import TestCase
 from django.utils import timezone
-from django_tenants.test.cases import FastTenantTestCase
 from rest_framework import status
 from rest_framework.test import APIClient
 
@@ -15,26 +15,14 @@ from academic.models import AcademicClass, Assessment, Attendance, Result, Stude
 User = get_user_model()
 
 
-class SchoolAnalyticsDashboardTests(FastTenantTestCase):
-    @classmethod
-    def setup_tenant(cls, tenant):
-        tenant.name = "Analytics Dashboard Test School"
-
-    @classmethod
-    def setup_domain(cls, domain):
-        domain.is_primary = True
-
+class SchoolAnalyticsDashboardTests(TestCase):
     def setUp(self):
-        self.client = APIClient(
-            HTTP_HOST=self.get_test_tenant_domain(),
-            HTTP_X_TENANT_ID=self.tenant.schema_name,
-        )
+        self.client = APIClient()
         self.admin = User.objects.create_user(
             username="analytics_admin",
             email="analytics_admin@example.com",
             password="Admin@1234",
             role="admin",
-            tenant=self.tenant,
         )
         student_user = User.objects.create_user(
             username="analytics_student",
@@ -43,7 +31,6 @@ class SchoolAnalyticsDashboardTests(FastTenantTestCase):
             role="student",
             first_name="Analytics",
             last_name="Student",
-            tenant=self.tenant,
         )
         academic_class = AcademicClass.objects.create(name="Analytics Grade", order=1)
         student = Student.objects.create(

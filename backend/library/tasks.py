@@ -7,7 +7,6 @@ import logging
 from datetime import date
 
 from celery import shared_task
-from django_tenants.utils import get_tenant_model, schema_context
 
 logger = logging.getLogger(__name__)
 
@@ -20,29 +19,17 @@ logger = logging.getLogger(__name__)
     default_retry_delay=300,
 )
 def mark_overdue_book_issues(self):
-    """Flip `issued` book issues past their due_date to `overdue` across all tenants.
+    """Flip `issued` book issues past their due_date to `overdue`.
 
     Runs daily. Replaces the per-request UPDATE that previously fired on every
     BookIssueViewSet.get_queryset() call.
     """
     from library.models import BookIssue
 
-    TenantModel = get_tenant_model()
     today = date.today()
-    total = 0
-    for tenant in TenantModel.objects.exclude(schema_name="public"):
-        try:
-            with schema_context(tenant.schema_name):
-                updated = BookIssue.objects.filter(
-                    status="issued",
-                    due_date__lt=today,
-                ).update(status="overdue")
-                total += updated
-        except Exception as exc:
-            logger.exception(
-                "Overdue sweep failed for tenant %s: %s",
-                tenant.schema_name,
-                exc,
-            )
-    logger.info("Overdue sweep: flipped %d book issues across tenants", total)
+    total = BookIssue.objects.filter(
+        status="issued",
+        due_date__lt=today,
+    ).update(status="overdue")
+    logger.info("Overdue sweep: flipped %d book issues", total)
     return total

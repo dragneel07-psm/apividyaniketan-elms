@@ -2,7 +2,7 @@
 # Unauthorized copying, modification, or distribution of this file,
 # via any medium, is strictly prohibited. Proprietary and confidential.
 from django.contrib.auth import get_user_model
-from django_tenants.test.cases import FastTenantTestCase
+from django.test import TestCase
 from rest_framework import status
 from rest_framework.test import APIClient
 
@@ -28,20 +28,9 @@ from academic.models.question import Question
 User = get_user_model()
 
 
-class AcademicYearRolloverAndPromotionTests(FastTenantTestCase):
-    @classmethod
-    def setup_tenant(cls, tenant):
-        tenant.name = "Rollover Test School"
-
-    @classmethod
-    def setup_domain(cls, domain):
-        domain.is_primary = True
-
+class AcademicYearRolloverAndPromotionTests(TestCase):
     def setUp(self):
-        self.client = APIClient(
-            HTTP_HOST=self.get_test_tenant_domain(),
-            HTTP_X_TENANT_ID=self.tenant.schema_name,
-        )
+        self.client = APIClient()
         self.admin_user = User.objects.create_user(
             username="rollover_admin",
             email="rollover_admin@example.com",
@@ -49,7 +38,6 @@ class AcademicYearRolloverAndPromotionTests(FastTenantTestCase):
             role="admin",
             first_name="Rollover",
             last_name="Admin",
-            tenant=self.tenant,
         )
         self.client.force_authenticate(user=self.admin_user)
 
@@ -70,7 +58,6 @@ class AcademicYearRolloverAndPromotionTests(FastTenantTestCase):
             email="rollover_student@example.com",
             password="Student@1234",
             role="student",
-            tenant=self.tenant,
         )
         student = Student.objects.create(
             user=student_user,
@@ -294,7 +281,6 @@ class AcademicYearRolloverAndPromotionTests(FastTenantTestCase):
             email="promotion_target@example.com",
             password="Student@1234",
             role="student",
-            tenant=self.tenant,
         )
         promoted_student = Student.objects.create(
             user=promoted_user,
@@ -307,7 +293,6 @@ class AcademicYearRolloverAndPromotionTests(FastTenantTestCase):
             email="promotion_other@example.com",
             password="Student@1234",
             role="student",
-            tenant=self.tenant,
         )
         unaffected_student = Student.objects.create(
             user=unaffected_user,
@@ -373,7 +358,6 @@ class AcademicYearRolloverAndPromotionTests(FastTenantTestCase):
             email="low_score_student@example.com",
             password="Student@1234",
             role="student",
-            tenant=self.tenant,
         )
         low_score_student = Student.objects.create(
             user=low_score_user,
@@ -385,7 +369,6 @@ class AcademicYearRolloverAndPromotionTests(FastTenantTestCase):
             email="manual_promote_student@example.com",
             password="Student@1234",
             role="student",
-            tenant=self.tenant,
         )
         manual_promote_student = Student.objects.create(
             user=manual_promote_user,
@@ -397,7 +380,6 @@ class AcademicYearRolloverAndPromotionTests(FastTenantTestCase):
             email="manual_hold_student@example.com",
             password="Student@1234",
             role="student",
-            tenant=self.tenant,
         )
         manual_hold_student = Student.objects.create(
             user=manual_hold_user,
@@ -517,7 +499,6 @@ class AcademicYearRolloverAndPromotionTests(FastTenantTestCase):
             email="exception_low_score@example.com",
             password="Student@1234",
             role="student",
-            tenant=self.tenant,
         )
         low_score_student = Student.objects.create(
             user=low_score_user,
@@ -529,7 +510,6 @@ class AcademicYearRolloverAndPromotionTests(FastTenantTestCase):
             email="exception_low_attendance@example.com",
             password="Student@1234",
             role="student",
-            tenant=self.tenant,
         )
         low_attendance_student = Student.objects.create(
             user=low_attendance_user,
@@ -541,7 +521,6 @@ class AcademicYearRolloverAndPromotionTests(FastTenantTestCase):
             email="exception_pass_student@example.com",
             password="Student@1234",
             role="student",
-            tenant=self.tenant,
         )
         pass_student = Student.objects.create(
             user=pass_user,

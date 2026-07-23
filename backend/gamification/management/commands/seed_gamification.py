@@ -1,10 +1,8 @@
 # Copyright (c) 2024-2026 Pramod Singh Manyal. All rights reserved.
 # Unauthorized copying, modification, or distribution of this file,
 # via any medium, is strictly prohibited. Proprietary and confidential.
-from django.core.management.base import BaseCommand, CommandError
-from django_tenants.utils import schema_context
+from django.core.management.base import BaseCommand
 
-from core.models import Tenant
 from gamification.models import Badge
 
 BADGES_DATA = [
@@ -136,64 +134,27 @@ BADGES_DATA = [
 
 
 class Command(BaseCommand):
-    help = "Seeds default gamification badges for all tenants (or a specific one with --schema)"
-
-    def add_arguments(self, parser):
-        parser.add_argument(
-            "--schema",
-            type=str,
-            default=None,
-            help="Seed only this tenant schema (subdomain). Omit to seed all tenants.",
-        )
+    help = "Seeds default gamification badges"
 
     def handle(self, *args, **options):
-        schema = options.get("schema")
-
-        if schema:
-            tenants = Tenant.objects.filter(subdomain=schema)
-            if not tenants.exists():
-                raise CommandError(f"No tenant found with subdomain '{schema}'")
-        else:
-            tenants = Tenant.objects.exclude(schema_name="public")
-
-        if not tenants.exists():
-            self.stdout.write(
-                self.style.WARNING(
-                    "No tenants found. Run init_prod or seed_data first."
-                )
-            )
-            return
-
         total_created = 0
         total_updated = 0
 
-        for tenant in tenants:
-            self.stdout.write(
-                f"\nProcessing tenant: {tenant.name} ({tenant.subdomain})"
+        for badge_data in BADGES_DATA:
+            badge, created = Badge.objects.get_or_create(
+                name=badge_data["name"],
+                defaults=badge_data,
             )
-
-            try:
-                with schema_context(tenant.schema_name):
-                    for badge_data in BADGES_DATA:
-                        badge, created = Badge.objects.get_or_create(
-                            tenant=tenant,
-                            name=badge_data["name"],
-                            defaults=badge_data,
-                        )
-                        if created:
-                            total_created += 1
-                            self.stdout.write(
-                                self.style.SUCCESS(f"  + Created: {badge.name}")
-                            )
-                        else:
-                            # Update all fields so existing badges stay in sync with the catalog
-                            for key, value in badge_data.items():
-                                setattr(badge, key, value)
-                            badge.save()
-                            total_updated += 1
-                            self.stdout.write(f"  . Updated: {badge.name}")
-            except Exception as e:
-                self.stdout.write(self.style.ERROR(f"  ✗ Error for {tenant.name}: {e}"))
+            if created:
+                total_created += 1
+                self.stdout.write(self.style.SUCCESS(f"  + Created: {badge.name}"))
+            else:
+                # Update all fields so existing badges stay in sync with the catalog
+                for key, value in badge_data.items():
+                    setattr(badge, key, value)
+                badge.save()
+                total_updated += 1
+                self.stdout.write(f"  . Updated: {badge.name}")
 
         self.stdout.write(
             self.style.SUCCESS(

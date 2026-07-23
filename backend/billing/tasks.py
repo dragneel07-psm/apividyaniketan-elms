@@ -29,7 +29,6 @@ def check_overdue_fees():
         # For MVP, we'll just send. In prod, we'd log 'last_reminded_at'.
 
         student = fee.student
-        tenant = fee.tenant
 
         title = f"Overdue Fee Reminder: {fee.fee_structure.name}"
         message = f"Dear {student.first_name}, your fee of {fee.amount_due} was due on {fee.due_date}. Please pay immediately."
@@ -39,7 +38,6 @@ def check_overdue_fees():
             recipient=student.user,
             title=title,
             message=message,
-            tenant=tenant,
             channels=["email", "app"],
         )
 

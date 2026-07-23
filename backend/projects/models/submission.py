@@ -7,14 +7,12 @@ from django.conf import settings
 from django.db import models
 from django.utils import timezone
 
-from core.models.tenant import Tenant
 
 
 class ProjectSubmission(models.Model):
     submission_id = models.UUIDField(
         primary_key=True, default=uuid_lib.uuid4, editable=False
     )
-    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, db_constraint=False)
     project = models.ForeignKey(
         "projects.Project", on_delete=models.CASCADE, related_name="submissions"
     )

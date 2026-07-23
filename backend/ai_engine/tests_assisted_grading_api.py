@@ -4,8 +4,7 @@
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
-from django_tenants.test.cases import FastTenantTestCase
-from django_tenants.utils import tenant_context
+from django.test import TestCase
 from rest_framework import status
 from rest_framework.test import APIClient
 
@@ -25,88 +24,76 @@ from ai_engine.models import AIGradingDraft, GradingRubric
 User = get_user_model()
 
 
-class AssistedGradingApiTests(FastTenantTestCase):
-    @classmethod
-    def setup_tenant(cls, tenant):
-        tenant.name = "AI Grading School"
-
-    @classmethod
-    def setup_domain(cls, domain):
-        domain.is_primary = True
-
+class AssistedGradingApiTests(TestCase):
     def setUp(self):
-        with tenant_context(self.tenant):
-            self.teacher_user = User.objects.create_user(
-                username="grading_teacher",
-                email="grading_teacher@example.com",
-                password="Teacher@123",
-                role="teacher",
-                tenant=self.tenant,
-                first_name="Grade",
-                last_name="Teacher",
-            )
-            self.admin_user = User.objects.create_user(
-                username="grading_admin",
-                email="grading_admin@example.com",
-                password="Admin@123",
-                role="admin",
-                tenant=self.tenant,
-            )
-            self.student_user = User.objects.create_user(
-                username="grading_student",
-                email="grading_student@example.com",
-                password="Student@123",
-                role="student",
-                tenant=self.tenant,
-                first_name="Grade",
-                last_name="Student",
-            )
-            self.academic_class = AcademicClass.objects.create(name="Grade 10")
-            self.teacher_profile = Teacher.objects.create(user=self.teacher_user)
-            self.teacher_profile.assigned_classes.add(self.academic_class)
-            self.student_profile = Student.objects.create(
-                user=self.student_user, academic_class=self.academic_class
-            )
+        self.teacher_user = User.objects.create_user(
+            username="grading_teacher",
+            email="grading_teacher@example.com",
+            password="Teacher@123",
+            role="teacher",
+            first_name="Grade",
+            last_name="Teacher",
+        )
+        self.admin_user = User.objects.create_user(
+            username="grading_admin",
+            email="grading_admin@example.com",
+            password="Admin@123",
+            role="admin",
+        )
+        self.student_user = User.objects.create_user(
+            username="grading_student",
+            email="grading_student@example.com",
+            password="Student@123",
+            role="student",
+            first_name="Grade",
+            last_name="Student",
+        )
+        self.academic_class = AcademicClass.objects.create(name="Grade 10")
+        self.teacher_profile = Teacher.objects.create(user=self.teacher_user)
+        self.teacher_profile.assigned_classes.add(self.academic_class)
+        self.student_profile = Student.objects.create(
+            user=self.student_user, academic_class=self.academic_class
+        )
 
-            self.subject = Subject.objects.create(
-                name="Science",
-                academic_class=self.academic_class,
-                is_active=True,
-                teacher=self.teacher_profile,
-            )
-            chapter = Chapter.objects.create(
-                subject=self.subject, title="Motion", order=1, is_published=True
-            )
-            lesson = Lesson.objects.create(
-                chapter=chapter,
-                title="Newton Laws",
-                content_type="text",
-                content="State and explain Newton's second law with example.",
-                order=1,
-                is_published=True,
-                duration_minutes=40,
-            )
-            self.assessment = Assessment.objects.create(
-                subject=self.subject,
-                title="Science Descriptive Test",
-                type="assignment",
-                total_marks=100,
-                passing_marks=40,
-                duration_minutes=60,
-                description="Subjective test",
-            )
-            lesson.assessment = self.assessment
-            lesson.save(update_fields=["assessment"])
-            self.submission = Submission.objects.create(
-                assessment=self.assessment,
-                student=self.student_profile,
-                content="Newton second law says force equals mass times acceleration. If mass doubles, force doubles.",
-                status="submitted",
-                is_graded=False,
-            )
+        self.subject = Subject.objects.create(
+            name="Science",
+            academic_class=self.academic_class,
+            is_active=True,
+            teacher=self.teacher_profile,
+        )
+        chapter = Chapter.objects.create(
+            subject=self.subject, title="Motion", order=1, is_published=True
+        )
+        lesson = Lesson.objects.create(
+            chapter=chapter,
+            title="Newton Laws",
+            content_type="text",
+            content="State and explain Newton's second law with example.",
+            order=1,
+            is_published=True,
+            duration_minutes=40,
+        )
+        self.assessment = Assessment.objects.create(
+            subject=self.subject,
+            title="Science Descriptive Test",
+            type="assignment",
+            total_marks=100,
+            passing_marks=40,
+            duration_minutes=60,
+            description="Subjective test",
+        )
+        lesson.assessment = self.assessment
+        lesson.save(update_fields=["assessment"])
+        self.submission = Submission.objects.create(
+            assessment=self.assessment,
+            student=self.student_profile,
+            content="Newton second law says force equals mass times acceleration. If mass doubles, force doubles.",
+            status="submitted",
+            is_graded=False,
+        )
 
     def _client_for(self, user):
-        client = APIClient(HTTP_HOST=self.get_test_tenant_domain())
+        client = APIClient()
         client.force_authenticate(user=user)
         return client
 

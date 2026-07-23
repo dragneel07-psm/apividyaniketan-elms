@@ -17,3 +17,15 @@ from .profiles import (
     StudentUpdateSerializer,
     TeacherSerializer,
 )
+from .site_content import (
+    AdmissionFaqSerializer,
+    CoreValueSerializer,
+    FieldTripSerializer,
+    GalleryItemSerializer,
+    HistoryMilestoneSerializer,
+    NewsArticleSerializer,
+    ProgramSerializer,
+    StudentLifeActivitySerializer,
+    TestimonialSerializer,
+    WellbeingSupportSerializer,
+)

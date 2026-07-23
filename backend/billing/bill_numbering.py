@@ -32,8 +32,8 @@ def _fy_short(fy: str) -> str:
     return fy
 
 
-def _resolve_fy(tenant) -> str:
-    fy = (getattr(tenant, "fiscal_year_bs", "") or "").strip()
+def _resolve_fy(profile) -> str:
+    fy = (getattr(profile, "fiscal_year_bs", "") or "").strip()
     if fy:
         return _fy_short(fy)
     # Fallback: compute from today.
@@ -42,23 +42,30 @@ def _resolve_fy(tenant) -> str:
     return _fy_short(fiscal_year_bs())
 
 
-def allocate_bill_number(tenant) -> str:
+def allocate_bill_number(tenant=None) -> str:
     """
-    Return the next sequential bill number for the given tenant.
+    Return the next sequential bill number.
+
+    `tenant` is unused and kept only for backward compatibility with
+    existing callers; the school is now a singleton so bill numbering
+    reads its prefix/fiscal-year identity from SchoolProfile.get_solo().
 
     Must be called inside a request transaction. The DB-level
-    UniqueConstraint(tenant, bill_number) is the ultimate safety net.
+    UniqueConstraint(bill_number) is the ultimate safety net.
     """
+    from core.models import SchoolProfile
+
     from .models_school import Payment
 
-    prefix = (getattr(tenant, "bill_prefix", "") or "BL").strip() or "BL"
-    fy = _resolve_fy(tenant)
+    profile = SchoolProfile.get_solo()
+    prefix = (profile.bill_prefix or "BL").strip() or "BL"
+    fy = _resolve_fy(profile)
     series = f"{prefix}-{fy}-"
 
     with transaction.atomic():
         last = (
             Payment.objects.select_for_update()
-            .filter(tenant=tenant, bill_number__startswith=series)
+            .filter(bill_number__startswith=series)
             .order_by("-bill_number")
             .values_list("bill_number", flat=True)
             .first()

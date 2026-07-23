@@ -13,9 +13,6 @@ from .views import (
     PasswordResetConfirmView,
     PasswordResetView,
     PermissionViewSet,
-    SaasStaffViewSet,
-    TwoFactorActivateView,
-    TwoFactorSetupView,
     UserAccountViewSet,
     WebSocketTicketView,
     register_user,
@@ -25,7 +22,6 @@ router = DefaultRouter()
 router.register(r"accounts", UserAccountViewSet)
 router.register(r"groups", GroupViewSet)
 router.register(r"permissions", PermissionViewSet)
-router.register(r"saas-staff", SaasStaffViewSet, basename="saas-staff")
 
 urlpatterns = [
     path("", include(router.urls)),
@@ -44,9 +40,6 @@ urlpatterns = [
         name="password_reset_confirm",
     ),
     path("verify-email/", EmailVerificationView.as_view(), name="verify_email"),
-    # SaaS Admin 2FA — re-auth with email+password (no JWT required)
-    path("2fa/setup/", TwoFactorSetupView.as_view(), name="2fa_setup"),
-    path("2fa/activate/", TwoFactorActivateView.as_view(), name="2fa_activate"),
     # Short-lived WebSocket auth ticket (browsers can't send httpOnly cookies on WS upgrades)
     path("ws-ticket/", WebSocketTicketView.as_view(), name="ws_ticket"),
 ]

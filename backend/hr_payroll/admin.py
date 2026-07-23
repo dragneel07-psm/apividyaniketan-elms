@@ -16,8 +16,8 @@ from .models import (
 
 @admin.register(Department)
 class DepartmentAdmin(admin.ModelAdmin):
-    list_display = ("name", "code", "tenant", "created_at")
-    list_filter = ("tenant",)
+    list_display = ("name", "code", "created_at")
+    list_filter = ()
     search_fields = ("name", "code")
 
 
@@ -39,7 +39,7 @@ class EmployeeAdmin(admin.ModelAdmin):
         "employee_code",
         "designation",
     )
-    raw_id_fields = ("user", "department", "tenant")
+    raw_id_fields = ("user", "department")
 
 
 @admin.register(LeaveType)
@@ -50,8 +50,7 @@ class LeaveTypeAdmin(admin.ModelAdmin):
         "max_days_per_year",
         "is_paid",
         "carry_forward",
-        "tenant",
-    )
+        )
     list_filter = ("is_paid", "carry_forward")
 
 
@@ -68,7 +67,7 @@ class LeaveApplicationAdmin(admin.ModelAdmin):
     )
     list_filter = ("status", "leave_type")
     search_fields = ("employee__user__first_name", "employee__user__last_name")
-    raw_id_fields = ("employee", "leave_type", "reviewed_by", "tenant")
+    raw_id_fields = ("employee", "leave_type", "reviewed_by")
 
 
 @admin.register(StaffAttendance)
@@ -76,14 +75,14 @@ class StaffAttendanceAdmin(admin.ModelAdmin):
     list_display = ("employee", "date", "status", "check_in_time", "check_out_time")
     list_filter = ("status", "date")
     search_fields = ("employee__user__first_name", "employee__user__last_name")
-    raw_id_fields = ("employee", "tenant")
+    raw_id_fields = ("employee",)
 
 
 @admin.register(PayrollPeriod)
 class PayrollPeriodAdmin(admin.ModelAdmin):
     list_display = ("name", "month", "year", "status", "working_days", "created_at")
     list_filter = ("status", "year")
-    raw_id_fields = ("finalized_by", "tenant")
+    raw_id_fields = ("finalized_by",)
 
 
 @admin.register(SalarySlip)
@@ -99,7 +98,7 @@ class SalarySlipAdmin(admin.ModelAdmin):
     )
     list_filter = ("status", "payroll_period__year", "payment_method")
     search_fields = ("employee__user__first_name", "employee__user__last_name")
-    raw_id_fields = ("employee", "payroll_period", "tenant")
+    raw_id_fields = ("employee", "payroll_period")
     readonly_fields = (
         "gross_salary",
         "total_deductions",

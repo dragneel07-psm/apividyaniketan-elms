@@ -19,10 +19,9 @@ class LessonSummaryService:
     VALID_LANGS = {"en", "ne"}
     VALID_TYPES = {"summary", "exam_notes"}
 
-    def __init__(self, *, tenant, user=None):
-        self.tenant = tenant
+    def __init__(self, *, user=None):
         self.user = user
-        self.rag = RAGTutorService(tenant=tenant)
+        self.rag = RAGTutorService()
         self.top_k = max(3, int(getattr(settings, "AI_TUTOR_TOP_K", 5)))
 
     @classmethod
@@ -57,7 +56,6 @@ class LessonSummaryService:
     ) -> AiGeneratedArtifact | None:
         return (
             AiGeneratedArtifact.objects.filter(
-                tenant=self.tenant,
                 artifact_type=artifact_type,
                 source_type=source_type,
                 source_id=source_id,
@@ -69,7 +67,7 @@ class LessonSummaryService:
 
     def _lesson_chunks(self, lesson: Lesson) -> list[ContentChunk]:
         lesson_id = str(lesson.id)
-        queryset = ContentChunk.objects.filter(tenant=self.tenant).filter(
+        queryset = ContentChunk.objects.filter(
             Q(source_type="lesson", source_id=lesson_id)
             | Q(source_type="material", metadata__lesson_id=lesson.id)
             | Q(source_type="material", metadata__lesson_id=lesson_id)
@@ -221,7 +219,6 @@ class LessonSummaryService:
             payload = self._normalize_content(parsed)
 
         AiGeneratedArtifact.objects.create(
-            tenant=self.tenant,
             artifact_type=normalized_type,
             source_type="lesson",
             source_id=source_id,

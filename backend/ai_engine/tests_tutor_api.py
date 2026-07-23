@@ -8,13 +8,11 @@ from unittest.mock import MagicMock, patch
 
 from django.conf import settings
 from django.test import override_settings
-from django_tenants.test.cases import FastTenantTestCase
-from django_tenants.utils import tenant_context
+from django.test import TestCase
 from rest_framework import status
 from rest_framework.test import APIClient
 
 from ai_engine.models import ContentChunk
-from core.models.tenant import Domain, Tenant
 from users.models import UserAccount
 
 
@@ -37,37 +35,25 @@ def _payload(response: ResponseLike) -> dict[str, Any]:
     return response.data
 
 
-class TutorChatApiTests(FastTenantTestCase):
-    @classmethod
-    def setup_tenant(cls, tenant: Tenant) -> None:
-        tenant.name = "Tutor API School"
-
-    @classmethod
-    def setup_domain(cls, domain: Domain) -> None:
-        domain.is_primary = True
-
+class TutorChatApiTests(TestCase):
     def setUp(self) -> None:
         dimensions = max(1, int(getattr(settings, "AI_EMBEDDING_DIMENSIONS", 1536)))
-        tenant = cast(Tenant, self.tenant)
-        with tenant_context(tenant):
-            self.user = cast(
-                UserAccount,
-                UserAccount.objects.create_user(
-                    username="rag_student",
-                    email="rag_student@example.com",
-                    password="RagStudent@123",
-                    role="student",
-                    tenant=tenant,
-                ),
-            )
-            ContentChunk.objects.create(
-                tenant=tenant,
-                source_type="lesson",
-                source_id="lesson-1",
-                text="Newton's first law states that an object remains at rest or in uniform motion unless acted upon by a net force.",
-                metadata={"lesson_id": "lesson-1", "chapter_id": "chapter-1"},
-                embedding=[0.01] * dimensions,
-            )
+        self.user = cast(
+            UserAccount,
+            UserAccount.objects.create_user(
+                username="rag_student",
+                email="rag_student@example.com",
+                password="RagStudent@123",
+                role="student",
+            ),
+        )
+        ContentChunk.objects.create(
+            source_type="lesson",
+            source_id="lesson-1",
+            text="Newton's first law states that an object remains at rest or in uniform motion unless acted upon by a net force.",
+            metadata={"lesson_id": "lesson-1", "chapter_id": "chapter-1"},
+            embedding=[0.01] * dimensions,
+        )
 
         self.client = cast(
             APIClientLike, APIClient(HTTP_HOST=str(self.get_test_tenant_domain()))

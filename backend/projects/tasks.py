@@ -25,37 +25,26 @@ except Exception:  # pragma: no cover — sync fallback for envs without celery
     from core.async_jobs import background_task as shared_task
 
 from django.utils import timezone
-from django_tenants.utils import get_tenant_model, schema_context
 
 logger = logging.getLogger(__name__)
 
 
 @shared_task(name="projects.scan_overdue_tasks")
 def scan_overdue_tasks() -> dict:
-    """Scan every tenant for overdue open tasks and notify assignees + leader."""
-    Tenant = get_tenant_model()
-    notified = 0
-    scanned_tenants = 0
-    for tenant in Tenant.objects.exclude(schema_name="public"):
-        with schema_context(tenant.schema_name):
-            scanned_tenants += 1
-            notified += _scan_overdue_for_current_tenant(tenant)
-    return {"tenants": scanned_tenants, "notifications_emitted": notified}
+    """Scan for overdue open tasks and notify assignees + leader."""
+    notified = _scan_overdue_for_current_tenant()
+    return {"notifications_emitted": notified}
 
 
 @shared_task(name="projects.scan_due_soon_projects")
 def scan_due_soon_projects() -> dict:
-    Tenant = get_tenant_model()
-    notified = 0
-    scanned_tenants = 0
-    for tenant in Tenant.objects.exclude(schema_name="public"):
-        with schema_context(tenant.schema_name):
-            scanned_tenants += 1
-            notified += _scan_due_soon_for_current_tenant(tenant)
-    return {"tenants": scanned_tenants, "notifications_emitted": notified}
+    notified = _scan_due_soon_for_current_tenant()
+    return {"notifications_emitted": notified}
 
 
-def _scan_overdue_for_current_tenant(tenant) -> int:
+def _scan_overdue_for_current_tenant(tenant=None) -> int:
+    # `tenant` kept as an accepted-but-unused kwarg: projects/tests_notifications.py
+    # (outside this fix's scope) still calls this positionally with a tenant object.
     from notifications.models import Notification
 
     from .models import Project, ProjectTask, ProjectUpdate
@@ -91,7 +80,6 @@ def _scan_overdue_for_current_tenant(tenant) -> int:
             recipients.append(leader_user)
         for user in recipients:
             Notification.objects.create(
-                tenant=tenant,
                 recipient=user,
                 title=f"Task overdue: {task.title}",
                 message=(
@@ -103,7 +91,6 @@ def _scan_overdue_for_current_tenant(tenant) -> int:
             notified += 1
         # Idempotency marker so future runs don't re-notify.
         ProjectUpdate.objects.create(
-            tenant=tenant,
             project=task.project,
             task=task,
             kind="status_change",
@@ -113,7 +100,9 @@ def _scan_overdue_for_current_tenant(tenant) -> int:
     return notified
 
 
-def _scan_due_soon_for_current_tenant(tenant) -> int:
+def _scan_due_soon_for_current_tenant(tenant=None) -> int:
+    # `tenant` kept as an accepted-but-unused kwarg: projects/tests_notifications.py
+    # (outside this fix's scope) still calls this positionally with a tenant object.
     from notifications.models import Notification
 
     from .models import Project, ProjectUpdate
@@ -144,7 +133,6 @@ def _scan_due_soon_for_current_tenant(tenant) -> int:
                 recipients.add(user)
         for user in recipients:
             Notification.objects.create(
-                tenant=tenant,
                 recipient=user,
                 title=f"Project due soon: {project.title}",
                 message=(
@@ -155,7 +143,6 @@ def _scan_due_soon_for_current_tenant(tenant) -> int:
             )
             notified += 1
         ProjectUpdate.objects.create(
-            tenant=tenant,
             project=project,
             kind="status_change",
             body=f"{project.title}: due in <24h",

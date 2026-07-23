@@ -58,7 +58,6 @@ class ProjectViewSet(TenantScopedQuerysetMixin, viewsets.ModelViewSet):
     ).all()
     serializer_class = ProjectSerializer
     permission_classes = [IsAuthenticated, IsProjectsEnabled, IsProjectMentorOrReadOnly]
-    tenant_field = "tenant"
 
     # Actions where the mentor-write rule shouldn't apply because the action body
     # implements its own role-aware authorization.
@@ -86,12 +85,9 @@ class ProjectViewSet(TenantScopedQuerysetMixin, viewsets.ModelViewSet):
         user = self.request.user
         if role_of(user) not in {"teacher", "admin", "staff", "saas_admin"}:
             raise PermissionDenied("Only teachers/admins can create projects.")
-        tenant = getattr(user, "tenant", None) or getattr(self.request, "tenant", None)
-        if tenant is None:
-            raise PermissionDenied("No tenant context.")
         # Default mentor to the requesting teacher unless an admin set someone else.
         mentor = serializer.validated_data.get("mentor") or user
-        serializer.save(tenant=tenant, mentor=mentor, created_by=user)
+        serializer.save(mentor=mentor, created_by=user)
 
     def perform_update(self, serializer):
         if serializer.instance.status not in {"draft", "active"}:
@@ -168,9 +164,7 @@ class ProjectViewSet(TenantScopedQuerysetMixin, viewsets.ModelViewSet):
             raise ValidationError(
                 {"student": "Student is already a member of this project."}
             )
-        member = ProjectMember(
-            tenant=project.tenant, project=project, student=student, role=role
-        )
+        member = ProjectMember(project=project, student=student, role=role)
         try:
             member.clean()
         except DjangoValidationError as exc:
@@ -258,7 +252,6 @@ class ProjectViewSet(TenantScopedQuerysetMixin, viewsets.ModelViewSet):
         if not project.can_transition_to("submitted"):
             raise ValidationError(f"Cannot submit from status '{project.status}'.")
         sub = ProjectSubmission.objects.create(
-            tenant=project.tenant,
             project=project,
             submitted_by=user,
             notes=request.data.get("notes", ""),
@@ -266,7 +259,6 @@ class ProjectViewSet(TenantScopedQuerysetMixin, viewsets.ModelViewSet):
         project.status = "submitted"
         project.save(update_fields=["status", "updated_at"])
         ProjectUpdate.objects.create(
-            tenant=project.tenant,
             project=project,
             author=user,
             kind="submission",
@@ -299,7 +291,6 @@ class ProjectViewSet(TenantScopedQuerysetMixin, viewsets.ModelViewSet):
             update_fields=["final_grade", "rubric_json", "status", "updated_at"]
         )
         ProjectUpdate.objects.create(
-            tenant=project.tenant,
             project=project,
             author=request.user,
             kind="grade",
@@ -318,7 +309,6 @@ class ProjectTaskViewSet(TenantScopedQuerysetMixin, viewsets.ModelViewSet):
     ).all()
     serializer_class = ProjectTaskSerializer
     permission_classes = [IsAuthenticated, IsProjectsEnabled, CanWriteOnProjectTask]
-    tenant_field = "tenant"
 
     def get_queryset(self):
         qs = super().get_queryset()
@@ -342,9 +332,8 @@ class ProjectTaskViewSet(TenantScopedQuerysetMixin, viewsets.ModelViewSet):
             or is_leader_of(student, project)
         ):
             raise PermissionDenied("Only mentor or leader can create tasks.")
-        serializer.save(tenant=project.tenant, created_by=user)
+        serializer.save(created_by=user)
         ProjectUpdate.objects.create(
-            tenant=project.tenant,
             project=project,
             task=serializer.instance,
             author=user,
@@ -373,7 +362,6 @@ class ProjectTaskViewSet(TenantScopedQuerysetMixin, viewsets.ModelViewSet):
         serializer.save()
         if new_status != old_status:
             ProjectUpdate.objects.create(
-                tenant=instance.tenant,
                 project=instance.project,
                 task=instance,
                 author=self.request.user,
@@ -390,7 +378,6 @@ class ProjectUpdateViewSet(TenantScopedQuerysetMixin, viewsets.ModelViewSet):
     queryset = ProjectUpdate.objects.select_related("project", "author", "task").all()
     serializer_class = ProjectUpdateSerializer
     permission_classes = [IsAuthenticated, IsProjectsEnabled, CanCommentOnProject]
-    tenant_field = "tenant"
     http_method_names = ["get", "post", "delete", "head", "options"]
 
     def get_queryset(self):
@@ -424,7 +411,7 @@ class ProjectUpdateViewSet(TenantScopedQuerysetMixin, viewsets.ModelViewSet):
             raise PermissionDenied(
                 "Only 'comment' updates can be created via this endpoint."
             )
-        serializer.save(tenant=project.tenant, author=user)
+        serializer.save(author=user)
 
 
 # --- Submission ---
@@ -438,7 +425,6 @@ class ProjectSubmissionViewSet(
     queryset = ProjectSubmission.objects.select_related("project", "submitted_by").all()
     serializer_class = ProjectSubmissionSerializer
     permission_classes = [IsAuthenticated, IsProjectsEnabled]
-    tenant_field = "tenant"
 
     def get_queryset(self):
         qs = super().get_queryset()
@@ -461,7 +447,6 @@ class ProjectAttachmentViewSet(TenantScopedQuerysetMixin, viewsets.ModelViewSet)
     ).all()
     serializer_class = ProjectAttachmentSerializer
     permission_classes = [IsAuthenticated, IsProjectsEnabled, CanCommentOnProject]
-    tenant_field = "tenant"
     http_method_names = ["get", "post", "delete", "head", "options"]
 
     def get_queryset(self):
@@ -489,9 +474,7 @@ class ProjectAttachmentViewSet(TenantScopedQuerysetMixin, viewsets.ModelViewSet)
         f = serializer.validated_data.get("file")
         size = getattr(f, "size", 0) or 0
         mime = getattr(f, "content_type", "") or ""
-        serializer.save(
-            tenant=project.tenant, uploaded_by=user, size_bytes=size, mime_type=mime
-        )
+        serializer.save(uploaded_by=user, size_bytes=size, mime_type=mime)
 
 
 # --- Rubric template ---
@@ -512,7 +495,6 @@ class RubricTemplateViewSet(TenantScopedQuerysetMixin, viewsets.ModelViewSet):
     queryset = RubricTemplate.objects.select_related("owner", "subject").all()
     serializer_class = RubricTemplateSerializer
     permission_classes = [IsAuthenticated, IsProjectsEnabled]
-    tenant_field = "tenant"
 
     def initial(self, request, *args, **kwargs):
         super().initial(request, *args, **kwargs)
@@ -529,10 +511,7 @@ class RubricTemplateViewSet(TenantScopedQuerysetMixin, viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         user = self.request.user
-        tenant = getattr(user, "tenant", None) or getattr(self.request, "tenant", None)
-        if tenant is None:
-            raise PermissionDenied("No tenant context.")
-        serializer.save(tenant=tenant, owner=user)
+        serializer.save(owner=user)
 
     def perform_update(self, serializer):
         instance = serializer.instance

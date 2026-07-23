@@ -3,20 +3,15 @@
 # via any medium, is strictly prohibited. Proprietary and confidential.
 import logging
 
-from django.conf import settings
 from django.contrib.auth.models import Group, Permission
-from django.db import connection, transaction
-from django.shortcuts import get_object_or_404
-from django_tenants.utils import schema_context
+from django.db import transaction
 from rest_framework import permissions, status, views, viewsets
 from rest_framework.decorators import action, throttle_classes
 from rest_framework.response import Response
 
-from core.mixins import TenantScopedQuerysetMixin
-from core.models import Tenant
 from core.utils.audit import record_audit_event
 
-from .emailing import send_password_reset_email, send_saas_admin_registration_email
+from .emailing import send_password_reset_email
 from .models import UserAccount
 from .permissions import IsAdminOrSaaSAdmin
 from .serializers import (
@@ -41,7 +36,7 @@ from .throttling import (
 logger = logging.getLogger(__name__)
 
 
-class UserAccountViewSet(TenantScopedQuerysetMixin, viewsets.ModelViewSet):
+class UserAccountViewSet(viewsets.ModelViewSet):
     queryset = UserAccount.objects.all()
     serializer_class = UserAccountSerializer
 
@@ -146,8 +141,7 @@ class AdminPasswordResetView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request):
-        # 1. Check if requester is Admin/Staff
-        if not (request.user.role in ["admin", "saas_admin"]):
+        if request.user.role != "admin":
             return Response(
                 {"error": "You do not have permission to reset passwords."},
                 status=status.HTTP_403_FORBIDDEN,
@@ -164,23 +158,6 @@ class AdminPasswordResetView(APIView):
 
         try:
             target_user = get_object_or_404(UserAccount, pk=user_id)
-
-            # Tenant Isolation Check
-            # 1. SaaS Admin can reset anyone's password
-            # 2. Tenant Admin can only reset users in their own tenant
-            if request.user.role == "admin":
-                if target_user.tenant != request.user.tenant:
-                    return Response(
-                        {"error": "User not found in your organization."},
-                        status=status.HTTP_404_NOT_FOUND,
-                    )
-            elif request.user.role == "saas_admin":
-                # SaaS Admin is global
-                pass
-            else:
-                return Response(
-                    {"error": "Unauthorized role"}, status=status.HTTP_403_FORBIDDEN
-                )
 
             # Set password, activate, and audit atomically so a failure anywhere
             # rolls the whole change back — we never leave a new password in
@@ -206,9 +183,6 @@ class AdminPasswordResetView(APIView):
                     details={
                         "target_user_id": str(target_user.user_id),
                         "target_email": target_user.email,
-                        "target_tenant_id": str(
-                            getattr(target_user, "tenant_id", "") or ""
-                        ),
                         "initiator_role": getattr(request.user, "role", None),
                     },
                 )
@@ -251,12 +225,6 @@ def register_user(request):
 
     if serializer.is_valid():
         user = serializer.save()
-        try:
-            # Notify newly registered SaaS admin with login and recovery links.
-            send_saas_admin_registration_email(user)
-        except Exception as exc:
-            # Account should remain created even if email provider is temporarily unavailable.
-            logger.warning("Failed to send SaaS admin registration email: %s", exc)
         return Response(
             {
                 "message": "Registration successful. Please verify your email before signing in.",
@@ -286,10 +254,6 @@ class CustomTokenObtainPairView(TokenObtainPairView):
     """
     Login view that returns JWT tokens with custom claims (role, etc.)
     POST /api/users/login/
-
-    For saas_admin accounts this view adds a 2FA pre-flight check before
-    invoking the full serializer, so the frontend can guide the user through
-    the setup or TOTP entry flow without leaking sensitive error details.
     """
 
     serializer_class = MyTokenObtainPairSerializer
@@ -300,20 +264,14 @@ class CustomTokenObtainPairView(TokenObtainPairView):
     _LOCKOUT_MINUTES = 15
 
     def post(self, request, *args, **kwargs):
-        from datetime import timedelta
-
-        from django.utils import timezone
-
         email = (request.data.get("email") or "").strip().lower()
-        password = request.data.get("password", "")
-        totp_code = (request.data.get("totp_code") or "").strip()
 
-        # ── Lockout & 2FA pre-flight (only when email is provided) ───────────
+        # Enforce account lockout before attempting auth
         if email:
             try:
-                user = UserAccount.objects.get(email__iexact=email)
+                from django.utils import timezone
 
-                # Enforce account lockout before attempting auth
+                user = UserAccount.objects.get(email__iexact=email)
                 if user.locked_until and user.locked_until > timezone.now():
                     wait = (
                         int((user.locked_until - timezone.now()).total_seconds() / 60)
@@ -329,36 +287,9 @@ class CustomTokenObtainPairView(TokenObtainPairView):
                         },
                         status=status.HTTP_429_TOO_MANY_REQUESTS,
                     )
-
-                # 2FA pre-flight for saas_admin only
-                if user.role == "saas_admin" and user.check_password(password):
-                    if not user.is_active:
-                        pass  # Let serializer surface "not verified"
-                    elif not user.is_2fa_enabled:
-                        return Response(
-                            {
-                                "two_factor_required": True,
-                                "action": "setup_2fa",
-                                "message": (
-                                    "Your account requires 2FA. "
-                                    "Please set up your authenticator app."
-                                ),
-                            },
-                            status=status.HTTP_200_OK,
-                        )
-                    elif not totp_code:
-                        return Response(
-                            {
-                                "two_factor_required": True,
-                                "action": "enter_totp",
-                                "message": "Please enter your 6-digit authenticator code.",
-                            },
-                            status=status.HTTP_200_OK,
-                        )
             except UserAccount.DoesNotExist:
                 pass  # Unknown email — let serializer handle
 
-        # ── Delegate to DRF SimpleJWT serializer ─────────────────────────────
         try:
             response = super().post(request, *args, **kwargs)
         except Exception:
@@ -425,60 +356,16 @@ class PasswordResetView(views.APIView):
     permission_classes = [permissions.AllowAny]
     throttle_classes = [PasswordResetRateThrottle]
 
-    def _tenant_targets_for_email(self, email: str, request):
-        """
-        Resolve reset targets in current schema and, when on public schema,
-        across tenant schemas so forgot-password works for all registered accounts.
-        """
-        targets: list[tuple[UserAccount, object]] = []
-        seen: set[str] = set()
-
-        for user in UserAccount.objects.filter(email__iexact=email, is_active=True):
-            key = f"{connection.schema_name}:{user.pk}"
-            if key in seen:
-                continue
-            seen.add(key)
-            targets.append((user, getattr(user, "tenant", None)))
-
-        # If no user in current schema and we're on public, probe tenant schemas.
-        if targets or connection.schema_name != "public":
-            return targets
-
-        for tenant in Tenant.objects.exclude(schema_name="public"):
-            try:
-                with schema_context(tenant.schema_name):
-                    tenant_user = UserAccount.objects.filter(
-                        email__iexact=email, is_active=True
-                    ).first()
-                    if not tenant_user:
-                        continue
-                    key = f"{tenant.schema_name}:{tenant_user.pk}"
-                    if key in seen:
-                        continue
-                    seen.add(key)
-                    targets.append((tenant_user, tenant))
-            except Exception as exc:
-                logger.warning(
-                    "Password reset lookup failed for schema %s: %s",
-                    tenant.schema_name,
-                    exc,
-                )
-                continue
-
-        return targets
-
     def post(self, request):
         serializer = PasswordResetSerializer(data=request.data)
         if serializer.is_valid():
             email = serializer.validated_data["email"]
-            targets = self._tenant_targets_for_email(email, request)
 
             # Send only when an account exists, but always return the same
             # response. Distinguishing "does not exist" here would let an
-            # anonymous caller enumerate registered emails platform-wide
-            # (the lookup probes every tenant schema).
-            for user, tenant in targets:
-                send_password_reset_email(user, tenant=tenant, reason="forgot_password")
+            # anonymous caller enumerate registered emails.
+            for user in UserAccount.objects.filter(email__iexact=email, is_active=True):
+                send_password_reset_email(user, reason="forgot_password")
 
             return Response(
                 {
@@ -538,232 +425,6 @@ class EmailVerificationView(views.APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-# ── SaaS Admin 2FA Views ──────────────────────────────────────────────────────
-
-
-def _saas_admin_from_credentials(email: str, password: str):
-    """
-    Validate email + password for a saas_admin account.
-    Returns the UserAccount or raises Response-ready error details.
-    """
-    _CRED_ERR = {"error": "Invalid credentials."}
-    try:
-        user = UserAccount.objects.get(
-            email__iexact=email.strip().lower(), role="saas_admin"
-        )
-    except UserAccount.DoesNotExist:
-        return None, _CRED_ERR
-    if not user.check_password(password):
-        return None, _CRED_ERR
-    if not user.is_active:
-        return None, {"error": "Account not yet verified. Check your email."}
-    return user, None
-
-
-class TwoFactorSetupView(views.APIView):
-    """
-    Generate a TOTP secret for a saas_admin who hasn't set up 2FA yet.
-    Requires re-authentication (email + password in body — no JWT needed).
-    Returns {secret, qr_uri} so the admin can scan with Google Authenticator / Authy.
-    The secret is saved as *pending* (is_2fa_enabled stays False until /activate/).
-
-    POST /api/users/2fa/setup/
-    Body: { email, password }
-    """
-
-    permission_classes = [permissions.AllowAny]
-    throttle_classes = [LoginRateThrottle]
-
-    def post(self, request):
-        import pyotp
-
-        email = request.data.get("email", "")
-        password = request.data.get("password", "")
-
-        user, err = _saas_admin_from_credentials(email, password)
-        if err:
-            return Response(err, status=status.HTTP_403_FORBIDDEN)
-
-        # Generate a new TOTP secret and store it (pending activation)
-        secret = pyotp.random_base32()
-        totp = pyotp.TOTP(secret)
-        issuer = getattr(settings, "TOTP_ISSUER_NAME", "E-Learning Platform")
-        qr_uri = totp.provisioning_uri(name=user.email, issuer_name=issuer)
-
-        user.two_factor_secret = secret
-        user.save(update_fields=["two_factor_secret"])
-
-        return Response(
-            {
-                "secret": secret,
-                "qr_uri": qr_uri,
-                "instructions": (
-                    "Scan the QR code (or enter the secret) in your authenticator app, "
-                    "then call /api/users/2fa/activate/ with a valid TOTP code to complete setup."
-                ),
-            },
-            status=status.HTTP_200_OK,
-        )
-
-
-class TwoFactorActivateView(views.APIView):
-    """
-    Activate TOTP 2FA for a saas_admin account.
-    Verifies the TOTP code against the pending secret from /setup/.
-    On success, enables 2FA and returns a full JWT pair.
-
-    POST /api/users/2fa/activate/
-    Body: { email, password, totp_code }
-    """
-
-    permission_classes = [permissions.AllowAny]
-    throttle_classes = [LoginRateThrottle]
-
-    def post(self, request):
-        import pyotp
-        from rest_framework_simplejwt.tokens import RefreshToken as _RT
-
-        from .token_policy import role_token_lifetimes
-
-        email = request.data.get("email", "")
-        password = request.data.get("password", "")
-        totp_code = (request.data.get("totp_code") or "").strip()
-
-        user, err = _saas_admin_from_credentials(email, password)
-        if err:
-            return Response(err, status=status.HTTP_403_FORBIDDEN)
-
-        if not user.two_factor_secret:
-            return Response(
-                {
-                    "error": "No pending 2FA secret found. Call /api/users/2fa/setup/ first."
-                },
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        if not totp_code:
-            return Response(
-                {"error": "totp_code is required."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        totp = pyotp.TOTP(user.two_factor_secret)
-        if not totp.verify(totp_code, valid_window=1):
-            return Response(
-                {"error": "Invalid or expired TOTP code. Please try again."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        # Activate 2FA
-        user.is_2fa_enabled = True
-        user.save(update_fields=["is_2fa_enabled"])
-
-        # Issue JWT tokens with role-scoped lifetimes
-        refresh = _RT.for_user(user)
-        lifetimes = role_token_lifetimes(user.role)
-        refresh.set_exp(lifetime=lifetimes.refresh)
-        access = refresh.access_token
-        access.set_exp(lifetime=lifetimes.access)
-
-        record_audit_event(
-            action="users.2fa_activated",
-            user=user,
-            request=request,
-            details={"email": user.email},
-        )
-
-        return Response(
-            {
-                "message": "2FA successfully activated.",
-                "access": str(access),
-                "refresh": str(refresh),
-                "user": {
-                    "user_id": str(user.user_id),
-                    "email": user.email,
-                    "role": user.role,
-                },
-            },
-            status=status.HTTP_200_OK,
-        )
-
-
-# ── SaaS Staff Management (super admin only) ──────────────────────────────────
-
-from .permissions import IsSaaSAdmin as _IsSaaSAdmin
-from .serializers import SaasStaffCreateSerializer, SaasStaffSerializer
-
-
-class SaasStaffViewSet(viewsets.ViewSet):
-    """
-    CRUD for saas_staff accounts.
-    Only saas_admin (super admin) can access these endpoints.
-    """
-
-    permission_classes = [_IsSaaSAdmin]
-
-    def _staff_qs(self):
-        return UserAccount.objects.filter(role="saas_staff").order_by("-date_joined")
-
-    def list(self, request):
-        staff = self._staff_qs()
-        return Response(SaasStaffSerializer(staff, many=True).data)
-
-    def create(self, request):
-        serializer = SaasStaffCreateSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        user = serializer.save()
-        record_audit_event(
-            action="users.saas_staff_created",
-            user=request.user,
-            request=request,
-            details={"staff_email": user.email, "staff_id": str(user.user_id)},
-        )
-        return Response(SaasStaffSerializer(user).data, status=status.HTTP_201_CREATED)
-
-    def partial_update(self, request, pk=None):
-        try:
-            user = self._staff_qs().get(pk=pk)
-        except UserAccount.DoesNotExist:
-            return Response(
-                {"error": "Staff member not found."}, status=status.HTTP_404_NOT_FOUND
-            )
-
-        # Only allow toggling is_active, updating name fields, and assigning saas sub-role
-        allowed = {
-            k: v
-            for k, v in request.data.items()
-            if k in ("is_active", "first_name", "last_name", "saas_staff_role")
-        }
-        for field, value in allowed.items():
-            setattr(user, field, value)
-        user.save(update_fields=list(allowed.keys()))
-        record_audit_event(
-            action="users.saas_staff_updated",
-            user=request.user,
-            request=request,
-            details={"staff_email": user.email, "changes": allowed},
-        )
-        return Response(SaasStaffSerializer(user).data)
-
-    def destroy(self, request, pk=None):
-        try:
-            user = self._staff_qs().get(pk=pk)
-        except UserAccount.DoesNotExist:
-            return Response(
-                {"error": "Staff member not found."}, status=status.HTTP_404_NOT_FOUND
-            )
-        email = user.email
-        user.is_active = False
-        user.save(update_fields=["is_active"])
-        record_audit_event(
-            action="users.saas_staff_deactivated",
-            user=request.user,
-            request=request,
-            details={"staff_email": email},
-        )
-        return Response(status=status.HTTP_204_NO_CONTENT)
-
-
 class WebSocketTicketView(views.APIView):
     """
     POST /api/users/ws-ticket/
@@ -779,7 +440,7 @@ class WebSocketTicketView(views.APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     # Claims JWTAuthMiddleware and WS consumers rely on.
-    _COPIED_CLAIMS = ("tenant_schema", "tenant_id", "role", "username", "staff_role")
+    _COPIED_CLAIMS = ("role", "username", "staff_role")
 
     def post(self, request):
         from datetime import timedelta

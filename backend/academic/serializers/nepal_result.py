@@ -14,7 +14,7 @@ from academic.models.nepal_result import (
 class NepalGradingProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = NepalGradingProfile
-        exclude = ["tenant"]
+        exclude = []
         read_only_fields = ["profile_id", "is_system_default", "created_at", "updated_at"]
 
 
@@ -25,7 +25,7 @@ class ExamTermSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ExamTerm
-        exclude = ["tenant"]
+        exclude = []
         read_only_fields = ["term_id", "status", "published_at", "published_by", "created_by", "created_at", "updated_at"]
         extra_kwargs = {"grading_profile": {"required": False}}
 

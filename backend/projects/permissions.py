@@ -10,21 +10,18 @@ from ._helpers import (
     is_leader_of,
     is_member_of,
     is_mentor_of,
+    projects_feature_enabled,
     role_of,
-    tenant_has_projects_enabled,
 )
 
 
 class IsProjectsEnabled(BasePermission):
-    """Block all access when the tenant has not enabled the projects feature."""
+    """Block all access when the school has not enabled the projects feature."""
 
     message = "The projects feature is not enabled for this school."
 
     def has_permission(self, request, view):
-        tenant = getattr(request.user, "tenant", None) or getattr(
-            request, "tenant", None
-        )
-        return tenant_has_projects_enabled(tenant)
+        return projects_feature_enabled()
 
 
 class IsProjectMentorOrReadOnly(BasePermission):

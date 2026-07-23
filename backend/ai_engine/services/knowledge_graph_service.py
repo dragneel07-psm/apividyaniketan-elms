@@ -35,8 +35,7 @@ MAX_DEPTH = 5
 
 
 class KnowledgeGraphService:
-    def __init__(self, *, tenant, user=None):
-        self.tenant = tenant
+    def __init__(self, *, user=None):
         self.user = user
         self.config = get_ai_provider_config()
 
@@ -51,10 +50,8 @@ class KnowledgeGraphService:
         Add a prerequisite edge: skill requires prerequisite.
         Silently returns existing edge if already exists.
         """
-        skill = SkillTag.objects.using(using).get(id=skill_id, tenant=self.tenant)
-        prereq = SkillTag.objects.using(using).get(
-            id=prerequisite_id, tenant=self.tenant
-        )
+        skill = SkillTag.objects.using(using).get(id=skill_id)
+        prereq = SkillTag.objects.using(using).get(id=prerequisite_id)
 
         # Prevent self-loops
         if skill.id == prereq.id:
@@ -88,9 +85,7 @@ class KnowledgeGraphService:
         Return full prerequisite graph for a subject.
         Format: { nodes: [...], edges: [...] }
         """
-        skills = SkillTag.objects.using(using).filter(
-            tenant=self.tenant, subject_id=subject_id
-        )
+        skills = SkillTag.objects.using(using).filter(subject_id=subject_id)
         skill_ids = {str(s.id) for s in skills}
 
         edges = (
@@ -157,15 +152,11 @@ class KnowledgeGraphService:
         all_ids = set(root_causes.keys()) | low_mastery_ids
         tags = {
             str(t.id): t
-            for t in SkillTag.objects.using(using).filter(
-                id__in=all_ids, tenant=self.tenant
-            )
+            for t in SkillTag.objects.using(using).filter(id__in=all_ids)
         }
         skill_tags_all = {
             str(t.id): t
-            for t in SkillTag.objects.using(using).filter(
-                tenant=self.tenant, id__in=low_mastery_ids
-            )
+            for t in SkillTag.objects.using(using).filter(id__in=low_mastery_ids)
         }
 
         result = []
@@ -209,7 +200,7 @@ class KnowledgeGraphService:
         """
         skills = list(
             SkillTag.objects.using(using)
-            .filter(tenant=self.tenant, subject_id=subject_id)
+            .filter(subject_id=subject_id)
             .values("id", "name")
         )
         if len(skills) < 2:
@@ -273,7 +264,6 @@ class KnowledgeGraphService:
             pt = getattr(response.usage, "prompt_tokens", 0)
             ct = getattr(response.usage, "completion_tokens", 0)
             AIInteractionLog.objects.using(using).create(
-                tenant=self.tenant,
                 user=self.user,
                 feature_used="knowledge_graph_generation",
                 prompt_tokens=pt,

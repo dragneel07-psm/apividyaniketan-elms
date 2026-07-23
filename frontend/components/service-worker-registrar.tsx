@@ -19,7 +19,38 @@ export function ServiceWorkerRegistrar() {
         // serving a stale JS bundle indefinitely, long after a fix has
         // landed and the dev server has restarted.
         if (process.env.NODE_ENV !== 'production') {
-            console.log('[PWA] Service Worker registration skipped in development.');
+            const cleanupDevelopmentPwa = async () => {
+                if (!('serviceWorker' in navigator)) return;
+
+                const hadController = Boolean(navigator.serviceWorker.controller);
+                const registrations = await navigator.serviceWorker.getRegistrations();
+                await Promise.all(registrations.map((registration) => registration.unregister()));
+
+                if ('caches' in window) {
+                    const cacheNames = await caches.keys();
+                    await Promise.all(
+                        cacheNames
+                            .filter((name) => name.startsWith('elearn-'))
+                            .map((name) => caches.delete(name))
+                    );
+                }
+
+                // Unregistering does not release the current document from its
+                // controller. Reload exactly once so subsequent requests go to
+                // the dev server rather than the retired worker.
+                const reloadKey = 'pwa-dev-cleanup-reloaded';
+                if (hadController && sessionStorage.getItem(reloadKey) !== '1') {
+                    sessionStorage.setItem(reloadKey, '1');
+                    window.location.reload();
+                    return;
+                }
+                sessionStorage.removeItem(reloadKey);
+                console.log('[PWA] Development service workers and app caches cleared.');
+            };
+
+            void cleanupDevelopmentPwa().catch((error) => {
+                console.warn('[PWA] Development cleanup failed:', error);
+            });
             return;
         }
 

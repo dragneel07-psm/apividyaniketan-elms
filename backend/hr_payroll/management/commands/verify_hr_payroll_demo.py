@@ -2,10 +2,8 @@
 
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
-from django_tenants.utils import schema_context
 from rest_framework.test import APIRequestFactory, force_authenticate
 
-from core.models import Tenant
 from hr_payroll.models import Employee, LeaveApplication, PayrollPeriod, SalarySlip
 from hr_payroll.views import (
     DepartmentViewSet,
@@ -23,29 +21,19 @@ from users.models import UserAccount
 class Command(BaseCommand):
     help = "Verify seeded HR/payroll list and action endpoints without retaining mutations."
 
-    def add_arguments(self, parser):
-        parser.add_argument("--schema", required=True)
-
     def handle(self, *args, **options):
-        schema = str(options["schema"]).strip().lower()
-        tenant = Tenant.objects.filter(schema_name=schema).first()
-        if not tenant or schema == "public":
-            raise CommandError(f"Non-public tenant '{schema}' was not found.")
-
-        with schema_context(schema), transaction.atomic():
-            user = UserAccount.objects.filter(
-                tenant=tenant, email=f"hrdemo01@{schema}.local"
-            ).first()
+        with transaction.atomic():
+            user = UserAccount.objects.filter(email="hrdemo01@school.local").first()
             if not user:
                 raise CommandError("Seeded HR manager is missing. Run seed_hr_payroll_demo first.")
             factory = APIRequestFactory()
             checks = []
 
-            slips = SalarySlip.objects.filter(tenant=tenant)
+            slips = SalarySlip.objects.all()
             if slips.count() < 24:
                 raise CommandError("Expected at least 24 seeded salary slips.")
             if {"pf", "ssf", "none"} - set(
-                Employee.objects.filter(tenant=tenant).values_list(
+                Employee.objects.all().values_list(
                     "social_security_scheme", flat=True
                 )
             ):
@@ -73,7 +61,6 @@ class Command(BaseCommand):
                 request = getattr(factory, method)(
                     path, data or {}, format="json", HTTP_HOST="localhost"
                 )
-                request.tenant = tenant
                 force_authenticate(request, user=user)
                 kwargs = {"pk": pk} if pk else {}
                 response = view(request, **kwargs)
@@ -95,11 +82,11 @@ class Command(BaseCommand):
             for label, view in list_views:
                 call(label, view)
 
-            employee = Employee.objects.filter(tenant=tenant, employee_code="HRD008").get()
+            employee = Employee.objects.filter(employee_code="HRD008").get()
             call("employee.deactivate", EmployeeViewSet.as_view({"post": "deactivate"}), "post", pk=employee.pk)
             call("employee.reactivate", EmployeeViewSet.as_view({"post": "reactivate"}), "post", pk=employee.pk)
 
-            pending_leave = LeaveApplication.objects.filter(tenant=tenant, status="pending").first()
+            pending_leave = LeaveApplication.objects.filter(status="pending").first()
             if not pending_leave:
                 raise CommandError("A pending seeded leave application is required.")
             call(
@@ -113,13 +100,13 @@ class Command(BaseCommand):
                 data={"date": "2026-07-31", "records": [{"employee_id": str(employee.pk), "status": "present"}]},
             )
 
-            draft = PayrollPeriod.objects.filter(tenant=tenant, status="draft").first()
+            draft = PayrollPeriod.objects.filter(status="draft").first()
             if not draft:
                 raise CommandError("A draft seeded payroll period is required.")
             call("payroll.generate", PayrollPeriodViewSet.as_view({"post": "generate_slips"}), "post", pk=draft.pk)
             call("payroll.finalize", PayrollPeriodViewSet.as_view({"post": "finalize"}), "post", pk=draft.pk)
 
-            slip = SalarySlip.objects.filter(tenant=tenant, payroll_period=draft).first()
+            slip = SalarySlip.objects.filter(payroll_period=draft).first()
             call(
                 "salary_slip.mark_paid", SalarySlipViewSet.as_view({"post": "mark_paid"}),
                 "post",
@@ -130,6 +117,6 @@ class Command(BaseCommand):
 
             transaction.set_rollback(True)
 
-        self.stdout.write(self.style.SUCCESS(f"Verified {len(checks)} HR/payroll API workflows in {schema}; mutations rolled back."))
+        self.stdout.write(self.style.SUCCESS(f"Verified {len(checks)} HR/payroll API workflows; mutations rolled back."))
         for label, status_code in checks:
             self.stdout.write(f"  {label}: HTTP {status_code}")

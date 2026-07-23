@@ -126,19 +126,15 @@ class ProjectStreamConsumer(AsyncWebsocketConsumer):
             is_leader_of,
             is_member_of,
             is_mentor_of,
-            tenant_has_projects_enabled,
+            projects_feature_enabled,
         )
         from .models import Project
 
         project = Project.objects.filter(pk=project_id).first()
         if project is None:
             return False
-        # Tenant safety: caller must be in the same tenant as the project.
-        user_tenant = getattr(user, "tenant", None)
-        if user_tenant is not None and project.tenant_id != user_tenant.pk:
-            return False
         # Feature flag: same gate the REST API enforces via IsProjectsEnabled.
-        if not tenant_has_projects_enabled(user_tenant or project.tenant):
+        if not projects_feature_enabled():
             return False
         if is_admin(user):
             return True
@@ -229,11 +225,6 @@ class MentorDigestStreamConsumer(AsyncWebsocketConsumer):
 
     @database_sync_to_async
     def _tenant_allows(self, user) -> bool:
-        from ._helpers import tenant_has_projects_enabled
+        from ._helpers import projects_feature_enabled
 
-        tenant = getattr(user, "tenant", None)
-        if tenant is None:
-            # Allow saas_admin (no tenant) through — global visibility.
-            role = (getattr(user, "role", "") or "").lower()
-            return role in {"saas_admin", "admin", "staff"}
-        return tenant_has_projects_enabled(tenant)
+        return projects_feature_enabled()

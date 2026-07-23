@@ -4,8 +4,7 @@
 from datetime import datetime, timezone
 
 from django.contrib.auth import get_user_model
-from django_tenants.test.cases import FastTenantTestCase
-from django_tenants.utils import tenant_context
+from django.test import TestCase
 from rest_framework import status
 from rest_framework.test import APIClient
 from rest_framework_simplejwt.tokens import AccessToken, RefreshToken
@@ -13,35 +12,21 @@ from rest_framework_simplejwt.tokens import AccessToken, RefreshToken
 User = get_user_model()
 
 
-class RoleBasedTokenPolicyTests(FastTenantTestCase):
-    @classmethod
-    def setup_tenant(cls, tenant):
-        tenant.name = "Role Token Policy School"
-
-    @classmethod
-    def setup_domain(cls, domain):
-        domain.is_primary = True
-
+class RoleBasedTokenPolicyTests(TestCase):
     def setUp(self):
-        self.client = APIClient(
-            HTTP_HOST=self.get_test_tenant_domain(),
-            HTTP_X_TENANT_ID=self.tenant.schema_name,
+        self.client = APIClient()
+        self.admin = User.objects.create_user(
+            username="role_admin",
+            email="role_admin@example.com",
+            password="AdminPass@123",
+            role="admin",
         )
-        with tenant_context(self.tenant):
-            self.admin = User.objects.create_user(
-                username="role_admin",
-                email="role_admin@example.com",
-                password="AdminPass@123",
-                role="admin",
-                tenant=self.tenant,
-            )
-            self.student = User.objects.create_user(
-                username="role_student",
-                email="role_student@example.com",
-                password="StudentPass@123",
-                role="student",
-                tenant=self.tenant,
-            )
+        self.student = User.objects.create_user(
+            username="role_student",
+            email="role_student@example.com",
+            password="StudentPass@123",
+            role="student",
+        )
 
     def _login(self, email: str, password: str):
         response = self.client.post(

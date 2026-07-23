@@ -29,8 +29,10 @@ from notifications.services import NotificationService
 
 
 class RiskAnalyticsService:
-    def __init__(self, *, tenant, user=None):
-        self.tenant = tenant
+    def __init__(self, *, tenant=None, user=None):
+        # `tenant` is accepted for backward compatibility with callers
+        # outside this module's assigned cleanup scope; it is unused now
+        # that tenant scoping has been removed.
         self.user = user
         self.lookback_days = int(getattr(settings, "AI_RISK_LOOKBACK_DAYS", 30))
         self.inactivity_days = int(getattr(settings, "AI_RISK_INACTIVITY_DAYS", 14))
@@ -41,7 +43,7 @@ class RiskAnalyticsService:
         self.use_llm_explanations = bool(
             getattr(settings, "AI_RISK_USE_LLM_EXPLANATIONS", False)
         )
-        self.rag = RAGTutorService(tenant=tenant)
+        self.rag = RAGTutorService()
 
     @staticmethod
     def _unique(values: list[str]) -> list[str]:
@@ -426,7 +428,6 @@ class RiskAnalyticsService:
             if recipient is None:
                 continue
             already_sent = Notification.objects.filter(
-                tenant=self.tenant,
                 recipient=recipient,
                 title=title,
                 created_at__gte=window_start,
@@ -437,7 +438,6 @@ class RiskAnalyticsService:
                 recipient=recipient,
                 title=title,
                 message=message,
-                tenant=self.tenant,
                 link="/teacher/students",
             )
 
@@ -513,7 +513,7 @@ class RiskAnalyticsService:
     ) -> list[dict[str, Any]]:
         students = list(
             Student.objects.select_related("user")
-            .filter(academic_class_id=class_id, user__tenant=self.tenant)
+            .filter(academic_class_id=class_id)
             .order_by("user__first_name", "user__last_name")
         )
         payloads = [

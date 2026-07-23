@@ -2,7 +2,7 @@
 # Unauthorized copying, modification, or distribution of this file,
 # via any medium, is strictly prohibited. Proprietary and confidential.
 from django.contrib.auth import get_user_model
-from django_tenants.test.cases import FastTenantTestCase
+from django.test import TestCase
 from rest_framework import status
 from rest_framework.test import APIClient
 
@@ -13,20 +13,9 @@ from core.models import AuditLog
 User = get_user_model()
 
 
-class ResultCardReportTests(FastTenantTestCase):
-    @classmethod
-    def setup_tenant(cls, tenant):
-        tenant.name = "Result Report Test School"
-
-    @classmethod
-    def setup_domain(cls, domain):
-        domain.is_primary = True
-
+class ResultCardReportTests(TestCase):
     def setUp(self):
-        self.client = APIClient(
-            HTTP_HOST=self.get_test_tenant_domain(),
-            HTTP_X_TENANT_ID=self.tenant.schema_name,
-        )
+        self.client = APIClient()
         self.admin_user = User.objects.create_user(
             username="report_admin",
             email="report_admin@example.com",
@@ -34,7 +23,6 @@ class ResultCardReportTests(FastTenantTestCase):
             role="admin",
             first_name="Report",
             last_name="Admin",
-            tenant=self.tenant,
         )
         self.student_user = User.objects.create_user(
             username="report_student",
@@ -43,7 +31,6 @@ class ResultCardReportTests(FastTenantTestCase):
             role="student",
             first_name="Report",
             last_name="Student",
-            tenant=self.tenant,
         )
         self.other_student_user = User.objects.create_user(
             username="report_student_other",
@@ -52,7 +39,6 @@ class ResultCardReportTests(FastTenantTestCase):
             role="student",
             first_name="Other",
             last_name="Student",
-            tenant=self.tenant,
         )
         self.parent_user = User.objects.create_user(
             username="report_parent",
@@ -61,7 +47,6 @@ class ResultCardReportTests(FastTenantTestCase):
             role="parent",
             first_name="Report",
             last_name="Parent",
-            tenant=self.tenant,
         )
         self.teacher_user = User.objects.create_user(
             username="report_teacher",
@@ -70,7 +55,6 @@ class ResultCardReportTests(FastTenantTestCase):
             role="teacher",
             first_name="Report",
             last_name="Teacher",
-            tenant=self.tenant,
         )
 
         self.academic_class = AcademicClass.objects.create(name="Grade 10", order=10)

@@ -55,7 +55,17 @@ export type AdminModule =
     | '/admin/communication/templates'
     | '/admin/notices'
     | '/admin/settings'
-    | '/admin/notifications';
+    | '/admin/notifications'
+    | '/admin/school-site/news'
+    | '/admin/school-site/gallery'
+    | '/admin/school-site/testimonials'
+    | '/admin/school-site/programs'
+    | '/admin/school-site/core-values'
+    | '/admin/school-site/history'
+    | '/admin/school-site/student-life'
+    | '/admin/school-site/field-trips'
+    | '/admin/school-site/wellbeing'
+    | '/admin/school-site/faqs';
 
 /** Modules every logged-in admin-panel user always sees */
 const COMMON: AdminModule[] = ['/admin', '/admin/calendar', '/admin/notifications'];
@@ -100,6 +110,16 @@ const ADMIN_FULL: AdminModule[] = [
     '/admin/settings/staff-access',
     '/admin/settings/school-profile',
     '/admin/notifications',
+    '/admin/school-site/news',
+    '/admin/school-site/gallery',
+    '/admin/school-site/testimonials',
+    '/admin/school-site/programs',
+    '/admin/school-site/core-values',
+    '/admin/school-site/history',
+    '/admin/school-site/student-life',
+    '/admin/school-site/field-trips',
+    '/admin/school-site/wellbeing',
+    '/admin/school-site/faqs',
 ];
 
 const STAFF_ROLE_MODULES: Record<StaffRole, AdminModule[]> = {

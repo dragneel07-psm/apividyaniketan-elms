@@ -67,6 +67,10 @@ class TokenBudgetService:
         """
         Return the most specific active budget for this request.
         Student-level wins over tenant-level. Returns None if no budget.
+
+        `tenant` is accepted for backward compatibility with callers outside
+        this module's cleanup scope; it is unused now that tenant scoping
+        has been removed from AITokenBudget.
         """
         from ai_engine.models import AITokenBudget
 
@@ -74,15 +78,15 @@ class TokenBudgetService:
         if student is not None:
             budget = (
                 AITokenBudget.objects.using(db_alias)
-                .filter(tenant=tenant, student=student, is_active=True)
+                .filter(student=student, is_active=True)
                 .first()
             )
             if budget:
                 return budget
-        # Tenant-level fallback
+        # School-wide fallback (no student attached)
         return (
             AITokenBudget.objects.using(db_alias)
-            .filter(tenant=tenant, student__isnull=True, is_active=True)
+            .filter(student__isnull=True, is_active=True)
             .first()
         )
 
@@ -90,7 +94,7 @@ class TokenBudgetService:
         self, tenant, student, tokens_requested: int = 1, db_alias: str = "default"
     ) -> None:
         """
-        Raise TokenBudgetExceeded if the student/tenant has no remaining budget.
+        Raise TokenBudgetExceeded if the student has no remaining budget.
         tokens_requested is an estimate (e.g. max_tokens setting).
         Pass 0 or None to skip the pre-flight check (deduct will still enforce).
         """
@@ -189,7 +193,6 @@ class TokenBudgetService:
         from ai_engine.models import AITokenBudget
 
         budget, _ = AITokenBudget.objects.using(db_alias).update_or_create(
-            tenant=tenant,
             student=student,
             defaults={
                 "daily_limit_tokens": daily_limit_tokens,

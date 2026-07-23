@@ -5,7 +5,7 @@ from datetime import timedelta
 
 from django.contrib.auth import get_user_model
 from django.utils import timezone
-from django_tenants.test.cases import FastTenantTestCase
+from django.test import TestCase
 from rest_framework import status
 from rest_framework.test import APIClient
 
@@ -19,25 +19,15 @@ from academic.models import (
     Teacher,
 )
 from academic.models.assessment import Assessment, Result
+from academic.services.academic_year_service import ensure_current_academic_year
 from academic.models.submission import Submission
 
 User = get_user_model()
 
 
-class StudentProfileOverviewTests(FastTenantTestCase):
-    @classmethod
-    def setup_tenant(cls, tenant):
-        tenant.name = "Student Profile Test School"
-
-    @classmethod
-    def setup_domain(cls, domain):
-        domain.is_primary = True
-
+class StudentProfileOverviewTests(TestCase):
     def setUp(self):
-        self.client = APIClient(
-            HTTP_HOST=self.get_test_tenant_domain(),
-            HTTP_X_TENANT_ID=self.tenant.schema_name,
-        )
+        self.client = APIClient()
 
         self.admin_user = User.objects.create_user(
             username="student_profile_admin",
@@ -46,7 +36,6 @@ class StudentProfileOverviewTests(FastTenantTestCase):
             role="admin",
             first_name="Admin",
             last_name="User",
-            tenant=self.tenant,
         )
         self.teacher_user = User.objects.create_user(
             username="student_profile_teacher",
@@ -55,7 +44,6 @@ class StudentProfileOverviewTests(FastTenantTestCase):
             role="teacher",
             first_name="Class",
             last_name="Teacher",
-            tenant=self.tenant,
         )
         self.unassigned_teacher_user = User.objects.create_user(
             username="student_profile_other_teacher",
@@ -64,7 +52,6 @@ class StudentProfileOverviewTests(FastTenantTestCase):
             role="teacher",
             first_name="Other",
             last_name="Teacher",
-            tenant=self.tenant,
         )
         self.student_user = User.objects.create_user(
             username="student_profile_student",
@@ -73,7 +60,6 @@ class StudentProfileOverviewTests(FastTenantTestCase):
             role="student",
             first_name="Ravi",
             last_name="Karki",
-            tenant=self.tenant,
         )
 
         self.academic_class = AcademicClass.objects.create(name="Grade 9", order=9)
@@ -102,10 +88,13 @@ class StudentProfileOverviewTests(FastTenantTestCase):
             total_minutes_learned=210,
         )
 
+        self.year = ensure_current_academic_year()
+
         self.math = Subject.objects.create(
             name="Mathematics",
             code="MTH-9",
             academic_class=self.academic_class,
+            academic_year=self.year,
             teacher=self.teacher_profile,
             is_active=True,
         )
@@ -113,6 +102,7 @@ class StudentProfileOverviewTests(FastTenantTestCase):
             name="Science",
             code="SCI-9",
             academic_class=self.academic_class,
+            academic_year=self.year,
             teacher=self.teacher_profile,
             is_active=True,
         )
@@ -121,6 +111,7 @@ class StudentProfileOverviewTests(FastTenantTestCase):
         self._create_lessons(self.science, total=2, published=1)
 
         self.quiz = Assessment.objects.create(
+            academic_year=self.year,
             subject=self.math,
             section=self.section,
             title="Math Quiz 1",
@@ -133,6 +124,7 @@ class StudentProfileOverviewTests(FastTenantTestCase):
             blooms_level="apply",
         )
         self.assignment = Assessment.objects.create(
+            academic_year=self.year,
             subject=self.science,
             section=self.section,
             title="Science Assignment 1",
@@ -219,8 +211,11 @@ class StudentProfileOverviewTests(FastTenantTestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
     def test_unassigned_teacher_cannot_view_student_profile_overview(self):
+        # The queryset scopes students to classes the teacher teaches/is
+        # assigned to, so an out-of-scope student is 404 (not found in this
+        # teacher's scope) rather than 403 — avoids confirming existence.
         self.client.force_authenticate(user=self.unassigned_teacher_user)
         response = self.client.get(
             f"/api/academic/students/{self.student.student_id}/profile-overview/"
         )
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)

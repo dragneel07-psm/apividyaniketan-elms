@@ -9,7 +9,6 @@ from rest_framework.views import APIView
 from users.permissions import (
     IsAdmin,
     IsAdminOrSaaSAdmin,
-    IsSaaSAdmin,
     IsStudent,
     IsTeacher,
     IsTeacherOrAdmin,

@@ -42,8 +42,7 @@ MAX_WRONG_PER_SUBJECT = 20
 
 
 class MisconceptionDetectionService:
-    def __init__(self, *, tenant, user=None):
-        self.tenant = tenant
+    def __init__(self, *, user=None):
         self.user = user
         self.config = get_ai_provider_config()
 
@@ -258,7 +257,6 @@ class MisconceptionDetectionService:
             ct = getattr(response.usage, "completion_tokens", 0)
 
             AIInteractionLog.objects.using(using).create(
-                tenant=self.tenant,
                 user=self.user,
                 feature_used="misconception_detection",
                 prompt_tokens=pt,
@@ -303,7 +301,6 @@ class MisconceptionDetectionService:
         return (
             AiGeneratedArtifact.objects.using(using)
             .filter(
-                tenant=self.tenant,
                 artifact_type="misconception_report",
                 source_type="student",
                 source_id=student_id_str,
@@ -316,14 +313,12 @@ class MisconceptionDetectionService:
     def _save_cache(self, student_id_str: str, content: dict, using: str):
         # Delete old cache entries for this student
         AiGeneratedArtifact.objects.using(using).filter(
-            tenant=self.tenant,
             artifact_type="misconception_report",
             source_type="student",
             source_id=student_id_str,
         ).delete()
 
         AiGeneratedArtifact.objects.using(using).create(
-            tenant=self.tenant,
             artifact_type="misconception_report",
             source_type="student",
             source_id=student_id_str,

@@ -2,7 +2,7 @@
 # Unauthorized copying, modification, or distribution of this file,
 # via any medium, is strictly prohibited. Proprietary and confidential.
 from django.contrib.auth import get_user_model
-from django_tenants.test.cases import FastTenantTestCase
+from django.test import TestCase
 from rest_framework import status
 from rest_framework.test import APIClient
 
@@ -11,33 +11,20 @@ from core.models import AuditLog
 User = get_user_model()
 
 
-class UserRoleAuditLoggingTests(FastTenantTestCase):
-    @classmethod
-    def setup_tenant(cls, tenant):
-        tenant.name = "User Audit School"
-
-    @classmethod
-    def setup_domain(cls, domain):
-        domain.is_primary = True
-
+class UserRoleAuditLoggingTests(TestCase):
     def setUp(self):
-        self.client = APIClient(
-            HTTP_HOST=self.get_test_tenant_domain(),
-            HTTP_X_TENANT_ID=self.tenant.schema_name,
-        )
+        self.client = APIClient()
         self.admin_user = User.objects.create_user(
             username="user_audit_admin",
             email="user_audit_admin@example.com",
             password="Admin@1234",
             role="admin",
-            tenant=self.tenant,
         )
         self.target_user = User.objects.create_user(
             username="user_audit_target",
             email="user_audit_target@example.com",
             password="Teacher@1234",
             role="teacher",
-            tenant=self.tenant,
         )
 
     def test_role_change_creates_audit_log(self):

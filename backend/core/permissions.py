@@ -3,11 +3,11 @@
 # via any medium, is strictly prohibited. Proprietary and confidential.
 from rest_framework.permissions import BasePermission
 
-ADMIN_ROLES = {"admin", "staff", "saas_admin"}
+ADMIN_ROLES = {"admin", "staff"}
 
 
 class IsAdminOrStaff(BasePermission):
-    """Allow access only to users with admin, staff, or saas_admin roles."""
+    """Allow access only to users with admin or staff roles."""
 
     def has_permission(self, request, view):
         return bool(

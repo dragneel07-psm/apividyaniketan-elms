@@ -1,7 +1,7 @@
 # Copyright (c) 2024-2026 Pramod Singh Manyal. All rights reserved.
 # Unauthorized copying, modification, or distribution of this file,
 # via any medium, is strictly prohibited. Proprietary and confidential.
-from django_tenants.test.cases import FastTenantTestCase
+from django.test import TestCase
 from rest_framework import status
 from rest_framework.test import APIClient
 
@@ -18,15 +18,7 @@ from academic.models import (
 from users.models import UserAccount
 
 
-class ExamAccessControlTests(FastTenantTestCase):
-    @classmethod
-    def setup_tenant(cls, tenant):
-        tenant.name = "Exam Security School"
-
-    @classmethod
-    def setup_domain(cls, domain):
-        domain.is_primary = True
-
+class ExamAccessControlTests(TestCase):
     @staticmethod
     def _items(response):
         if isinstance(response.data, dict):
@@ -34,31 +26,25 @@ class ExamAccessControlTests(FastTenantTestCase):
         return response.data
 
     def setUp(self):
-        self.client = APIClient(
-            HTTP_HOST=self.get_test_tenant_domain(),
-            HTTP_X_TENANT_ID=self.tenant.schema_name,
-        )
+        self.client = APIClient()
 
         self.teacher_user = UserAccount.objects.create_user(
             username="exam_teacher",
             email="exam_teacher@example.com",
             password="Teacher@1234",
             role="teacher",
-            tenant=self.tenant,
         )
         self.student_user = UserAccount.objects.create_user(
             username="exam_student",
             email="exam_student@example.com",
             password="Student@1234",
             role="student",
-            tenant=self.tenant,
         )
         self.parent_user = UserAccount.objects.create_user(
             username="exam_parent",
             email="exam_parent@example.com",
             password="Parent@1234",
             role="parent",
-            tenant=self.tenant,
         )
 
         self.year, _ = AcademicYear.objects.get_or_create(

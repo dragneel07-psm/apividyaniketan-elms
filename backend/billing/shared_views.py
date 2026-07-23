@@ -5,7 +5,6 @@ from __future__ import annotations
 
 from django.db import IntegrityError, transaction
 from rest_framework import status
-from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 
 from .idempotency import is_valid_idempotency_key
@@ -15,39 +14,14 @@ from .models import BillingIdempotencyKey
 
 
 class BillingSchemaGuardMixin:
+    """
+    Historical no-op guard (used to enforce public-vs-tenant schema access
+    under the removed multi-tenancy setup). Kept only so existing view
+    classes that inherit it don't all need touching; carries no behavior.
+    """
+
     require_public_schema = False
     require_tenant_schema = False
-
-    def _schema_name(self, request):
-        tenant = getattr(request, "tenant", None)
-        return getattr(tenant, "schema_name", "public") if tenant else "public"
-
-    def _request_tenant(self, request):
-        tenant = getattr(request, "tenant", None)
-        if tenant and getattr(tenant, "schema_name", "public") != "public":
-            return tenant
-        return None
-
-    def initial(self, request, *args, **kwargs):
-        super().initial(request, *args, **kwargs)
-        schema_name = self._schema_name(request)
-        user_tenant = getattr(request.user, "tenant", None)
-        request_tenant = self._request_tenant(request)
-
-        if self.require_public_schema and schema_name != "public":
-            raise PermissionDenied(
-                "This endpoint is available only on the public schema."
-            )
-
-        if self.require_tenant_schema:
-            if schema_name == "public":
-                raise PermissionDenied("This endpoint requires a school tenant schema.")
-            if not user_tenant:
-                raise PermissionDenied(
-                    "Authenticated user is not associated with a tenant."
-                )
-            if request_tenant and user_tenant != request_tenant:
-                raise PermissionDenied("Cross-tenant access denied.")
 
 
 class BillingIdempotencyMixin:
@@ -65,7 +39,6 @@ class BillingIdempotencyMixin:
     def _load_or_create_idempotency_record(
         self, request, *, endpoint: str, idempotency_key: str, fingerprint: str
     ):
-        tenant = getattr(request.user, "tenant", None)
         try:
             with transaction.atomic():
                 try:
@@ -77,7 +50,6 @@ class BillingIdempotencyMixin:
                     return record, False
                 except BillingIdempotencyKey.DoesNotExist:
                     record = BillingIdempotencyKey.objects.create(
-                        tenant=tenant,
                         user=request.user,
                         endpoint=endpoint,
                         idempotency_key=idempotency_key,

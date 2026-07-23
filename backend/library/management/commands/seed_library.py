@@ -2,19 +2,15 @@
 # Unauthorized copying, modification, or distribution of this file,
 # via any medium, is strictly prohibited. Proprietary and confidential.
 from django.core.management.base import BaseCommand
-from django_tenants.utils import schema_context
 
-from core.models import Tenant
 from library.models import Book
 
 
 class Command(BaseCommand):
-    help = "Seeds default library books for all tenants"
+    help = "Seeds default library books"
 
     def handle(self, *args, **options):
         self.stdout.write("Seeding library books...")
-
-        tenants = Tenant.objects.exclude(schema_name="public")
 
         books_data = [
             {
@@ -55,29 +51,16 @@ class Command(BaseCommand):
             },
         ]
 
-        if not tenants.exists():
-            self.stdout.write(
-                self.style.WARNING("No tenants found! run init_tenant first.")
+        for b_data in books_data:
+            book, created = Book.objects.get_or_create(
+                title=b_data["title"], author=b_data["author"], defaults=b_data
             )
-            return
-
-        for tenant in tenants:
-            self.stdout.write(f"Processing tenant: {tenant.name}")
-
-            with schema_context(tenant.schema_name):
-                for b_data in books_data:
-                    book, created = Book.objects.get_or_create(
-                        title=b_data["title"], author=b_data["author"], defaults=b_data
-                    )
-                    if created:
-                        self.stdout.write(
-                            self.style.SUCCESS(f"  + Created book: {book.title}")
-                        )
-                    else:
-                        # Update existing book
-                        for key, value in b_data.items():
-                            setattr(book, key, value)
-                        book.save()
-                        self.stdout.write(f"  . Updated/Verified book: {book.title}")
+            if created:
+                self.stdout.write(self.style.SUCCESS(f"  + Created book: {book.title}"))
+            else:
+                for key, value in b_data.items():
+                    setattr(book, key, value)
+                book.save()
+                self.stdout.write(f"  . Updated/Verified book: {book.title}")
 
         self.stdout.write(self.style.SUCCESS("Library seeding complete!"))

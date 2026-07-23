@@ -65,8 +65,7 @@ class ComplaintViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         user = self.request.user
         role = getattr(user, "role", "student")
-        schema = getattr(getattr(user, "tenant", None), "schema_name", "")
-        qs = Complaint.objects.filter(tenant_schema=schema)
+        qs = Complaint.objects.all()
 
         if role in ("admin", "staff", "principal"):
             status_filter = self.request.query_params.get("status")
@@ -82,8 +81,7 @@ class ComplaintViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         user = self.request.user
-        schema = getattr(getattr(user, "tenant", None), "schema_name", "")
-        serializer.save(submitted_by=user, tenant_schema=schema)
+        serializer.save(submitted_by=user)
 
     @action(detail=True, methods=["post"])
     def resolve(self, request, pk=None):
@@ -117,7 +115,6 @@ def _notify_complaint(complaint, event: str, note: str = ""):
         from notifications.services import NotificationService
 
         user = complaint.submitted_by
-        tenant = getattr(user, "tenant", None)
         if event == "resolved":
             title = "✅ Complaint Resolved"
             message = (
@@ -130,7 +127,6 @@ def _notify_complaint(complaint, event: str, note: str = ""):
             recipient=user,
             title=title,
             message=message,
-            tenant=tenant,
             link="/student/complaints",
         )
     except Exception as exc:

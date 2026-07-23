@@ -11,12 +11,6 @@ class HostelBlock(models.Model):
     block_id = models.UUIDField(
         primary_key=True, default=uuid_lib.uuid4, editable=False
     )
-    tenant = models.ForeignKey(
-        "core.Tenant",
-        on_delete=models.CASCADE,
-        related_name="hostel_blocks",
-        db_constraint=False,
-    )
     name = models.CharField(max_length=100)
     GENDER = [("male", "Male"), ("female", "Female"), ("mixed", "Mixed")]
     gender = models.CharField(max_length=10, choices=GENDER, default="mixed")
@@ -43,12 +37,6 @@ class HostelBlock(models.Model):
 
 class HostelRoom(models.Model):
     room_id = models.UUIDField(primary_key=True, default=uuid_lib.uuid4, editable=False)
-    tenant = models.ForeignKey(
-        "core.Tenant",
-        on_delete=models.CASCADE,
-        related_name="hostel_rooms",
-        db_constraint=False,
-    )
     block = models.ForeignKey(
         HostelBlock, on_delete=models.CASCADE, related_name="rooms", db_constraint=False
     )
@@ -88,12 +76,6 @@ class HostelAllotment(models.Model):
     allotment_id = models.UUIDField(
         primary_key=True, default=uuid_lib.uuid4, editable=False
     )
-    tenant = models.ForeignKey(
-        "core.Tenant",
-        on_delete=models.CASCADE,
-        related_name="hostel_allotments",
-        db_constraint=False,
-    )
     student = models.ForeignKey(
         "academic.Student",
         on_delete=models.CASCADE,
@@ -116,7 +98,7 @@ class HostelAllotment(models.Model):
         ordering = ["-check_in_date"]
         indexes = [
             models.Index(
-                fields=["tenant", "is_active"], name="hostel_allot_tenant_active_idx"
+                fields=["is_active"], name="hostel_allot_tenant_active_idx"
             ),
         ]
 

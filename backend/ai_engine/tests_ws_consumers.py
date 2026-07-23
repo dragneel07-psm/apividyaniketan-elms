@@ -196,21 +196,6 @@ class TutorStreamConsumerTests(TestCase):
         self.assertIn("message", response["detail"])
         await comm.disconnect()
 
-    async def test_missing_tenant_returns_error(self):
-        user = _make_user(pk=5, role="student")
-        user.tenant = None
-
-        comm = WebsocketCommunicator(self._app(), "/ws/tutor/chat/")
-        comm.scope["user"] = user
-        connected, _ = await comm.connect()
-        self.assertTrue(connected)
-
-        await comm.send_to(text_data=json.dumps({"type": "chat", "message": "hello"}))
-        response = await comm.receive_json_from()
-        self.assertEqual(response["type"], "error")
-        self.assertIn("tenant", response["detail"])
-        await comm.disconnect()
-
     async def test_budget_exceeded_returns_budget_frame(self):
         from ai_engine.services.token_budget_service import TokenBudgetExceeded
 

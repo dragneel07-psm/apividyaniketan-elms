@@ -1033,6 +1033,103 @@ export function normalizeArrayPayload<T>(payload: T[] | PaginatedResponse<T> | n
     return [];
 }
 
+// School-site content (admin-managed marketing site data — /admin/school-site/*)
+export interface SiteContentBase {
+    id: number;
+    order: number;
+    is_active: boolean;
+}
+
+export interface NewsArticle extends SiteContentBase {
+    title: string;
+    slug: string;
+    excerpt: string;
+    body: string;
+    category: 'academics' | 'events' | 'achievements' | 'community';
+    published_date: string;
+    image?: File | null;
+    image_url?: string | null;
+}
+
+export interface GalleryItem extends SiteContentBase {
+    caption: string;
+    category: 'campus' | 'academics' | 'sports' | 'culture' | 'events';
+    image?: File | null;
+    image_url?: string | null;
+}
+
+export interface Testimonial extends SiteContentBase {
+    quote: string;
+    name: string;
+    role: string;
+}
+
+export interface Program extends SiteContentBase {
+    title: string;
+    description: string;
+    icon: 'book' | 'flask' | 'palette' | 'trophy';
+}
+
+export interface CoreValue extends SiteContentBase {
+    title: string;
+    description: string;
+}
+
+export interface HistoryMilestone extends SiteContentBase {
+    year: string;
+    title: string;
+    description: string;
+}
+
+export interface StudentLifeActivity extends SiteContentBase {
+    name: string;
+    description: string;
+    category: 'clubs' | 'sports' | 'arts' | 'leadership';
+}
+
+export interface FieldTrip extends SiteContentBase {
+    title: string;
+    description: string;
+    grade_band: string;
+}
+
+export interface WellbeingSupport extends SiteContentBase {
+    title: string;
+    description: string;
+}
+
+export interface AdmissionFaq extends SiteContentBase {
+    question: string;
+    answer: string;
+}
+
+function contentCrudAPI<T extends { id: number }>(basePath: string) {
+    return {
+        list: async (): Promise<T[]> =>
+            normalizeArrayPayload(await apiRequest<T[] | PaginatedResponse<T>>(basePath)),
+        create: (data: FormData | Partial<T>) => apiRequest<T>(basePath, {
+            method: 'POST',
+            body: data instanceof FormData ? data : JSON.stringify(data),
+        }),
+        update: (id: number, data: FormData | Partial<T>) => apiRequest<T>(`${basePath}${id}/`, {
+            method: 'PATCH',
+            body: data instanceof FormData ? data : JSON.stringify(data),
+        }),
+        remove: (id: number) => apiRequest<void>(`${basePath}${id}/`, { method: 'DELETE' }),
+    };
+}
+
+export const newsArticlesAPI = contentCrudAPI<NewsArticle>('/academic/news-articles/');
+export const galleryItemsAPI = contentCrudAPI<GalleryItem>('/academic/gallery-items/');
+export const testimonialsAPI = contentCrudAPI<Testimonial>('/academic/testimonials/');
+export const programsAPI = contentCrudAPI<Program>('/academic/programs/');
+export const coreValuesAPI = contentCrudAPI<CoreValue>('/academic/core-values/');
+export const historyMilestonesAPI = contentCrudAPI<HistoryMilestone>('/academic/history-milestones/');
+export const studentLifeActivitiesAPI = contentCrudAPI<StudentLifeActivity>('/academic/student-life-activities/');
+export const fieldTripsAPI = contentCrudAPI<FieldTrip>('/academic/field-trips/');
+export const wellbeingSupportAPI = contentCrudAPI<WellbeingSupport>('/academic/wellbeing-support/');
+export const admissionFaqsAPI = contentCrudAPI<AdmissionFaq>('/academic/admission-faqs/');
+
 // Phase B report row types
 export interface DayBookRow {
     date: string;

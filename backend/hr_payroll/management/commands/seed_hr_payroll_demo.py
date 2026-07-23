@@ -3,12 +3,10 @@
 from datetime import date, time, timedelta
 from decimal import Decimal
 
-from django.core.management.base import BaseCommand, CommandError
+from django.core.management.base import BaseCommand
 from django.db import transaction
 from django.utils import timezone
-from django_tenants.utils import schema_context
 
-from core.models import Tenant
 from hr_payroll.models import (
     Department,
     Employee,
@@ -50,66 +48,54 @@ LEAVE_TYPES = [
 
 
 class Command(BaseCommand):
-    help = "Seed complete HR/payroll demo data into one non-public tenant schema."
-
-    def add_arguments(self, parser):
-        parser.add_argument("--schema", required=True, help="Target tenant schema, for example qa.")
+    help = "Seed complete HR/payroll demo data."
 
     def handle(self, *args, **options):
-        schema = str(options["schema"]).strip().lower()
-        if not schema or schema == "public":
-            raise CommandError("--schema must identify a non-public tenant.")
-        tenant = Tenant.objects.filter(schema_name=schema).first()
-        if not tenant:
-            raise CommandError(f"Tenant schema '{schema}' was not found.")
-
-        with schema_context(schema), transaction.atomic():
-            departments = self._departments(tenant)
-            employees = self._employees(tenant, departments)
+        with transaction.atomic():
+            departments = self._departments()
+            employees = self._employees(departments)
             self._department_heads(departments, employees)
-            leave_types = self._leave_types(tenant)
-            self._attendance(tenant, employees)
-            self._leave_applications(tenant, employees, leave_types)
-            self._payroll(tenant, employees)
+            leave_types = self._leave_types()
+            self._attendance(employees)
+            self._leave_applications(employees, leave_types)
+            self._payroll(employees)
             counts = {
-                "departments": Department.objects.filter(tenant=tenant).count(),
-                "employees": Employee.objects.filter(tenant=tenant).count(),
-                "leave_types": LeaveType.objects.filter(tenant=tenant).count(),
-                "leave_applications": LeaveApplication.objects.filter(tenant=tenant).count(),
-                "attendance": StaffAttendance.objects.filter(tenant=tenant).count(),
-                "periods": PayrollPeriod.objects.filter(tenant=tenant).count(),
-                "salary_slips": SalarySlip.objects.filter(tenant=tenant).count(),
+                "departments": Department.objects.all().count(),
+                "employees": Employee.objects.all().count(),
+                "leave_types": LeaveType.objects.all().count(),
+                "leave_applications": LeaveApplication.objects.all().count(),
+                "attendance": StaffAttendance.objects.all().count(),
+                "periods": PayrollPeriod.objects.all().count(),
+                "salary_slips": SalarySlip.objects.all().count(),
             }
 
         summary = ", ".join(f"{key}={value}" for key, value in counts.items())
-        self.stdout.write(self.style.SUCCESS(f"HR/payroll demo ready in {schema}: {summary}"))
-        self.stdout.write(f"Test HR login: hrdemo01@{schema}.local / HRDemo@2026!")
+        self.stdout.write(self.style.SUCCESS(f"HR/payroll demo ready: {summary}"))
+        self.stdout.write("Test HR login: hrdemo01@school.local / HRDemo@2026!")
 
-    def _departments(self, tenant):
+    def _departments(self):
         result = {}
         for name, code in DEPARTMENTS.items():
             department, _ = Department.objects.update_or_create(
-                tenant=tenant,
                 name=name,
                 defaults={"code": code, "description": f"{name} department test records"},
             )
             result[name] = department
         return result
 
-    def _employees(self, tenant, departments):
+    def _employees(self, departments):
         result = []
         for index, row in enumerate(EMPLOYEES, start=1):
             code, first, last, designation, department, role, staff_role, contract, salary, scheme, marital, cit, insurance = row
-            email = f"hrdemo{index:02d}@{tenant.schema_name}.local"
+            email = f"hrdemo{index:02d}@school.local"
             user, created = UserAccount.objects.get_or_create(
                 email=email,
                 defaults={
-                    "username": f"hrdemo{index:02d}_{tenant.schema_name}",
+                    "username": f"hrdemo{index:02d}",
                     "first_name": first,
                     "last_name": last,
                     "role": role,
                     "staff_role": staff_role,
-                    "tenant": tenant,
                     "is_active": True,
                     "is_staff": role == "staff",
                 },
@@ -120,13 +106,12 @@ class Command(BaseCommand):
             else:
                 UserAccount.objects.filter(pk=user.pk).update(
                     first_name=first, last_name=last, role=role,
-                    staff_role=staff_role, tenant=tenant, is_active=True,
+                    staff_role=staff_role, is_active=True,
                 )
 
             employee, _ = Employee.objects.update_or_create(
                 user=user,
                 defaults={
-                    "tenant": tenant,
                     "employee_code": code,
                     "department": departments[department],
                     "designation": designation,
@@ -161,11 +146,10 @@ class Command(BaseCommand):
             department.head = by_department.get(name)
             department.save(update_fields=["head"])
 
-    def _leave_types(self, tenant):
+    def _leave_types(self):
         result = {}
         for name, code, maximum, paid, carry, carry_max in LEAVE_TYPES:
             leave_type, _ = LeaveType.objects.update_or_create(
-                tenant=tenant,
                 code=code,
                 defaults={
                     "name": name,
@@ -178,7 +162,7 @@ class Command(BaseCommand):
             result[code] = leave_type
         return result
 
-    def _attendance(self, tenant, employees):
+    def _attendance(self, employees):
         statuses = ["present", "present", "late", "present", "half_day", "present", "absent", "present", "on_leave", "present"]
         start = date(2026, 6, 15)
         marker = employees[0].user
@@ -190,7 +174,6 @@ class Command(BaseCommand):
                     employee=employee,
                     date=attendance_date,
                     defaults={
-                        "tenant": tenant,
                         "status": actual_status,
                         "check_in_time": time(9, 0 + min(employee_index * 2, 30)) if actual_status in {"present", "late", "half_day"} else None,
                         "check_out_time": time(16, 0) if actual_status in {"present", "late"} else None,
@@ -199,7 +182,7 @@ class Command(BaseCommand):
                     },
                 )
 
-    def _leave_applications(self, tenant, employees, leave_types):
+    def _leave_applications(self, employees, leave_types):
         rows = [
             (0, "CL", date(2026, 7, 2), date(2026, 7, 2), "pending", "Personal work"),
             (1, "SL", date(2026, 6, 22), date(2026, 6, 23), "approved", "Medical rest"),
@@ -209,7 +192,6 @@ class Command(BaseCommand):
         reviewer = employees[0].user
         for employee_index, code, start, end, status, reason in rows:
             defaults = {
-                "tenant": tenant,
                 "total_days": Decimal((end - start).days + 1),
                 "reason": reason,
                 "status": status,
@@ -222,7 +204,7 @@ class Command(BaseCommand):
                 start_date=start, end_date=end, defaults=defaults,
             )
 
-    def _payroll(self, tenant, employees):
+    def _payroll(self, employees):
         periods = [
             (4, "April 2026", date(2026, 4, 1), date(2026, 4, 30), "paid"),
             (5, "May 2026", date(2026, 5, 1), date(2026, 5, 31), "finalized"),
@@ -230,7 +212,7 @@ class Command(BaseCommand):
         ]
         for month, name, start, end, status in periods:
             period, _ = PayrollPeriod.objects.update_or_create(
-                tenant=tenant, month=month, year=2026,
+                month=month, year=2026,
                 defaults={
                     "name": name, "start_date": start, "end_date": end,
                     "working_days": 26, "status": status,
@@ -245,7 +227,6 @@ class Command(BaseCommand):
                 SalarySlip.objects.update_or_create(
                     employee=employee, payroll_period=period,
                     defaults={
-                        "tenant": tenant,
                         "working_days": 26,
                         "paid_days": 25 if index % 4 == 0 else 26,
                         "absent_days": 1 if index % 4 == 0 else 0,

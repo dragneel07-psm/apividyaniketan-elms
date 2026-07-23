@@ -5,14 +5,10 @@ import uuid as uuid_lib
 
 from django.db import models
 
-from .tenant import Tenant
-
 
 class ContactMessage(models.Model):
     """A visitor-submitted message from the public school marketing site's
-    Contact page. Lives in the shared/public schema (core is a SHARED_APPS
-    app) like Tenant/AuditLog — scoped per school via the tenant FK, same
-    pattern as those models, not a per-tenant-schema table."""
+    Contact page."""
 
     DEPARTMENT_CHOICES = [
         ("general", "General Inquiry"),
@@ -24,7 +20,6 @@ class ContactMessage(models.Model):
     ]
 
     message_id = models.UUIDField(primary_key=True, default=uuid_lib.uuid4, editable=False)
-    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name="contact_messages")
     name = models.CharField(max_length=150)
     email = models.EmailField()
     phone = models.CharField(max_length=20, blank=True, default="")

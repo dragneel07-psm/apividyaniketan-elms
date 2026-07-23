@@ -11,7 +11,6 @@ from django.utils.decorators import method_decorator
 from django.views.decorators.cache import cache_page
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
-from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
@@ -39,7 +38,7 @@ class FeeStructureViewSet(
     permission_classes = [IsSchoolFinanceManager]
 
     def perform_create(self, serializer):
-        item = serializer.save(tenant=self.request.user.tenant)
+        item = serializer.save()
         record_audit_event(
             action="billing.fee_structure_created",
             user=self.request.user,
@@ -126,16 +125,7 @@ class FeeHeadViewSet(
         return qs.order_by("sort_order", "name")
 
     def perform_create(self, serializer):
-        from billing.models_school import FeeStructure
-
-        tenant = self.request.user.tenant
-        # Enforce the fee_structure belongs to this tenant.
-        structure = serializer.validated_data.get("fee_structure")
-        if structure and getattr(structure, "tenant_id", None) != tenant.id:
-            from rest_framework.exceptions import PermissionDenied
-
-            raise PermissionDenied("Fee structure does not belong to your tenant.")
-        head = serializer.save(tenant=tenant)
+        head = serializer.save()
         record_audit_event(
             action="billing.fee_head_created",
             user=self.request.user,
@@ -205,7 +195,7 @@ class StudentFeeViewSet(
         )
 
     def perform_create(self, serializer):
-        item = serializer.save(tenant=self.request.user.tenant)
+        item = serializer.save()
         record_audit_event(
             action="billing.student_fee_created",
             user=self.request.user,
@@ -347,12 +337,6 @@ class StudentFeeViewSet(
         """
         from academic.models import Student
 
-        tenant = getattr(request.user, "tenant", None)
-        if not tenant:
-            return Response(
-                {"detail": "No tenant in scope."}, status=status.HTTP_400_BAD_REQUEST
-            )
-
         class_ids = request.data.get("class_ids") or []
         structure_ids = request.data.get("fee_structure_ids") or []
         due_date = request.data.get("due_date")
@@ -366,19 +350,17 @@ class StudentFeeViewSet(
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        structures = FeeStructure.objects.filter(
-            tenant=tenant, fee_id__in=structure_ids
-        )
+        structures = FeeStructure.objects.filter(fee_id__in=structure_ids)
         if structures.count() != len(set(map(str, structure_ids))):
             return Response(
-                {"detail": "Some fee structures not found in this tenant."},
+                {"detail": "Some fee structures not found."},
                 status=status.HTTP_404_NOT_FOUND,
             )
 
         students = list(
-            Student.objects.filter(
-                academic_class_id__in=class_ids, user__tenant=tenant
-            ).select_related("user")
+            Student.objects.filter(academic_class_id__in=class_ids).select_related(
+                "user"
+            )
         )
         if not students:
             return Response(
@@ -400,7 +382,7 @@ class StudentFeeViewSet(
                 if skip_existing:
                     existing = set(
                         StudentFee.objects.filter(
-                            tenant=tenant, fee_structure=structure, due_date=due_date
+                            fee_structure=structure, due_date=due_date
                         ).values_list("student_id", flat=True)
                     )
                 for s in students:
@@ -408,7 +390,6 @@ class StudentFeeViewSet(
                         skipped += 1
                         continue
                     fee = StudentFee.objects.create(
-                        tenant=tenant,
                         student=s,
                         fee_structure=structure,
                         amount_due=structure.amount,
@@ -462,9 +443,10 @@ class StudentFeeViewSet(
         from decimal import Decimal
 
         from billing_school.utils_bs_calendar import bs_date_display
+        from core.models import SchoolProfile
 
         fee = self.get_object()
-        tenant = fee.tenant
+        profile = SchoolProfile.get_solo()
         structure = fee.fee_structure
         student = fee.student
 
@@ -500,22 +482,22 @@ class StudentFeeViewSet(
 
         logo_url = ""
         try:
-            if tenant and tenant.logo:
-                logo_url = tenant.logo.url
+            if profile.logo:
+                logo_url = profile.logo.url
         except Exception:
             logo_url = ""
 
         context = {
-            "school_name": tenant.name if tenant else "",
-            "school_address": getattr(tenant, "address", "") or "",
-            "school_phone": getattr(tenant, "contact_phone", "") or "",
-            "school_email": getattr(tenant, "contact_email", "") or "",
-            "school_pan": getattr(tenant, "pan_number", "") or "",
-            "school_vat": getattr(tenant, "vat_number", "") or "",
+            "school_name": profile.name,
+            "school_address": profile.address or "",
+            "school_phone": profile.contact_phone or "",
+            "school_email": profile.contact_email or "",
+            "school_pan": profile.pan_number or "",
+            "school_vat": profile.vat_number or "",
             "school_logo": logo_url,
-            "principal_name": getattr(tenant, "principal_name", "") or "",
-            "accountant_name": getattr(tenant, "accountant_name", "") or "",
-            "fiscal_year_bs": getattr(tenant, "fiscal_year_bs", "") or "",
+            "principal_name": profile.principal_name or "",
+            "accountant_name": profile.accountant_name or "",
+            "fiscal_year_bs": profile.fiscal_year_bs or "",
             "bill_number": f"BILL-{str(fee.student_fee_id)[:8].upper()}",
             "student_name": student_name,
             "student_id": str(getattr(student, "student_id", "") or ""),
@@ -535,7 +517,7 @@ class StudentFeeViewSet(
             "late_fee": f"{Decimal(str(getattr(fee, 'late_fee_applied', 0) or 0)):.2f}",
             "amount_words": amount_words,
             "status": fee.get_status_display(),
-            "currency": getattr(tenant, "currency_symbol", "Rs.") or "Rs.",
+            "currency": profile.currency_symbol or "Rs.",
             "generated_on": timezone.now().strftime("%d %b %Y %H:%M"),
         }
         filename = f"bill_{str(fee.student_fee_id)[:8]}.pdf"
@@ -556,12 +538,9 @@ class StudentFeeViewSet(
         from decimal import Decimal
 
         from billing_school.utils_bs_calendar import bs_date_display
+        from core.models import SchoolProfile
 
-        tenant = getattr(request.user, "tenant", None)
-        if not tenant:
-            return Response(
-                {"detail": "No tenant in scope."}, status=status.HTTP_400_BAD_REQUEST
-            )
+        profile = SchoolProfile.get_solo()
 
         ids = request.data.get("student_fee_ids") or []
         if not ids:
@@ -571,7 +550,7 @@ class StudentFeeViewSet(
             )
 
         fees = (
-            StudentFee.objects.filter(tenant=tenant, student_fee_id__in=ids)
+            StudentFee.objects.filter(student_fee_id__in=ids)
             .select_related("student__user", "fee_structure")
             .prefetch_related("fee_structure__heads")
             .order_by("student__user__first_name")
@@ -638,22 +617,22 @@ class StudentFeeViewSet(
 
         logo_url = ""
         try:
-            if tenant and tenant.logo:
-                logo_url = tenant.logo.url
+            if profile.logo:
+                logo_url = profile.logo.url
         except Exception:
             logo_url = ""
 
         context = {
             "bills": bills,
-            "school_name": tenant.name if tenant else "",
-            "school_address": getattr(tenant, "address", "") or "",
-            "school_phone": getattr(tenant, "contact_phone", "") or "",
-            "school_pan": getattr(tenant, "pan_number", "") or "",
+            "school_name": profile.name,
+            "school_address": profile.address or "",
+            "school_phone": profile.contact_phone or "",
+            "school_pan": profile.pan_number or "",
             "school_logo": logo_url,
-            "principal_name": getattr(tenant, "principal_name", "") or "",
-            "accountant_name": getattr(tenant, "accountant_name", "") or "",
-            "fiscal_year_bs": getattr(tenant, "fiscal_year_bs", "") or "",
-            "currency": getattr(tenant, "currency_symbol", "Rs.") or "Rs.",
+            "principal_name": profile.principal_name or "",
+            "accountant_name": profile.accountant_name or "",
+            "fiscal_year_bs": profile.fiscal_year_bs or "",
+            "currency": profile.currency_symbol or "Rs.",
             "generated_on": timezone.now().strftime("%d %b %Y %H:%M"),
         }
         filename = f"bills_{timezone.now().strftime('%Y%m%d_%H%M')}.pdf"
@@ -696,18 +675,9 @@ class StudentFeeViewSet(
             try:
                 from academic.models import Student
 
-                tenant = getattr(request.user, "tenant", None)
-                if not tenant:
-                    return Response(
-                        {"error": "User has no associated tenant"},
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
-
-                fee_structure = FeeStructure.objects.get(
-                    fee_id=fee_structure_id, tenant=tenant
-                )
+                fee_structure = FeeStructure.objects.get(fee_id=fee_structure_id)
                 students = Student.objects.filter(
-                    academic_class_id=academic_class_id, user__tenant=tenant
+                    academic_class_id=academic_class_id
                 )
 
                 if not students.exists():
@@ -720,7 +690,6 @@ class StudentFeeViewSet(
                     created_count = 0
                     for student in students:
                         StudentFee.objects.create(
-                            tenant=tenant,
                             student=student,
                             fee_structure=fee_structure,
                             amount_due=fee_structure.amount,
@@ -797,18 +766,11 @@ class PaymentViewSet(
         )
 
     def perform_create(self, serializer):
-        if not getattr(self.request.user, "tenant", None):
-            raise PermissionDenied(
-                "Authenticated user is not associated with a tenant."
-            )
-
         from billing.bill_numbering import allocate_bill_number
 
-        tenant = self.request.user.tenant
-        bill_number = allocate_bill_number(tenant)
+        bill_number = allocate_bill_number()
 
         payment = serializer.save(
-            tenant=tenant,
             recorded_by=self.request.user,
             bill_number=bill_number,
         )
@@ -910,12 +872,13 @@ class PaymentViewSet(
         from decimal import Decimal
 
         from billing_school.utils_bs_calendar import bs_date_display
+        from core.models import SchoolProfile
 
         payment = self.get_object()
         student = payment.student
         student_fee = payment.student_fee
         fee_structure = student_fee.fee_structure if student_fee else None
-        tenant = payment.tenant
+        profile = SchoolProfile.get_solo()
 
         # Remaining balance for this student fee
         balance_due = "0.00"
@@ -977,25 +940,25 @@ class PaymentViewSet(
         except Exception:
             payment_date_bs = ""
 
-        currency_symbol = (getattr(tenant, "currency_symbol", "") or "Rs.").strip()
+        currency_symbol = (profile.currency_symbol or "Rs.").strip()
         logo_url = ""
         try:
-            if tenant and tenant.logo:
-                logo_url = tenant.logo.url
+            if profile.logo:
+                logo_url = profile.logo.url
         except Exception:
             logo_url = ""
 
         context = {
-            "school_name": tenant.name if tenant else "",
-            "school_address": getattr(tenant, "address", "") or "",
-            "school_phone": getattr(tenant, "contact_phone", "") or "",
-            "school_email": getattr(tenant, "contact_email", "") or "",
-            "school_pan": getattr(tenant, "pan_number", "") or "",
-            "school_vat": getattr(tenant, "vat_number", "") or "",
+            "school_name": profile.name,
+            "school_address": profile.address or "",
+            "school_phone": profile.contact_phone or "",
+            "school_email": profile.contact_email or "",
+            "school_pan": profile.pan_number or "",
+            "school_vat": profile.vat_number or "",
             "school_logo": logo_url,
-            "principal_name": getattr(tenant, "principal_name", "") or "",
-            "accountant_name": getattr(tenant, "accountant_name", "") or "",
-            "fiscal_year_bs": getattr(tenant, "fiscal_year_bs", "") or "",
+            "principal_name": profile.principal_name or "",
+            "accountant_name": profile.accountant_name or "",
+            "fiscal_year_bs": profile.fiscal_year_bs or "",
             # Bill identity
             "bill_number": payment.bill_number or str(payment.payment_id)[:8].upper(),
             "receipt_number": payment.bill_number
@@ -1086,7 +1049,6 @@ class ExpenseViewSet(
 
     def perform_create(self, serializer):
         expense = serializer.save(
-            tenant=self.request.user.tenant,
             recorded_by=self.request.user,
         )
         record_audit_event(
@@ -1156,29 +1118,11 @@ class FinanceDashboardViewSet(BillingSchemaGuardMixin, viewsets.ViewSet):
 
     @method_decorator(cache_page(60 * 5))
     def list(self, request):
-        user = request.user
-        tenant = getattr(user, "tenant", None)
-        if not tenant:
-            tenant = getattr(request, "tenant", None)
-
-        if not tenant:
-            return Response(
-                {
-                    "total_revenue": 0.0,
-                    "total_pending": 0.0,
-                    "total_expenses": 0.0,
-                    "net_balance": 0.0,
-                    "recent_payments": [],
-                    "recent_expenses": [],
-                    "notice": "No school tenant identified for this session. Showing summary only.",
-                }
-            )
-
         start_date = request.query_params.get("start_date")
         end_date = request.query_params.get("end_date")
 
-        payments_qs = Payment.objects.filter(tenant=tenant)
-        expenses_qs = Expense.objects.filter(tenant=tenant)
+        payments_qs = Payment.objects.all()
+        expenses_qs = Expense.objects.all()
 
         if start_date:
             payments_qs = payments_qs.filter(payment_date__date__gte=start_date)
@@ -1191,7 +1135,6 @@ class FinanceDashboardViewSet(BillingSchemaGuardMixin, viewsets.ViewSet):
         total_revenue = revenue_agg["total"] or 0
 
         pending_fees_qs = StudentFee.objects.filter(
-            tenant=tenant,
             status__in=["pending", "partial", "overdue"],
         )
         if start_date:
@@ -1209,14 +1152,12 @@ class FinanceDashboardViewSet(BillingSchemaGuardMixin, viewsets.ViewSet):
         total_expenses = expense_agg["total"] or 0
 
         recent_payments = (
-            Payment.objects.filter(tenant=tenant)
+            Payment.objects.all()
             .select_related("student__user", "student_fee__fee_structure")
             .order_by("-payment_date")[:5]
         )
         recent_expenses = (
-            Expense.objects.filter(tenant=tenant)
-            .select_related("recorded_by")
-            .order_by("-date")[:5]
+            Expense.objects.all().select_related("recorded_by").order_by("-date")[:5]
         )
 
         return Response(
@@ -1240,25 +1181,10 @@ class FinanceDashboardViewSet(BillingSchemaGuardMixin, viewsets.ViewSet):
         - collection_rate: % of total fees collected
         - top_defaulters: students with highest outstanding balances
         """
-        user = request.user
-        tenant = getattr(user, "tenant", None) or getattr(request, "tenant", None)
-        if not tenant:
-            return Response(
-                {
-                    "monthly_collections": [],
-                    "expense_by_category": [],
-                    "fee_status_breakdown": [],
-                    "collection_rate": 0,
-                    "top_defaulters": [],
-                }
-            )
-
         # ── Monthly collections (last 12 months) ────────────────────────────
         twelve_months_ago = date.today().replace(day=1) - timedelta(days=335)
         monthly_qs = (
-            Payment.objects.filter(
-                tenant=tenant, payment_date__date__gte=twelve_months_ago
-            )
+            Payment.objects.filter(payment_date__date__gte=twelve_months_ago)
             .annotate(month=TruncMonth("payment_date"))
             .values("month")
             .annotate(total=Sum("amount"))
@@ -1275,7 +1201,7 @@ class FinanceDashboardViewSet(BillingSchemaGuardMixin, viewsets.ViewSet):
 
         # ── Expense by category ──────────────────────────────────────────────
         expense_cats = (
-            Expense.objects.filter(tenant=tenant)
+            Expense.objects.all()
             .values("category")
             .annotate(total=Sum("amount"), count=Count("expense_id"))
             .order_by("-total")
@@ -1291,7 +1217,7 @@ class FinanceDashboardViewSet(BillingSchemaGuardMixin, viewsets.ViewSet):
 
         # ── Fee status breakdown ─────────────────────────────────────────────
         status_qs = (
-            StudentFee.objects.filter(tenant=tenant)
+            StudentFee.objects.all()
             .values("status")
             .annotate(
                 count=Count("student_fee_id"),
@@ -1310,7 +1236,7 @@ class FinanceDashboardViewSet(BillingSchemaGuardMixin, viewsets.ViewSet):
         ]
 
         # ── Collection rate ──────────────────────────────────────────────────
-        all_fees = StudentFee.objects.filter(tenant=tenant).aggregate(
+        all_fees = StudentFee.objects.aggregate(
             total_due=Sum("amount_due"),
             total_paid=Sum("amount_paid"),
         )
@@ -1326,9 +1252,7 @@ class FinanceDashboardViewSet(BillingSchemaGuardMixin, viewsets.ViewSet):
         from academic.models import Student
 
         defaulter_fees = (
-            StudentFee.objects.filter(
-                tenant=tenant, status__in=["pending", "partial", "overdue"]
-            )
+            StudentFee.objects.filter(status__in=["pending", "partial", "overdue"])
             .values("student_id")
             .annotate(
                 outstanding=Sum("amount_due") - Sum("amount_paid"),

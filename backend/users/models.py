@@ -41,13 +41,6 @@ class UserAccount(AbstractUser):
     user_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     # Circular import risk if we import Tenant directly?
     # Use string reference 'core.Tenant'.
-    tenant = models.ForeignKey(
-        "core.Tenant",
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True,
-        db_constraint=False,
-    )
     role = models.CharField(max_length=20, choices=ROLE_CHOICES, default="student")
     staff_role = models.CharField(
         max_length=30, choices=STAFF_ROLE_CHOICES, blank=True, default=""
@@ -83,8 +76,8 @@ class UserAccount(AbstractUser):
 
     class Meta(AbstractUser.Meta):
         indexes = [
-            models.Index(fields=["tenant", "role"], name="users_tenant_role_idx"),
+            models.Index(fields=["role"], name="users_tenant_role_idx"),
             models.Index(
-                fields=["tenant", "is_active"], name="users_tenant_active_idx"
+                fields=["is_active"], name="users_tenant_active_idx"
             ),
         ]

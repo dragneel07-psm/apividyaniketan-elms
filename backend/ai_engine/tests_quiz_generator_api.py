@@ -5,8 +5,7 @@ from unittest.mock import patch
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from django_tenants.test.cases import FastTenantTestCase
-from django_tenants.utils import tenant_context
+from django.test import TestCase
 from rest_framework import status
 from rest_framework.test import APIClient
 
@@ -17,63 +16,51 @@ from ai_engine.models import ContentChunk
 User = get_user_model()
 
 
-class QuizGeneratorApiTests(FastTenantTestCase):
-    @classmethod
-    def setup_tenant(cls, tenant):
-        tenant.name = "Quiz Generator School"
-
-    @classmethod
-    def setup_domain(cls, domain):
-        domain.is_primary = True
-
+class QuizGeneratorApiTests(TestCase):
     def setUp(self):
-        with tenant_context(self.tenant):
-            self.teacher = User.objects.create_user(
-                username="quiz_teacher",
-                email="quiz_teacher@example.com",
-                password="QuizTeacher@123",
-                role="teacher",
-                tenant=self.tenant,
-            )
-            self.student = User.objects.create_user(
-                username="quiz_student",
-                email="quiz_student@example.com",
-                password="QuizStudent@123",
-                role="student",
-                tenant=self.tenant,
-            )
-            academic_class = AcademicClass.objects.create(name="Grade 10")
-            subject = Subject.objects.create(
-                name="Science", academic_class=academic_class, is_active=True
-            )
-            chapter = Chapter.objects.create(
-                subject=subject,
-                title="Motion",
-                description="Basics of motion",
-                order=1,
-                is_published=True,
-            )
-            self.lesson = Lesson.objects.create(
-                chapter=chapter,
-                title="Newton Laws",
-                content_type="text",
-                content="Force, mass, acceleration and inertia.",
-                order=1,
-                is_published=True,
-                duration_minutes=40,
-            )
-            ContentChunk.objects.create(
-                tenant=self.tenant,
-                source_type="lesson",
-                source_id=str(self.lesson.id),
-                text="Newton's first law describes inertia. Newton's second law links force, mass and acceleration.",
-                metadata={"lesson_id": self.lesson.id},
-                embedding=[0.01]
-                * max(1, int(getattr(settings, "AI_EMBEDDING_DIMENSIONS", 1536))),
-            )
+        self.teacher = User.objects.create_user(
+            username="quiz_teacher",
+            email="quiz_teacher@example.com",
+            password="QuizTeacher@123",
+            role="teacher",
+        )
+        self.student = User.objects.create_user(
+            username="quiz_student",
+            email="quiz_student@example.com",
+            password="QuizStudent@123",
+            role="student",
+        )
+        academic_class = AcademicClass.objects.create(name="Grade 10")
+        subject = Subject.objects.create(
+            name="Science", academic_class=academic_class, is_active=True
+        )
+        chapter = Chapter.objects.create(
+            subject=subject,
+            title="Motion",
+            description="Basics of motion",
+            order=1,
+            is_published=True,
+        )
+        self.lesson = Lesson.objects.create(
+            chapter=chapter,
+            title="Newton Laws",
+            content_type="text",
+            content="Force, mass, acceleration and inertia.",
+            order=1,
+            is_published=True,
+            duration_minutes=40,
+        )
+        ContentChunk.objects.create(
+            source_type="lesson",
+            source_id=str(self.lesson.id),
+            text="Newton's first law describes inertia. Newton's second law links force, mass and acceleration.",
+            metadata={"lesson_id": self.lesson.id},
+            embedding=[0.01]
+            * max(1, int(getattr(settings, "AI_EMBEDDING_DIMENSIONS", 1536))),
+        )
 
     def _client_for(self, user):
-        client = APIClient(HTTP_HOST=self.get_test_tenant_domain())
+        client = APIClient()
         client.force_authenticate(user=user)
         return client
 

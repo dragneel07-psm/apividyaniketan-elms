@@ -4,10 +4,8 @@
 from __future__ import annotations
 
 from django.core.management.base import BaseCommand, CommandError
-from django_tenants.utils import schema_context
 
 from academic.models import Parent, Student, Teacher
-from core.models import Tenant
 from users.models import UserAccount
 
 ROLE_CHOICES = {"student", "teacher", "parent", "admin", "staff", "saas_admin"}
@@ -23,12 +21,9 @@ def _ensure_role_profile(role: str, user: UserAccount) -> None:
 
 
 class Command(BaseCommand):
-    help = "Create or update a tenant user directly in a tenant schema."
+    help = "Create or update a user account directly."
 
     def add_arguments(self, parser):
-        parser.add_argument(
-            "--schema", required=True, help="Tenant schema name (e.g. demo)."
-        )
         parser.add_argument("--email", required=True, help="User email.")
         parser.add_argument("--password", required=True, help="User password.")
         parser.add_argument(
@@ -48,7 +43,6 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
-        schema = str(options["schema"]).strip().lower()
         email = str(options["email"]).strip().lower()
         password = str(options["password"])
         role = str(options.get("role") or "student").strip().lower()
@@ -59,49 +53,39 @@ class Command(BaseCommand):
 
         if role not in ROLE_CHOICES:
             raise CommandError(f"Invalid role '{role}'.")
-        if not schema or schema == "public":
-            raise CommandError("--schema must be a non-public tenant schema.")
-
-        tenant = Tenant.objects.filter(schema_name=schema).first()
-        if not tenant:
-            raise CommandError(f"Tenant schema '{schema}' not found.")
 
         if not username:
             username = email.split("@", 1)[0]
 
-        with schema_context(schema):
-            user = UserAccount.objects.filter(email__iexact=email).first()
-            created = False
+        user = UserAccount.objects.filter(email__iexact=email).first()
+        created = False
 
-            if user is None:
-                if UserAccount.objects.filter(username=username).exists():
-                    base = username[:120]
-                    suffix = 1
-                    while suffix < 10000:
-                        candidate = f"{base}_{suffix}"
-                        if not UserAccount.objects.filter(username=candidate).exists():
-                            username = candidate
-                            break
-                        suffix += 1
-                user = UserAccount(
-                    email=email,
-                    username=username,
-                )
-                created = True
+        if user is None:
+            if UserAccount.objects.filter(username=username).exists():
+                base = username[:120]
+                suffix = 1
+                while suffix < 10000:
+                    candidate = f"{base}_{suffix}"
+                    if not UserAccount.objects.filter(username=candidate).exists():
+                        username = candidate
+                        break
+                    suffix += 1
+            user = UserAccount(
+                email=email,
+                username=username,
+            )
+            created = True
 
-            user.first_name = first_name
-            user.last_name = last_name
-            user.role = role
-            user.is_staff = role in {"admin", "staff", "saas_admin"}
-            user.is_active = is_active
-            user.tenant_id = tenant.id
-            user.set_password(password)
-            user.save()
-            _ensure_role_profile(role, user)
+        user.first_name = first_name
+        user.last_name = last_name
+        user.role = role
+        user.is_staff = role in {"admin", "staff", "saas_admin"}
+        user.is_active = is_active
+        user.set_password(password)
+        user.save()
+        _ensure_role_profile(role, user)
 
         action = "CREATED" if created else "UPDATED"
         self.stdout.write(
-            self.style.SUCCESS(
-                f"{action} user {email} in schema={schema} role={role} active={is_active}"
-            )
+            self.style.SUCCESS(f"{action} user {email} role={role} active={is_active}")
         )

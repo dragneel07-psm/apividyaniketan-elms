@@ -6,7 +6,7 @@ Tests for ProjectStreamConsumer + post-save broadcast signals.
 
 Mirrors ai_engine/tests_ws_consumers.py — uses InMemoryChannelLayer so no
 Redis is required. The class-level override_settings does not propagate
-into async test methods when combined with FastTenantTestCase, so each
+into async test methods when combined with TestCase, so each
 async test wraps its body in an inline override_settings context.
 """
 
@@ -17,9 +17,10 @@ from unittest.mock import MagicMock
 
 from channels.testing import WebsocketCommunicator
 from django.test import TestCase, override_settings
-from django_tenants.test.cases import FastTenantTestCase
+from django.test import TestCase
 
 from academic.models import AcademicClass, Section, Student
+from core.models import SchoolProfile
 from projects.consumers import (
     MentorDigestStreamConsumer,
     ProjectStreamConsumer,
@@ -38,9 +39,10 @@ def _anon_user():
     return MagicMock(is_authenticated=False)
 
 
-def _enable_projects(tenant):
-    tenant.features = {**(tenant.features or {}), "projects": True}
-    tenant.save(update_fields=["features"])
+def _enable_projects():
+    profile = SchoolProfile.get_solo()
+    profile.features = {**(profile.features or {}), "projects": True}
+    profile.save(update_fields=["features"])
 
 
 @override_settings(CHANNEL_LAYERS=IN_MEMORY_CHANNEL_LAYERS)
@@ -68,19 +70,11 @@ class ProjectStreamConsumerAuthTests(TestCase):
         await comm.disconnect()
 
 
-class ProjectStreamConsumerVisibilityTests(FastTenantTestCase):
+class ProjectStreamConsumerVisibilityTests(TestCase):
     """Connect-time visibility check uses the real DB."""
 
-    @classmethod
-    def setup_tenant(cls, tenant):
-        tenant.name = "WS Visibility Test School"
-
-    @classmethod
-    def setup_domain(cls, domain):
-        domain.is_primary = True
-
     def setUp(self):
-        _enable_projects(self.tenant)
+        _enable_projects()
         self.acad_class = AcademicClass.objects.create(name="Grade 11", order=11)
         self.section = Section.objects.create(name="A", academic_class=self.acad_class)
         self.mentor = UserAccount.objects.create_user(
@@ -88,14 +82,12 @@ class ProjectStreamConsumerVisibilityTests(FastTenantTestCase):
             email="ws_mentor@example.com",
             password="Pass@1234",
             role="teacher",
-            tenant=self.tenant,
         )
         self.member_user = UserAccount.objects.create_user(
             username="ws_member",
             email="ws_member@example.com",
             password="Pass@1234",
             role="student",
-            tenant=self.tenant,
         )
         self.member_student = Student.objects.create(
             user=self.member_user, academic_class=self.acad_class, section=self.section
@@ -105,7 +97,6 @@ class ProjectStreamConsumerVisibilityTests(FastTenantTestCase):
             email="ws_outsider@example.com",
             password="Pass@1234",
             role="student",
-            tenant=self.tenant,
         )
         Student.objects.create(
             user=self.outsider_user,
@@ -113,7 +104,6 @@ class ProjectStreamConsumerVisibilityTests(FastTenantTestCase):
             section=self.section,
         )
         self.project = Project.objects.create(
-            tenant=self.tenant,
             title="WS Project",
             mentor=self.mentor,
             is_group=True,
@@ -121,7 +111,7 @@ class ProjectStreamConsumerVisibilityTests(FastTenantTestCase):
             status="active",
         )
         ProjectMember.objects.create(
-            tenant=self.tenant, project=self.project, student=self.member_student
+            project=self.project, student=self.member_student
         )
 
     async def _connect_as(self, user):
@@ -155,30 +145,22 @@ class ProjectStreamConsumerVisibilityTests(FastTenantTestCase):
             await comm.disconnect()
 
 
-class ProjectStreamFeatureFlagTests(FastTenantTestCase):
+class ProjectStreamFeatureFlagTests(TestCase):
     """Feature flag off must reject the WebSocket connect with 4403."""
-
-    @classmethod
-    def setup_tenant(cls, tenant):
-        tenant.name = "WS Feature Flag Test School"
-
-    @classmethod
-    def setup_domain(cls, domain):
-        domain.is_primary = True
 
     def setUp(self):
         # Deliberately do NOT call _enable_projects — the flag is off.
-        self.tenant.features = {**(self.tenant.features or {}), "projects": False}
-        self.tenant.save(update_fields=["features"])
+        profile = SchoolProfile.get_solo()
+        profile.features = {**(profile.features or {}), "projects": False}
+        profile.save(update_fields=["features"])
         self.mentor = UserAccount.objects.create_user(
             username="ff_mentor",
             email="ff_mentor@example.com",
             password="Pass@1234",
             role="teacher",
-            tenant=self.tenant,
         )
         self.project = Project.objects.create(
-            tenant=self.tenant, title="FF", mentor=self.mentor, status="active"
+            title="FF", mentor=self.mentor, status="active"
         )
 
     async def test_flag_off_rejects_connect(self):
@@ -194,28 +176,19 @@ class ProjectStreamFeatureFlagTests(FastTenantTestCase):
             await comm.disconnect()
 
 
-class ProjectStreamBroadcastTests(FastTenantTestCase):
+class ProjectStreamBroadcastTests(TestCase):
     """Verify channel-layer events from group_send reach the connected client."""
 
-    @classmethod
-    def setup_tenant(cls, tenant):
-        tenant.name = "WS Broadcast Test School"
-
-    @classmethod
-    def setup_domain(cls, domain):
-        domain.is_primary = True
-
     def setUp(self):
-        _enable_projects(self.tenant)
+        _enable_projects()
         self.mentor = UserAccount.objects.create_user(
             username="bcast_mentor",
             email="bcast_mentor@example.com",
             password="Pass@1234",
             role="teacher",
-            tenant=self.tenant,
         )
         self.project = Project.objects.create(
-            tenant=self.tenant, title="Bcast", mentor=self.mentor, status="active"
+            title="Bcast", mentor=self.mentor, status="active"
         )
 
     async def test_task_created_event_pushed(self):
@@ -273,17 +246,9 @@ class MentorDigestAuthTests(TestCase):
         await comm.disconnect()
 
 
-class MentorDigestVisibilityTests(FastTenantTestCase):
-    @classmethod
-    def setup_tenant(cls, tenant):
-        tenant.name = "Mentor Digest School"
-
-    @classmethod
-    def setup_domain(cls, domain):
-        domain.is_primary = True
-
+class MentorDigestVisibilityTests(TestCase):
     def setUp(self):
-        _enable_projects(self.tenant)
+        _enable_projects()
         self.acad_class = AcademicClass.objects.create(name="Grade 12", order=12)
         self.section = Section.objects.create(name="A", academic_class=self.acad_class)
         self.mentor = UserAccount.objects.create_user(
@@ -291,14 +256,12 @@ class MentorDigestVisibilityTests(FastTenantTestCase):
             email="md_mentor@example.com",
             password="Pass@1234",
             role="teacher",
-            tenant=self.tenant,
         )
         self.student = UserAccount.objects.create_user(
             username="md_student",
             email="md_student@example.com",
             password="Pass@1234",
             role="student",
-            tenant=self.tenant,
         )
 
     async def test_teacher_can_connect(self):
@@ -323,25 +286,16 @@ class MentorDigestVisibilityTests(FastTenantTestCase):
             await comm.disconnect()
 
 
-class MentorDigestBroadcastTests(FastTenantTestCase):
+class MentorDigestBroadcastTests(TestCase):
     """group_send to mentor_<id> reaches the connected client."""
 
-    @classmethod
-    def setup_tenant(cls, tenant):
-        tenant.name = "Mentor Digest Bcast School"
-
-    @classmethod
-    def setup_domain(cls, domain):
-        domain.is_primary = True
-
     def setUp(self):
-        _enable_projects(self.tenant)
+        _enable_projects()
         self.mentor = UserAccount.objects.create_user(
             username="md_bcast_mentor",
             email="md_bcast_mentor@example.com",
             password="Pass@1234",
             role="teacher",
-            tenant=self.tenant,
         )
 
     async def test_summary_event_pushed_to_client(self):

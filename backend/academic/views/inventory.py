@@ -9,7 +9,6 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from core.mixins import TenantScopedQuerysetMixin
 from core.utils.audit import record_audit_event
 
 from ..models.inventory import (
@@ -168,11 +167,10 @@ class ConsumableStockSerializer(serializers.ModelSerializer):
 # ── ViewSets ─────────────────────────────────────────────────────────────────
 
 
-class AssetViewSet(TenantScopedQuerysetMixin, viewsets.ModelViewSet):
+class AssetViewSet(viewsets.ModelViewSet):
     queryset = Asset.objects.all()
     serializer_class = AssetSerializer
     permission_classes = [IsAuthenticated]
-    tenant_field = "tenant"
 
     def get_queryset(self):
         qs = (
@@ -196,8 +194,7 @@ class AssetViewSet(TenantScopedQuerysetMixin, viewsets.ModelViewSet):
         return qs
 
     def perform_create(self, serializer):
-        tenant = getattr(self.request.user, "tenant", None)
-        asset = serializer.save(tenant=tenant)
+        asset = serializer.save()
         record_audit_event(
             action="inventory.asset_created",
             user=self.request.user,
@@ -276,17 +273,15 @@ class AssetViewSet(TenantScopedQuerysetMixin, viewsets.ModelViewSet):
 
     @action(detail=False, methods=["get"], url_path="dashboard")
     def dashboard(self, request):
-        tenant = getattr(request.user, "tenant", None)
-        qs = Asset.objects.filter(tenant=tenant)
+        qs = Asset.objects.all()
         by_status = list(qs.values("status").annotate(count=Count("asset_id")))
         by_category = list(qs.values("category").annotate(count=Count("asset_id")))
         open_maintenance = MaintenanceRequest.objects.filter(
-            tenant=tenant, status__in=["open", "in_progress"]
+            status__in=["open", "in_progress"]
         ).count()
-        low_stock = ConsumableStock.objects.filter(tenant=tenant).count()
         low_stock_items = [
             s
-            for s in ConsumableStock.objects.filter(tenant=tenant)
+            for s in ConsumableStock.objects.all()
             if s.current_quantity <= s.minimum_quantity
         ]
         return Response(
@@ -303,11 +298,10 @@ class AssetViewSet(TenantScopedQuerysetMixin, viewsets.ModelViewSet):
         )
 
 
-class MaintenanceRequestViewSet(TenantScopedQuerysetMixin, viewsets.ModelViewSet):
+class MaintenanceRequestViewSet(viewsets.ModelViewSet):
     queryset = MaintenanceRequest.objects.all()
     serializer_class = MaintenanceRequestSerializer
     permission_classes = [IsAuthenticated]
-    tenant_field = "tenant"
 
     def get_queryset(self):
         qs = super().get_queryset().select_related("asset", "reported_by")
@@ -320,8 +314,7 @@ class MaintenanceRequestViewSet(TenantScopedQuerysetMixin, viewsets.ModelViewSet
         return qs
 
     def perform_create(self, serializer):
-        tenant = getattr(self.request.user, "tenant", None)
-        req = serializer.save(tenant=tenant, reported_by=self.request.user)
+        req = serializer.save(reported_by=self.request.user)
         # Mark asset as under maintenance
         req.asset.status = "maintenance"
         req.asset.save(update_fields=["status"])
@@ -358,11 +351,10 @@ class MaintenanceRequestViewSet(TenantScopedQuerysetMixin, viewsets.ModelViewSet
         return Response(MaintenanceRequestSerializer(req).data)
 
 
-class ConsumableStockViewSet(TenantScopedQuerysetMixin, viewsets.ModelViewSet):
+class ConsumableStockViewSet(viewsets.ModelViewSet):
     queryset = ConsumableStock.objects.all()
     serializer_class = ConsumableStockSerializer
     permission_classes = [IsAuthenticated]
-    tenant_field = "tenant"
 
     def get_queryset(self):
         qs = super().get_queryset()
@@ -374,8 +366,7 @@ class ConsumableStockViewSet(TenantScopedQuerysetMixin, viewsets.ModelViewSet):
         return qs
 
     def perform_create(self, serializer):
-        tenant = getattr(self.request.user, "tenant", None)
-        serializer.save(tenant=tenant)
+        serializer.save()
 
     @action(detail=True, methods=["post"], url_path="restock")
     def restock(self, request, pk=None):

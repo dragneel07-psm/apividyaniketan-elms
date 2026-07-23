@@ -8,7 +8,6 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from core.mixins import TenantScopedQuerysetMixin
 from core.utils.audit import record_audit_event
 
 from ..models.event import SchoolEvent
@@ -53,11 +52,10 @@ class SchoolEventSerializer(serializers.ModelSerializer):
         return None
 
 
-class SchoolEventViewSet(TenantScopedQuerysetMixin, viewsets.ModelViewSet):
+class SchoolEventViewSet(viewsets.ModelViewSet):
     queryset = SchoolEvent.objects.all()
     serializer_class = SchoolEventSerializer
     permission_classes = [IsAuthenticated]
-    tenant_field = "tenant"
 
     def get_queryset(self):
         qs = super().get_queryset().select_related("created_by")
@@ -87,8 +85,7 @@ class SchoolEventViewSet(TenantScopedQuerysetMixin, viewsets.ModelViewSet):
         return qs
 
     def perform_create(self, serializer):
-        tenant = getattr(self.request.user, "tenant", None)
-        event = serializer.save(tenant=tenant, created_by=self.request.user)
+        event = serializer.save(created_by=self.request.user)
         record_audit_event(
             action="academic.event_created",
             user=self.request.user,

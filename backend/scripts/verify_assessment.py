@@ -15,23 +15,12 @@ from academic.models.question import Question
 from academic.models.student import Student
 from academic.models.subject import Subject
 from academic.services.grading_service import GradingService
-from core.models.tenant import Tenant
 
 
 def verify_assessment():
     print("🧪 Verifying Assessment Flow...")
 
-    # 1. Setup Tenant DB
-    tenant = Tenant.objects.get(subdomain="demo")
-    db_alias = "demo_school"
-    db_name = "school_demo.sqlite3"
-
-    from django.conf import settings
-
-    if db_alias not in settings.DATABASES:
-        new_db_config = settings.DATABASES["default"].copy()
-        new_db_config["NAME"] = settings.BASE_DIR / db_name
-        settings.DATABASES[db_alias] = new_db_config
+    db_alias = "default"
 
     # 2. Get Test Data
     subject = Subject.objects.using(db_alias).first()

@@ -94,13 +94,6 @@ class TutorStreamConsumer(AsyncWebsocketConsumer):
             TokenBudgetService,
         )
 
-        tenant = getattr(user, "tenant", None)
-        if tenant is None:
-            await self.send_json(
-                {"type": "error", "detail": "tenant context required."}
-            )
-            return
-
         db_alias = "default"  # WS consumers don't have request.db_alias; use default
         context.setdefault("user_role", str(getattr(user, "role", "") or "").lower())
 
@@ -109,7 +102,7 @@ class TutorStreamConsumer(AsyncWebsocketConsumer):
         budget_service = TokenBudgetService()
         try:
             await sync_to_async(budget_service.check)(
-                tenant=tenant, student=student, db_alias=db_alias
+                tenant=None, student=student, db_alias=db_alias
             )
         except TokenBudgetExceeded as exc:
             await self.send_json(
@@ -125,7 +118,7 @@ class TutorStreamConsumer(AsyncWebsocketConsumer):
 
         # --- Resolve / create conversation ---
         conversation = await self._get_or_create_conversation(
-            user, tenant, conversation_id, message, context, db_alias
+            user, conversation_id, message, context, db_alias
         )
 
         # --- Resolve teaching mode (persisted → auto-select → default) ---
@@ -183,15 +176,12 @@ class TutorStreamConsumer(AsyncWebsocketConsumer):
         history = history[-6:]
 
         # --- Stream AI response ---
-        service = RAGTutorService(tenant=tenant)
+        service = RAGTutorService()
         full_answer = ""
         done_payload = {}
 
         # Run synchronous generator in thread pool, sending each chunk to client
         def _generate():
-            from django.db import connection
-
-            connection.set_tenant(tenant)
             return list(
                 service.stream_answer(
                     message,
@@ -235,13 +225,12 @@ class TutorStreamConsumer(AsyncWebsocketConsumer):
 
         # --- Deduct budget ---
         budget_status = await sync_to_async(budget_service.deduct)(
-            tenant=tenant, student=student, tokens_used=total_tokens, db_alias=db_alias
+            tenant=None, student=student, tokens_used=total_tokens, db_alias=db_alias
         )
 
         # --- Log interaction ---
         try:
             await sync_to_async(AIInteractionLog.objects.using(db_alias).create)(
-                tenant=tenant,
                 user=user,
                 feature_used="tutor_rag_ws",
                 prompt_tokens=prompt_tokens,
@@ -270,7 +259,7 @@ class TutorStreamConsumer(AsyncWebsocketConsumer):
         )
 
     async def _get_or_create_conversation(
-        self, user, tenant, conversation_id, message, context, db_alias
+        self, user, conversation_id, message, context, db_alias
     ):
         from ai_engine.models import TutorConversation
 
@@ -278,7 +267,7 @@ class TutorStreamConsumer(AsyncWebsocketConsumer):
             try:
                 conv = await sync_to_async(
                     TutorConversation.objects.using(db_alias).get
-                )(id=conversation_id, user=user, tenant=tenant)
+                )(id=conversation_id, user=user)
                 return conv
             except TutorConversation.DoesNotExist:
                 pass
@@ -286,7 +275,6 @@ class TutorStreamConsumer(AsyncWebsocketConsumer):
         student = await sync_to_async(lambda: getattr(user, "student_profile", None))()
         auto_title = message[:80] + ("…" if len(message) > 80 else "")
         return await sync_to_async(TutorConversation.objects.using(db_alias).create)(
-            tenant=tenant,
             user=user,
             student=student,
             lesson_id=context.get("lesson_id") or None,
@@ -363,13 +351,6 @@ class ProgressReportStreamConsumer(AsyncWebsocketConsumer):
     async def _handle_generate(self, user, report_type: str, force: bool):
         from academic.models import Student
 
-        tenant = getattr(user, "tenant", None)
-        if tenant is None:
-            await self.send_json(
-                {"type": "error", "detail": "tenant context required."}
-            )
-            return
-
         db_alias = "default"
 
         # Resolve student
@@ -431,10 +412,7 @@ class ProgressReportStreamConsumer(AsyncWebsocketConsumer):
         )
 
         def _generate():
-            from django.db import connection
-
-            connection.set_tenant(tenant)
-            svc = ProgressReportService(tenant=tenant, db_alias=db_alias)
+            svc = ProgressReportService(db_alias=db_alias)
             return svc.generate(
                 student, report_type=report_type, save=True, is_automated=False
             )

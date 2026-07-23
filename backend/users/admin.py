@@ -9,17 +9,17 @@ from .models import UserAccount
 
 @admin.register(UserAccount)
 class UserAccountAdmin(BaseUserAdmin):
-    list_display = ("username", "email", "first_name", "last_name", "role", "tenant")
-    list_filter = ("role", "tenant", "is_staff", "is_active")
+    list_display = ("username", "email", "first_name", "last_name", "role")
+    list_filter = ("role", "is_staff", "is_active")
     search_fields = ("username", "email", "first_name", "last_name")
 
     fieldsets = BaseUserAdmin.fieldsets + (
-        ("Additional Info", {"fields": ("role", "tenant")}),
+        ("Additional Info", {"fields": ("role",)}),
     )
 
     add_fieldsets = BaseUserAdmin.add_fieldsets + (
         (
             "Additional Info",
-            {"fields": ("role", "tenant", "email", "first_name", "last_name")},
+            {"fields": ("role", "email", "first_name", "last_name")},
         ),
     )

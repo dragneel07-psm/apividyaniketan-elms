@@ -18,6 +18,7 @@ from ai_engine.models import ContentChunk
 from ai_engine.services.ai_client import chat_with_fallback, stream_with_fallback
 from ai_engine.services.lang_utils import get_lang_instruction
 from ai_engine.services.provider_config import get_ai_provider_config
+from core.models import SchoolProfile
 from core.vector import PGVECTOR_AVAILABLE
 
 try:
@@ -34,8 +35,10 @@ class RAGTutorService:
     _SIMILARITY_LOW_MASTERY = 0.45  # avg BKT mastery < 0.4
     _SIMILARITY_HIGH_MASTERY = 0.70  # avg BKT mastery >= 0.75
 
-    def __init__(self, *, tenant):
-        self.tenant = tenant
+    def __init__(self, *, tenant=None):
+        # `tenant` is accepted for backward compatibility with callers
+        # outside this module's assigned cleanup scope; it is unused now
+        # that tenant scoping has been removed.
         self.config = get_ai_provider_config()
         self.model = str(
             self.config.get("model") or getattr(settings, "OPENAI_MODEL", "gpt-4o-mini")
@@ -150,7 +153,7 @@ class RAGTutorService:
     def _base_queryset(
         self, context: dict[str, Any] | None = None
     ) -> QuerySet[ContentChunk]:
-        queryset = ContentChunk.objects.filter(tenant=self.tenant)
+        queryset = ContentChunk.objects.all()
         payload = context or {}
 
         lesson_id = payload.get("lesson_id")
@@ -303,7 +306,7 @@ class RAGTutorService:
     def _build_messages(
         self, message: str, snippets: list[dict[str, Any]]
     ) -> list[dict[str, str]]:
-        tenant_name = getattr(self.tenant, "name", "the school")
+        tenant_name = SchoolProfile.get_solo().name or "the school"
         rules = (
             "You are a careful school tutor assistant.\n"
             "Rules:\n"
@@ -395,7 +398,7 @@ class RAGTutorService:
         conversation_history: list[dict[str, Any]] | None = None,
         context: dict[str, Any] | None = None,
     ) -> list[dict[str, str]]:
-        tenant_name = getattr(self.tenant, "name", "the school")
+        tenant_name = SchoolProfile.get_solo().name or "the school"
         user_role = str((context or {}).get("user_role") or "").strip().lower()
         mode = str((context or {}).get("mode") or "direct").strip().lower()
         lang = str((context or {}).get("lang") or "en")
@@ -450,7 +453,7 @@ class RAGTutorService:
         conversation_history: list[dict[str, Any]] | None = None,
         context: dict[str, Any] | None = None,
     ) -> list[dict[str, str]]:
-        tenant_name = getattr(self.tenant, "name", "the school")
+        tenant_name = SchoolProfile.get_solo().name or "the school"
         user_role = str((context or {}).get("user_role") or "").strip().lower()
         lang = str((context or {}).get("lang") or "en")
         lang_instruction = get_lang_instruction(lang)

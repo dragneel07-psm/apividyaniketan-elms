@@ -6,14 +6,6 @@ from django.db import models
 
 
 class Notification(models.Model):
-    tenant = models.ForeignKey(
-        "core.Tenant",
-        on_delete=models.CASCADE,
-        related_name="notifications",
-        null=True,
-        blank=True,
-        db_constraint=False,
-    )
     recipient = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
@@ -34,13 +26,6 @@ class Notification(models.Model):
 
 
 class NotificationTemplate(models.Model):
-    tenant = models.ForeignKey(
-        "core.Tenant",
-        on_delete=models.CASCADE,
-        related_name="notification_templates",
-        null=True,
-        blank=True,
-    )
     name = models.CharField(max_length=100)  # e.g. "Fee Due Reminder"
     subject_template = models.CharField(max_length=255)
     body_template = models.TextField()  # e.g. "Dear {name}, your fees..."

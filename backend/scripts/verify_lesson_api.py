@@ -11,56 +11,19 @@ sys.path.append("/Users/pramodsinghmanyal/Desktop/E-LearningWebApp/backend")
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings.local")
 django.setup()
 
-from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.db import connections
 
 # Imports that depend on settings must come after django.setup()
 from rest_framework.test import APIClient
 
 from academic.models import AcademicClass, Subject
 from academic.models.lesson import Chapter, Lesson
-from core.middleware.tenant import _thread_locals
-from core.models import Tenant
 
 
 def verify_api():
     print("Verifying Lesson API...")
 
-    # 1. Setup Tenant
-    try:
-        tenant = Tenant.objects.get(subdomain="demo")
-    except Tenant.DoesNotExist:
-        tenant = Tenant.objects.first()
-
-    if not tenant:
-        print("No tenant found")
-        return
-
-    # Set thread locals for direct ORM access in the script
-    _thread_locals.tenant = tenant
-    _thread_locals.db_alias = tenant.db_alias
-    print(f"Tenant: {tenant.subdomain}")
-
-    # Register DB if needed
-    # Tenant DBs are stored in backend/config/
-    db_path = settings.BASE_DIR / "config" / tenant.db_name
-    if tenant.db_alias not in settings.DATABASES:
-        new_db_config = settings.DATABASES["default"].copy()
-        new_db_config["NAME"] = db_path
-        settings.DATABASES[tenant.db_alias] = new_db_config
-
-    # Check if we can access the DB
-    try:
-        Subject.objects.using(tenant.db_alias).count()
-    except Exception:
-        # If connection failed, register it
-        new_db_config = settings.DATABASES["default"].copy()
-        new_db_config["NAME"] = db_path
-        settings.DATABASES[tenant.db_alias] = new_db_config
-        connections.databases[tenant.db_alias] = new_db_config
-
-    # 2. Setup User
+    # 1. Setup User
     User = get_user_model()
     user = User.objects.filter(is_superuser=True).first()
     if not user:
@@ -69,10 +32,9 @@ def verify_api():
 
     client = APIClient()
     client.force_authenticate(user=user)
-    client.defaults["HTTP_X_TENANT_ID"] = tenant.subdomain
     client.defaults["HTTP_HOST"] = "localhost"
 
-    # 3. Create Prerequisites
+    # 2. Create Prerequisites
     academic_class = AcademicClass.objects.first()
     if not academic_class:
         academic_class = AcademicClass.objects.create(name="Test Class", order=1)

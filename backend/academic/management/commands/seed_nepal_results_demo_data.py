@@ -2,19 +2,18 @@
 # Unauthorized copying, modification, or distribution of this file,
 # via any medium, is strictly prohibited. Proprietary and confidential.
 """
-Seeds a fully processed Nepal-standard exam term for an existing school
-tenant: grading profile, exam term, per-section/subject configuration,
-anonymized answer-paper codes, mark entries, and a published
-StudentTermResult (marksheet) for every student — exercising the whole
-secure exam-processing pipeline (see academic/services/nepal_result_service.py)
+Seeds a fully processed Nepal-standard exam term for the school: grading
+profile, exam term, per-section/subject configuration, anonymized
+answer-paper codes, mark entries, and a published StudentTermResult
+(marksheet) for every student — exercising the whole secure
+exam-processing pipeline (see academic/services/nepal_result_service.py)
 end to end. Idempotent (get_or_create throughout, safe to re-run).
 
-Assumes seed_school_demo_data has already been run for the target schema
-— this reads its Sections/Subjects/Students/Teachers rather than creating
-its own.
+Assumes seed_school_demo_data has already been run — this reads its
+Sections/Subjects/Students/Teachers rather than creating its own.
 
 Usage:
-  python manage.py seed_nepal_results_demo_data --schema apividyaniketan
+  python manage.py seed_nepal_results_demo_data
 """
 
 import random
@@ -23,7 +22,6 @@ from decimal import Decimal
 
 from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
-from django_tenants.utils import schema_context
 
 from academic.models import Section, Student, Subject
 from academic.models.nepal_result import AnswerPaperCode, ExamSubject, ExamTerm, MarkEntry
@@ -34,7 +32,6 @@ from academic.services.nepal_result_service import (
     paper_code_hash,
     publish_exam_term,
 )
-from core.models import Tenant
 from users.models import UserAccount
 
 # Subjects that carry a practical component under the Nepal basic/secondary
@@ -48,60 +45,45 @@ ABSENT_RATE = 0.03
 class Command(BaseCommand):
     help = (
         "Seed a fully processed Nepal-standard exam term (grading profile, "
-        "coded papers, marks, and published marksheets) for an existing "
-        "tenant. Run seed_school_demo_data first."
+        "coded papers, marks, and published marksheets). Run "
+        "seed_school_demo_data first."
     )
 
     def add_arguments(self, parser):
-        parser.add_argument("--schema", required=True, help="Tenant schema to seed into.")
         parser.add_argument("--seed", type=int, default=42, help="RNG seed for reproducible marks.")
 
     def handle(self, *args, **options):
-        schema = str(options["schema"]).strip().lower()
         rng = random.Random(int(options["seed"]))
 
-        if not schema or schema == "public":
-            raise CommandError("--schema must be a non-public tenant schema.")
+        year = ensure_current_academic_year()
+        if not year:
+            raise CommandError("No academic year found. Run seed_school_demo_data first.")
+        sections = list(
+            Section.objects.select_related("academic_class")
+            .order_by("academic_class__order", "name")
+        )
+        if not sections:
+            raise CommandError("No classes/sections found. Run seed_school_demo_data first.")
+        admin_user = UserAccount.objects.filter(role="admin").order_by("email").first()
 
-        tenant = Tenant.objects.filter(schema_name=schema).first()
-        if not tenant:
-            raise CommandError(f"Tenant schema '{schema}' not found.")
-
-        with schema_context(schema):
-            year = ensure_current_academic_year()
-            if not year:
-                raise CommandError(
-                    f"No academic year found in schema '{schema}'. Run seed_school_demo_data first."
-                )
-            sections = list(
-                Section.objects.select_related("academic_class")
-                .order_by("academic_class__order", "name")
-            )
-            if not sections:
-                raise CommandError(
-                    f"No classes/sections found in schema '{schema}'. Run seed_school_demo_data first."
-                )
-            admin_user = UserAccount.objects.filter(tenant=tenant, role="admin").order_by("email").first()
-
-            profile = ensure_nepal_2081_profile(tenant)
-            term = self._seed_exam_term(tenant, year, profile, admin_user)
-            configs_created, papers_created, marks_created = self._seed_exam_subjects_and_marks(
-                term, sections, rng, admin_user
-            )
-            results = publish_exam_term(term, admin_user)
+        profile = ensure_nepal_2081_profile()
+        term = self._seed_exam_term(year, profile, admin_user)
+        configs_created, papers_created, marks_created = self._seed_exam_subjects_and_marks(
+            term, sections, rng, admin_user
+        )
+        results = publish_exam_term(term, admin_user)
 
         self.stdout.write(
             self.style.SUCCESS(
-                f"\nResult processing demo data seeded into schema={schema}: "
+                f"\nResult processing demo data seeded: "
                 f"term={term.name!r}, {configs_created} exam-subject batches created, "
                 f"{papers_created} answer papers created, {marks_created} mark entries created, "
                 f"{len(results)} published student marksheets."
             )
         )
 
-    def _seed_exam_term(self, tenant, year, profile, admin_user):
+    def _seed_exam_term(self, year, profile, admin_user):
         term, created = ExamTerm.objects.get_or_create(
-            tenant=tenant,
             academic_year=year,
             name=TERM_NAME,
             defaults={

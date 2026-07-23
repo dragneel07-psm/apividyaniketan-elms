@@ -72,12 +72,6 @@ class ChartOfAccount(models.Model):
     account_id = models.UUIDField(
         primary_key=True, default=uuid_lib.uuid4, editable=False
     )
-    tenant = models.ForeignKey(
-        "core.Tenant",
-        on_delete=models.CASCADE,
-        related_name="chart_of_accounts",
-        db_constraint=False,
-    )
     account_code = models.CharField(max_length=10, help_text="e.g. 1010, 4100, 5010")
     name = models.CharField(max_length=120)
     name_np = models.CharField(max_length=120, blank=True, help_text="Nepali name")
@@ -100,9 +94,9 @@ class ChartOfAccount(models.Model):
 
     class Meta:
         ordering = ["account_code"]
-        unique_together = [("tenant", "account_code")]
+        unique_together = [("account_code",)]
         indexes = [
-            models.Index(fields=["tenant", "account_type"], name="coa_tenant_type_idx"),
+            models.Index(fields=["account_type"], name="coa_tenant_type_idx"),
         ]
 
     def __str__(self):
@@ -143,12 +137,6 @@ class JournalEntry(models.Model):
     entry_id = models.UUIDField(
         primary_key=True, default=uuid_lib.uuid4, editable=False
     )
-    tenant = models.ForeignKey(
-        "core.Tenant",
-        on_delete=models.CASCADE,
-        related_name="journal_entries",
-        db_constraint=False,
-    )
     entry_number = models.CharField(
         max_length=20,
         blank=True,
@@ -184,13 +172,13 @@ class JournalEntry(models.Model):
     class Meta:
         ordering = ["-date_ad", "-created_at"]
         indexes = [
-            models.Index(fields=["tenant", "date_ad"], name="je_tenant_date_idx"),
-            models.Index(fields=["tenant", "entry_type"], name="je_tenant_type_idx"),
+            models.Index(fields=["date_ad"], name="je_tenant_date_idx"),
+            models.Index(fields=["entry_type"], name="je_tenant_type_idx"),
         ]
         constraints = [
             # Prevent duplicate voucher numbers per tenant (L6 + C1 guard)
             models.UniqueConstraint(
-                fields=["tenant", "entry_number"],
+                fields=["entry_number"],
                 condition=~models.Q(entry_number=""),
                 name="je_tenant_entry_number_uniq",
             ),
@@ -274,12 +262,6 @@ class FundAccount(models.Model):
     ]
 
     fund_id = models.UUIDField(primary_key=True, default=uuid_lib.uuid4, editable=False)
-    tenant = models.ForeignKey(
-        "core.Tenant",
-        on_delete=models.CASCADE,
-        related_name="fund_accounts",
-        db_constraint=False,
-    )
     name = models.CharField(max_length=120)
     name_np = models.CharField(max_length=120, blank=True)
     fund_type = models.CharField(
@@ -340,12 +322,6 @@ class TDSEntry(models.Model):
     ]
 
     tds_id = models.UUIDField(primary_key=True, default=uuid_lib.uuid4, editable=False)
-    tenant = models.ForeignKey(
-        "core.Tenant",
-        on_delete=models.CASCADE,
-        related_name="tds_entries",
-        db_constraint=False,
-    )
     vendor_name = models.CharField(max_length=150)
     pan_number = models.CharField(
         max_length=20, blank=True, help_text="PAN / VAT registration number"
@@ -389,8 +365,8 @@ class TDSEntry(models.Model):
     class Meta:
         ordering = ["-payment_date"]
         indexes = [
-            models.Index(fields=["tenant", "payment_date"], name="tds_tenant_date_idx"),
-            models.Index(fields=["tenant", "fiscal_year"], name="tds_tenant_fy_idx"),
+            models.Index(fields=["payment_date"], name="tds_tenant_date_idx"),
+            models.Index(fields=["fiscal_year"], name="tds_tenant_fy_idx"),
         ]
 
     def save(self, *args, **kwargs):
@@ -440,12 +416,6 @@ class InventoryItem(models.Model):
     ]
 
     item_id = models.UUIDField(primary_key=True, default=uuid_lib.uuid4, editable=False)
-    tenant = models.ForeignKey(
-        "core.Tenant",
-        on_delete=models.CASCADE,
-        related_name="inventory_items",
-        db_constraint=False,
-    )
     item_code = models.CharField(
         max_length=30, blank=True, help_text="Internal asset tag / barcode"
     )
@@ -507,8 +477,8 @@ class InventoryItem(models.Model):
     class Meta:
         ordering = ["category", "name"]
         indexes = [
-            models.Index(fields=["tenant", "category"], name="inv_tenant_cat_idx"),
-            models.Index(fields=["tenant", "form_type"], name="inv_tenant_form_idx"),
+            models.Index(fields=["category"], name="inv_tenant_cat_idx"),
+            models.Index(fields=["form_type"], name="inv_tenant_form_idx"),
         ]
 
     def save(self, *args, **kwargs):
@@ -559,12 +529,6 @@ class MerchantServiceFee(models.Model):
     ]
 
     msf_id = models.UUIDField(primary_key=True, default=uuid_lib.uuid4, editable=False)
-    tenant = models.ForeignKey(
-        "core.Tenant",
-        on_delete=models.CASCADE,
-        related_name="merchant_service_fees",
-        db_constraint=False,
-    )
     payment = models.OneToOneField(
         "billing.Payment",
         on_delete=models.CASCADE,

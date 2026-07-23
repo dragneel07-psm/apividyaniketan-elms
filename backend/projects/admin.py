@@ -28,14 +28,14 @@ class ProjectAdmin(admin.ModelAdmin):
     list_filter = ("status", "is_group")
     search_fields = ("title", "description")
     readonly_fields = ("created_at", "updated_at")
-    raw_id_fields = ("mentor", "leader", "subject", "section", "created_by", "tenant")
+    raw_id_fields = ("mentor", "leader", "subject", "section", "created_by")
 
 
 @admin.register(ProjectMember)
 class ProjectMemberAdmin(admin.ModelAdmin):
     list_display = ("project", "student", "role", "joined_at")
     list_filter = ("role",)
-    raw_id_fields = ("project", "student", "tenant")
+    raw_id_fields = ("project", "student")
 
 
 @admin.register(ProjectTask)
@@ -51,7 +51,7 @@ class ProjectTaskAdmin(admin.ModelAdmin):
     )
     list_filter = ("status",)
     search_fields = ("title", "description")
-    raw_id_fields = ("project", "assignee", "created_by", "tenant")
+    raw_id_fields = ("project", "assignee", "created_by")
 
 
 @admin.register(ProjectUpdate)
@@ -59,7 +59,7 @@ class ProjectUpdateAdmin(admin.ModelAdmin):
     list_display = ("project", "kind", "author", "created_at")
     list_filter = ("kind",)
     search_fields = ("body",)
-    raw_id_fields = ("project", "task", "author", "tenant")
+    raw_id_fields = ("project", "task", "author")
     readonly_fields = ("created_at",)
 
 
@@ -67,7 +67,7 @@ class ProjectUpdateAdmin(admin.ModelAdmin):
 class ProjectSubmissionAdmin(admin.ModelAdmin):
     list_display = ("project", "submitted_by", "submitted_at", "is_late", "is_final")
     list_filter = ("is_late", "is_final")
-    raw_id_fields = ("project", "submitted_by", "tenant")
+    raw_id_fields = ("project", "submitted_by")
 
 
 @admin.register(ProjectAttachment)
@@ -80,7 +80,7 @@ class ProjectAttachmentAdmin(admin.ModelAdmin):
         "uploaded_at",
         "size_bytes",
     )
-    raw_id_fields = ("project", "task", "update", "uploaded_by", "tenant")
+    raw_id_fields = ("project", "task", "update", "uploaded_by")
     readonly_fields = ("uploaded_at",)
 
 
@@ -88,5 +88,5 @@ class ProjectAttachmentAdmin(admin.ModelAdmin):
 class RubricTemplateAdmin(admin.ModelAdmin):
     list_display = ("name", "owner", "subject", "is_shared", "updated_at")
     search_fields = ("name", "description")
-    raw_id_fields = ("tenant", "owner", "subject")
+    raw_id_fields = ("owner", "subject")
     readonly_fields = ("created_at", "updated_at")

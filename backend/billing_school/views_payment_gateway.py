@@ -7,7 +7,7 @@ import logging
 import uuid as uuid_lib
 from decimal import Decimal, InvalidOperation
 
-from django.db import connection, transaction
+from django.db import transaction
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -18,20 +18,12 @@ from billing_school.payment_gateways import EsewaGateway, KhaltiGateway
 logger = logging.getLogger(__name__)
 
 
-def _ensure_tenant_schema() -> bool:
-    """Reject gateway callbacks that resolved to the public schema."""
-    schema_name = (
-        str(getattr(connection, "schema_name", "public") or "public").strip().lower()
-    )
-    return schema_name != "public"
-
-
 def _resolve_fee_by_pid_prefix(oid: str):
     """Resolve a StudentFee from an eSewa pid of form ``sf_{hex16}_{random}``.
 
     Initiation truncates the UUID to 16 hex chars, so a UUID range query
     (PK index scan) is used to find the fee. Returns None if the pid is
-    malformed or does not resolve to exactly one fee in this tenant schema.
+    malformed or does not resolve to exactly one fee.
     """
     parts = (oid or "").split("_")
     if len(parts) < 2 or len(parts[1]) < 16:
@@ -78,7 +70,6 @@ def _record_payment(fee, amount, method, gateway_ref, request):
             return existing
 
         payment = Payment.objects.create(
-            tenant=locked_fee.tenant,
             student=locked_fee.student,
             student_fee=locked_fee,
             amount=amount,
@@ -106,7 +97,7 @@ class EsewaInitiateView(APIView):
         if not fee_id:
             return Response({"error": "student_fee_id is required."}, status=400)
         try:
-            fee = StudentFee.objects.get(pk=fee_id, tenant=request.user.tenant)
+            fee = StudentFee.objects.get(pk=fee_id)
         except StudentFee.DoesNotExist:
             return Response({"error": "Fee not found."}, status=404)
 
@@ -128,9 +119,6 @@ class EsewaCallbackView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request):
-        if not _ensure_tenant_schema():
-            return Response({"error": "Tenant context required."}, status=400)
-
         oid = request.query_params.get("oid", "")
         amt = request.query_params.get("amt", "")
         ref_id = request.query_params.get("refId", "")
@@ -164,7 +152,7 @@ class KhaltiInitiateView(APIView):
         if not fee_id:
             return Response({"error": "student_fee_id is required."}, status=400)
         try:
-            fee = StudentFee.objects.get(pk=fee_id, tenant=request.user.tenant)
+            fee = StudentFee.objects.get(pk=fee_id)
         except StudentFee.DoesNotExist:
             return Response({"error": "Fee not found."}, status=404)
 
@@ -208,9 +196,6 @@ class KhaltiCallbackView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request):
-        if not _ensure_tenant_schema():
-            return Response({"error": "Tenant context required."}, status=400)
-
         pidx = request.query_params.get("pidx")
         if not pidx:
             return Response({"error": "pidx required."}, status=400)

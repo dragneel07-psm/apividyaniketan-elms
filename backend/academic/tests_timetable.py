@@ -3,16 +3,17 @@
 # via any medium, is strictly prohibited. Proprietary and confidential.
 from django.contrib.auth import get_user_model
 from django.utils import timezone
-from django_tenants.test.cases import FastTenantTestCase
+from django.test import TestCase
 from rest_framework import status
 from rest_framework.test import APIClient
 
 from academic.models import AcademicClass, Teacher, Timetable
+from academic.services.academic_year_service import ensure_current_academic_year
 
 User = get_user_model()
 
 
-class TimetablePermissionTests(FastTenantTestCase):
+class TimetablePermissionTests(TestCase):
     """Regression coverage for timetable permission rules in tenant schema.
 
     This class also serves as a deploy-trigger touchpoint for backend-only Railway watches.
@@ -20,19 +21,8 @@ class TimetablePermissionTests(FastTenantTestCase):
     Update this docstring only with no-op text when deploy retriggers are needed (latest refresh: 2026-03-04).
     """
 
-    @classmethod
-    def setup_tenant(cls, tenant):
-        tenant.name = "Test School"
-
-    @classmethod
-    def setup_domain(cls, domain):
-        domain.is_primary = True
-
     def setUp(self):
-        self.client = APIClient(
-            HTTP_HOST=self.get_test_tenant_domain(),
-            HTTP_X_TENANT_ID=self.tenant.schema_name,
-        )
+        self.client = APIClient()
 
         self.admin_user = User.objects.create_user(
             username="admin_user",
@@ -62,6 +52,7 @@ class TimetablePermissionTests(FastTenantTestCase):
     def test_teacher_cannot_patch_admin_main_slot(self):
         main_slot = Timetable.objects.create(
             academic_class=self.academic_class,
+            academic_year=ensure_current_academic_year(),
             day_of_week="Monday",
             start_time="09:00",
             end_time="10:00",

@@ -79,19 +79,14 @@ class SMSService:
 
 class NotificationService:
     @staticmethod
-    def create_notification(
-        recipient, title, message, tenant=None, link=None, channels=None
-    ):
+    def create_notification(recipient, title, message, link=None, channels=None):
         """
         Creates a notification for a user and optionally sends via other channels.
         channels: list of 'email', 'sms', 'in_app' (default: in_app only)
         """
-        if not tenant:
-            tenant = getattr(recipient, "tenant", None)
-
         # 1. In-App Notification (Always created if not disabled explicitly, but usually yes)
         notification = Notification.objects.create(
-            tenant=tenant, recipient=recipient, title=title, message=message, link=link
+            recipient=recipient, title=title, message=message, link=link
         )
 
         channels = channels or []
@@ -138,32 +133,30 @@ class NotificationService:
         return notification
 
     @staticmethod
-    def notify_role(tenant, role, title, message, link=None, channels=None):
+    def notify_role(role, title, message, link=None, channels=None):
         """
-        Sends a notification to all users with a specific role within a tenant.
+        Sends a notification to all users with a specific role.
         """
         from users.models import UserAccount
 
-        users = UserAccount.objects.filter(tenant=tenant, role=role)
+        users = UserAccount.objects.filter(role=role)
         notifications = []
         for user in users:
             notifications.append(
                 NotificationService.create_notification(
-                    user, title, message, tenant=tenant, link=link, channels=channels
+                    user, title, message, link=link, channels=channels
                 )
             )
         return notifications
 
     @staticmethod
-    def notify_class(tenant, academic_class, title, message, link=None, channels=None):
+    def notify_class(academic_class, title, message, link=None, channels=None):
         """
         Sends a notification to all students in a specific class.
         """
         from academic.models import Student
 
-        students = Student.objects.filter(
-            academic_class=academic_class, user__tenant=tenant
-        )
+        students = Student.objects.filter(academic_class=academic_class)
         notifications = []
         for student in students:
             # Notify the student User
@@ -172,7 +165,6 @@ class NotificationService:
                     student.user,
                     title,
                     message,
-                    tenant=tenant,
                     link=link,
                     channels=channels,
                 )

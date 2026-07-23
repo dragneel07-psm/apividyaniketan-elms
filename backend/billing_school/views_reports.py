@@ -11,6 +11,7 @@ from rest_framework.response import Response
 from billing.models_school import Payment, StudentFee
 from billing.permissions import IsSchoolFinanceManager
 from billing.shared_views import BillingSchemaGuardMixin
+from core.models import SchoolProfile
 from core.reports import generate_excel_response, generate_pdf_response
 from core.utils.audit import record_audit_event
 
@@ -20,11 +21,10 @@ class BillingReportViewSet(BillingSchemaGuardMixin, viewsets.ViewSet):
     ViewSet for generating billing and finance reports.
     """
 
-    require_tenant_schema = True
     permission_classes = [IsSchoolFinanceManager]
 
     def _tenant(self, request):
-        return getattr(request.user, "tenant", None) or getattr(request, "tenant", None)
+        return SchoolProfile.get_solo()
 
     def _log_export(
         self, request, *, report_type: str, fmt: str, details: dict | None = None
@@ -47,7 +47,7 @@ class BillingReportViewSet(BillingSchemaGuardMixin, viewsets.ViewSet):
         tenant = self._tenant(request)
 
         payments = (
-            Payment.objects.filter(tenant=tenant)
+            Payment.objects.all()
             .select_related("student__user", "student_fee__fee_structure")
             .order_by("-payment_date")
         )
@@ -106,7 +106,7 @@ class BillingReportViewSet(BillingSchemaGuardMixin, viewsets.ViewSet):
         tenant = self._tenant(request)
 
         payments = (
-            Payment.objects.filter(tenant=tenant)
+            Payment.objects.all()
             .select_related("student__user", "student_fee__fee_structure")
             .order_by("-payment_date")
         )
@@ -148,7 +148,6 @@ class BillingReportViewSet(BillingSchemaGuardMixin, viewsets.ViewSet):
         tenant = self._tenant(request)
         pending_fees = (
             StudentFee.objects.filter(
-                tenant=tenant,
                 status__in=["pending", "partial", "overdue"],
             )
             .select_related("student__user", "fee_structure")
@@ -191,7 +190,6 @@ class BillingReportViewSet(BillingSchemaGuardMixin, viewsets.ViewSet):
         tenant = self._tenant(request)
         pending_fees = (
             StudentFee.objects.filter(
-                tenant=tenant,
                 status__in=["pending", "partial", "overdue"],
             )
             .select_related("student__user", "fee_structure")
@@ -253,7 +251,6 @@ class BillingReportViewSet(BillingSchemaGuardMixin, viewsets.ViewSet):
 
         return (
             Payment.objects.filter(
-                tenant=tenant,
                 payment_date__date__gte=start,
                 payment_date__date__lte=end,
             )
@@ -267,7 +264,7 @@ class BillingReportViewSet(BillingSchemaGuardMixin, viewsets.ViewSet):
         from billing.models_school import Expense
 
         return (
-            Expense.objects.filter(tenant=tenant, date__gte=start, date__lte=end)
+            Expense.objects.filter(date__gte=start, date__lte=end)
             .select_related("recorded_by")
             .order_by("date")
         )
@@ -461,12 +458,12 @@ class BillingReportViewSet(BillingSchemaGuardMixin, viewsets.ViewSet):
             )
 
         fees = (
-            StudentFee.objects.filter(tenant=tenant, student=student)
+            StudentFee.objects.filter(student=student)
             .select_related("fee_structure")
             .order_by("due_date")
         )
         payments = (
-            Payment.objects.filter(tenant=tenant, student=student)
+            Payment.objects.filter(student=student)
             .select_related("student_fee__fee_structure")
             .order_by("payment_date")
         )
@@ -563,7 +560,7 @@ class BillingReportViewSet(BillingSchemaGuardMixin, viewsets.ViewSet):
         as_of = self._date_range(request)[1]  # use 'to' as as_of
 
         outstanding = (
-            StudentFee.objects.filter(tenant=tenant)
+            StudentFee.objects.all()
             .exclude(status__in=["paid", "waived"])
             .annotate(balance=F("amount_due") - F("amount_paid"))
             .filter(balance__gt=0)
@@ -635,7 +632,7 @@ class BillingReportViewSet(BillingSchemaGuardMixin, viewsets.ViewSet):
         fy = (request.query_params.get("fy") or "").strip()
 
         qs = (
-            StudentFee.objects.filter(tenant=tenant)
+            StudentFee.objects.all()
             .exclude(discount__isnull=True)
             .exclude(discount__scholarship_category="")
             .select_related("student__user", "fee_structure", "discount")
@@ -793,7 +790,7 @@ class BillingReportViewSet(BillingSchemaGuardMixin, viewsets.ViewSet):
         as_of = self._date_range(request)[1]
 
         accounts = ChartOfAccount.objects.filter(
-            tenant=tenant, is_active=True
+            is_active=True
         ).order_by("account_code")
 
         rows = []

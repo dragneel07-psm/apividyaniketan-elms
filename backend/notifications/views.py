@@ -23,15 +23,13 @@ class NotificationViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         user = self.request.user
         role = getattr(user, "role", "")
-        tenant = getattr(self.request, "tenant", None)
-        # Admins and staff can see all tenant notifications
-        if role in ("admin", "staff", "saas_admin") and tenant:
-            return Notification.objects.filter(tenant=tenant)
+        # Admins and staff can see all notifications
+        if role in ("admin", "staff", "saas_admin"):
+            return Notification.objects.all()
         return Notification.objects.filter(recipient=user)
 
     def perform_create(self, serializer):
-        tenant = getattr(self.request, "tenant", None)
-        serializer.save(tenant=tenant)
+        serializer.save()
 
     @action(detail=False, methods=["GET"])
     def unread_count(self, request):
@@ -69,9 +67,7 @@ class NotificationViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        tenant_schema = str(
-            getattr(getattr(request, "tenant", None), "schema_name", "public")
-        )
+        tenant_schema = "public"
         job = enqueue_job(
             send_notification_task,
             tenant_schema=tenant_schema,
@@ -105,10 +101,7 @@ class NotificationViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        tenant = getattr(request, "tenant", None)
         qs = User.objects.filter(is_active=True)
-        if tenant:
-            qs = qs.filter(tenant=tenant)
 
         if target == "role" and role:
             qs = qs.filter(role=role)
@@ -121,7 +114,6 @@ class NotificationViewSet(viewsets.ModelViewSet):
         bulk = [
             Notification(
                 recipient=user,
-                tenant=tenant,
                 title=title,
                 message=message,
                 link=link or None,
@@ -146,11 +138,7 @@ class NotificationTemplateViewSet(viewsets.ModelViewSet):
         return [permissions.IsAuthenticated()]
 
     def get_queryset(self):
-        # Filter by tenant
-        if hasattr(self.request, "tenant"):
-            return NotificationTemplate.objects.filter(tenant=self.request.tenant)
-        return NotificationTemplate.objects.none()
+        return NotificationTemplate.objects.all()
 
     def perform_create(self, serializer):
-        tenant = getattr(self.request, "tenant", None)
-        serializer.save(tenant=tenant)
+        serializer.save()

@@ -27,7 +27,7 @@ class LegacyBillingDeprecationMixin:
     Adds RFC-style deprecation metadata on legacy `/api/billing/*` endpoints.
     """
 
-    legacy_replacement_hint = "Use /api/billing/saas/* or /api/billing/school/*"
+    legacy_replacement_hint = "Use /api/billing/school/*"
 
     def finalize_response(self, request, response, *args, **kwargs):
         response = super().finalize_response(request, response, *args, **kwargs)
@@ -35,7 +35,7 @@ class LegacyBillingDeprecationMixin:
         response.setdefault("Sunset", _legacy_sunset_value())
         response.setdefault(
             "Link",
-            '</api/billing/saas/>; rel="successor-version", </api/billing/school/>; rel="successor-version"',
+            '</api/billing/school/>; rel="successor-version"',
         )
         response.setdefault("X-API-Deprecated", self.legacy_replacement_hint)
         return response

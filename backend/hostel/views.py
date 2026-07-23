@@ -19,30 +19,16 @@ from .serializers import (
 logger = logging.getLogger(__name__)
 
 
-class TenantFilterMixin:
-    def get_queryset(self):
-        tenant = getattr(self.request.user, "tenant", None)
-        if tenant is None:
-            return self.queryset.model.objects.none()
-        return self.queryset.filter(tenant=tenant)
-
-
-class HostelBlockViewSet(TenantFilterMixin, viewsets.ModelViewSet):
+class HostelBlockViewSet(viewsets.ModelViewSet):
     serializer_class = HostelBlockSerializer
     permission_classes = [IsAuthenticated]
     queryset = HostelBlock.objects.prefetch_related("rooms__allotments").all()
-
-    def perform_create(self, serializer):
-        tenant = getattr(self.request.user, "tenant", None)
-        serializer.save(tenant=tenant)
 
     @action(detail=False, methods=["get"])
     def dashboard(self, request):
         blocks = self.get_queryset().filter(is_active=True)
         total_capacity = sum(sum(r.capacity for r in b.rooms.all()) for b in blocks)
-        total_occupied = HostelAllotment.objects.filter(
-            tenant=request.user.tenant, is_active=True
-        ).count()
+        total_occupied = HostelAllotment.objects.filter(is_active=True).count()
         return Response(
             {
                 "total_blocks": blocks.count(),
@@ -58,16 +44,12 @@ class HostelBlockViewSet(TenantFilterMixin, viewsets.ModelViewSet):
         )
 
 
-class HostelRoomViewSet(TenantFilterMixin, viewsets.ModelViewSet):
+class HostelRoomViewSet(viewsets.ModelViewSet):
     serializer_class = HostelRoomSerializer
     permission_classes = [IsAuthenticated]
     queryset = (
         HostelRoom.objects.select_related("block").prefetch_related("allotments").all()
     )
-
-    def perform_create(self, serializer):
-        tenant = getattr(self.request.user, "tenant", None)
-        serializer.save(tenant=tenant)
 
     def get_queryset(self):
         qs = super().get_queryset()
@@ -84,7 +66,7 @@ class HostelRoomViewSet(TenantFilterMixin, viewsets.ModelViewSet):
         return qs
 
 
-class HostelAllotmentViewSet(TenantFilterMixin, viewsets.ModelViewSet):
+class HostelAllotmentViewSet(viewsets.ModelViewSet):
     serializer_class = HostelAllotmentSerializer
     permission_classes = [IsAuthenticated]
     queryset = HostelAllotment.objects.select_related(
@@ -92,11 +74,10 @@ class HostelAllotmentViewSet(TenantFilterMixin, viewsets.ModelViewSet):
     ).all()
 
     def perform_create(self, serializer):
-        tenant = getattr(self.request.user, "tenant", None)
-        allotment = serializer.save(tenant=tenant)
-        self._create_hostel_fee(allotment, tenant)
+        allotment = serializer.save()
+        self._create_hostel_fee(allotment)
 
-    def _create_hostel_fee(self, allotment, tenant):
+    def _create_hostel_fee(self, allotment):
         """Auto-generate a pending StudentFee for the room's monthly_fee."""
         try:
             monthly_fee = allotment.room.monthly_fee
@@ -106,9 +87,8 @@ class HostelAllotmentViewSet(TenantFilterMixin, viewsets.ModelViewSet):
 
             from billing.models_school import FeeStructure, StudentFee
 
-            # Find or create a hostel fee structure for this tenant
+            # Find or create a hostel fee structure
             fee_structure, _ = FeeStructure.objects.get_or_create(
-                tenant=tenant,
                 name="Hostel Fee",
                 defaults={
                     "amount": monthly_fee,
@@ -122,7 +102,6 @@ class HostelAllotmentViewSet(TenantFilterMixin, viewsets.ModelViewSet):
                 else datetime.date.today().replace(day=1)
             )
             StudentFee.objects.get_or_create(
-                tenant=tenant,
                 student=allotment.student,
                 fee_structure=fee_structure,
                 due_date=due_date,

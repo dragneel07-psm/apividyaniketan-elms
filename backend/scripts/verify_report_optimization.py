@@ -23,7 +23,6 @@ from academic.models.subject import Subject
 from academic.views.reports import ReportViewSet
 from billing.models import FeeStructure, StudentFee
 from billing.views_reports import BillingReportViewSet
-from core.models.tenant import Tenant
 
 User = get_user_model()
 
@@ -31,13 +30,7 @@ User = get_user_model()
 def verify_optimizations():
     print("Starting verification of report optimizations...")
 
-    # 0. Setup Mock Data if needed (assuming 'demo' tenant exists)
-    try:
-        tenant = Tenant.objects.get(subdomain="demo")
-        db_alias = tenant.db_alias
-    except Tenant.DoesNotExist:
-        print("Demo tenant not found. Skipping full verification.")
-        return
+    db_alias = "default"
 
     # 1. Verify Attendance Summary (Academic)
     print("\nVerifying Attendance Summary Optimization...")

@@ -4,18 +4,13 @@
 from django.db import models
 
 from core.upload_validation import document_upload_validators
-from core.utils.storage_paths import (
-    schema_from_current_connection,
-    tenant_scoped_upload_path,
-)
+from core.utils.storage_paths import scoped_upload_path
 
 from .subject import Subject
 
 
 def lesson_material_upload_to(instance, filename):
-    return tenant_scoped_upload_path(
-        schema_from_current_connection(), "lesson_materials", filename
-    )
+    return scoped_upload_path("lesson_materials", filename)
 
 
 class Chapter(models.Model):

@@ -1,7 +1,7 @@
 # Copyright (c) 2024-2026 Pramod Singh Manyal. All rights reserved.
 # Unauthorized copying, modification, or distribution of this file,
 # via any medium, is strictly prohibited. Proprietary and confidential.
-from django_tenants.test.cases import FastTenantTestCase
+from django.test import TestCase
 from rest_framework import status
 from rest_framework.test import APIClient
 
@@ -9,15 +9,7 @@ from academic.models import AcademicClass, AcademicYear, Subject, Teacher
 from users.models import UserAccount
 
 
-class ClassAndSubjectVisibilityTests(FastTenantTestCase):
-    @classmethod
-    def setup_tenant(cls, tenant):
-        tenant.name = "Class Visibility School"
-
-    @classmethod
-    def setup_domain(cls, domain):
-        domain.is_primary = True
-
+class ClassAndSubjectVisibilityTests(TestCase):
     @staticmethod
     def _items(response):
         if isinstance(response.data, dict):
@@ -25,24 +17,19 @@ class ClassAndSubjectVisibilityTests(FastTenantTestCase):
         return response.data
 
     def setUp(self):
-        self.client = APIClient(
-            HTTP_HOST=self.get_test_tenant_domain(),
-            HTTP_X_TENANT_ID=self.tenant.schema_name,
-        )
+        self.client = APIClient()
 
         self.teacher_user = UserAccount.objects.create_user(
             username="visibility_teacher",
             email="visibility_teacher@example.com",
             password="Teacher@1234",
             role="teacher",
-            tenant=self.tenant,
         )
         self.other_teacher_user = UserAccount.objects.create_user(
             username="other_visibility_teacher",
             email="other_visibility_teacher@example.com",
             password="Teacher@1234",
             role="teacher",
-            tenant=self.tenant,
         )
 
         self.teacher_profile = Teacher.objects.create(user=self.teacher_user)

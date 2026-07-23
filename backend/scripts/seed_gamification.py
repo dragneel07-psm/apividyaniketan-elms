@@ -7,29 +7,14 @@ import sys
 import django
 
 # Setup Django
-sys.path.append("/Users/pramodsinghmanyal/Desktop/E-LearningWebApp/backend")
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings.local")
 django.setup()
 
-from core.models import Tenant
 from gamification.models import Badge
 
 
 def seed_badges():
-    # Use the first tenant found (usually 'demo')
-    tenant = Tenant.objects.first()
-    if not tenant:
-        print("No tenant found. Running in default context.")
-        return
-
-    # Register the demo database for the script if needed
-    from django.conf import settings
-
-    db_path = settings.BASE_DIR / "config" / tenant.db_name
-    if "demo" not in settings.DATABASES:
-        settings.DATABASES["demo"] = settings.DATABASES["default"].copy()
-        settings.DATABASES["demo"]["NAME"] = db_path
-
     badges_data = [
         {
             "name": "Course Started",
@@ -66,10 +51,7 @@ def seed_badges():
     ]
 
     for data in badges_data:
-        # Use 'demo' database alias
-        badge, created = Badge.objects.using("demo").get_or_create(
-            tenant=tenant, name=data["name"], defaults=data
-        )
+        badge, created = Badge.objects.get_or_create(name=data["name"], defaults=data)
         if created:
             print(f"Created badge: {badge.name}")
         else:

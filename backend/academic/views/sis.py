@@ -44,7 +44,7 @@ class StudentHealthRecordSerializer(serializers.ModelSerializer):
     class Meta:
         model = StudentHealthRecord
         fields = "__all__"
-        read_only_fields = ["tenant", "created_at", "updated_at"]
+        read_only_fields = ["created_at", "updated_at"]
 
 
 class DisciplinaryIncidentSerializer(serializers.ModelSerializer):
@@ -56,7 +56,7 @@ class DisciplinaryIncidentSerializer(serializers.ModelSerializer):
     class Meta:
         model = DisciplinaryIncident
         fields = "__all__"
-        read_only_fields = ["tenant", "created_at", "updated_at"]
+        read_only_fields = ["created_at", "updated_at"]
 
     def get_reported_by_name(self, obj):
         if obj.reported_by:
@@ -76,7 +76,7 @@ class StudentDocumentSerializer(serializers.ModelSerializer):
     class Meta:
         model = StudentDocument
         fields = "__all__"
-        read_only_fields = ["tenant", "document_number", "created_at"]
+        read_only_fields = ["document_number", "created_at"]
 
     def get_issued_by_name(self, obj):
         if obj.issued_by:
@@ -90,12 +90,7 @@ class StudentDocumentSerializer(serializers.ModelSerializer):
 class _SISBase(
     BillingSchemaGuardMixin, TenantScopedQuerysetMixin, viewsets.ModelViewSet
 ):
-    require_tenant_schema = True
-    allow_unscoped_for_saas = False
     permission_classes = [IsSISStaff]
-
-    def _tenant(self):
-        return getattr(self.request.user, "tenant", None)
 
 
 # ─── Health Records ───────────────────────────────────────────────────────────
@@ -117,7 +112,7 @@ class StudentHealthRecordViewSet(_SISBase):
         return qs
 
     def perform_create(self, serializer):
-        record = serializer.save(tenant=self._tenant())
+        record = serializer.save()
         record_audit_event(
             action="sis.health_record_created",
             user=self.request.user,
@@ -183,7 +178,7 @@ class DisciplinaryIncidentViewSet(_SISBase):
         return qs
 
     def perform_create(self, serializer):
-        incident = serializer.save(tenant=self._tenant(), reported_by=self.request.user)
+        incident = serializer.save(reported_by=self.request.user)
         record_audit_event(
             action="sis.incident_reported",
             user=self.request.user,
@@ -253,7 +248,7 @@ class StudentDocumentViewSet(_SISBase):
         return qs.filter(is_cancelled=False)
 
     def perform_create(self, serializer):
-        doc = serializer.save(tenant=self._tenant(), issued_by=self.request.user)
+        doc = serializer.save(issued_by=self.request.user)
         record_audit_event(
             action="sis.document_issued",
             user=self.request.user,
@@ -289,10 +284,12 @@ class StudentDocumentViewSet(_SISBase):
     @action(detail=True, methods=["get"], url_path="preview")
     def preview(self, request, pk=None):
         """Return structured data for rendering the certificate on the frontend."""
+        from core.models import SchoolProfile
+
         doc = self.get_object()
         student = doc.student
         user = student.user
-        tenant = self._tenant()
+        school = SchoolProfile.get_solo()
 
         payload = {
             "document_number": doc.document_number,
@@ -313,10 +310,10 @@ class StudentDocumentViewSet(_SISBase):
                 "section": student.section.name if student.section else "",
             },
             "school": {
-                "name": tenant.name if tenant else "",
-                "address": getattr(tenant, "address", "") or "",
-                "contact_email": getattr(tenant, "contact_email", "") or "",
-                "contact_phone": getattr(tenant, "contact_phone", "") or "",
+                "name": school.name or "",
+                "address": school.address or "",
+                "contact_email": school.contact_email or "",
+                "contact_phone": school.contact_phone or "",
             },
             "issued_by": doc.issued_by.get_full_name() if doc.issued_by else "",
             "metadata": doc.metadata,
@@ -328,37 +325,30 @@ class StudentDocumentViewSet(_SISBase):
 
 
 class SISDashboardViewSet(BillingSchemaGuardMixin, viewsets.ViewSet):
-    require_tenant_schema = True
     permission_classes = [IsSISStaff]
-
-    def _tenant(self, request):
-        return getattr(request.user, "tenant", None)
 
     @action(detail=False, methods=["get"], url_path="stats")
     def stats(self, request):
-        tenant = self._tenant(request)
-        health_count = StudentHealthRecord.objects.filter(tenant=tenant).count()
+        health_count = StudentHealthRecord.objects.all().count()
         open_incidents = DisciplinaryIncident.objects.filter(
-            tenant=tenant, status=DisciplinaryIncident.STATUS_OPEN
+            status=DisciplinaryIncident.STATUS_OPEN
         ).count()
-        total_incidents = DisciplinaryIncident.objects.filter(tenant=tenant).count()
-        docs_issued = StudentDocument.objects.filter(
-            tenant=tenant, is_cancelled=False
-        ).count()
+        total_incidents = DisciplinaryIncident.objects.all().count()
+        docs_issued = StudentDocument.objects.filter(is_cancelled=False).count()
         tc_issued = StudentDocument.objects.filter(
-            tenant=tenant, document_type=StudentDocument.TYPE_TC, is_cancelled=False
+            document_type=StudentDocument.TYPE_TC, is_cancelled=False
         ).count()
 
         from django.db.models import Count
 
         incident_by_type = list(
-            DisciplinaryIncident.objects.filter(tenant=tenant)
+            DisciplinaryIncident.objects.all()
             .values("incident_type")
             .annotate(count=Count("incident_id"))
             .order_by("-count")[:6]
         )
         incident_by_severity = list(
-            DisciplinaryIncident.objects.filter(tenant=tenant)
+            DisciplinaryIncident.objects.all()
             .values("severity")
             .annotate(count=Count("incident_id"))
         )

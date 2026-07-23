@@ -23,9 +23,11 @@ NEPAL_2081_BANDS = [
 ]
 
 
-def ensure_nepal_2081_profile(tenant):
+def ensure_nepal_2081_profile(tenant=None):
+    # `tenant` is unused now (single-tenant deployment); kept as an accepted
+    # parameter because callers outside this sweep's file list still pass it
+    # positionally (see academic/management/commands/seed_nepal_results_demo_data.py).
     profile, _ = NepalGradingProfile.objects.get_or_create(
-        tenant=tenant,
         name="Nepal Letter Grading 2081",
         effective_from_bs="2081",
         defaults={

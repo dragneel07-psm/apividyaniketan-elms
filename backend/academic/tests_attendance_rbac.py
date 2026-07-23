@@ -1,7 +1,7 @@
 # Copyright (c) 2024-2026 Pramod Singh Manyal. All rights reserved.
 # Unauthorized copying, modification, or distribution of this file,
 # via any medium, is strictly prohibited. Proprietary and confidential.
-from django_tenants.test.cases import FastTenantTestCase
+from django.test import TestCase
 from rest_framework import status
 from rest_framework.test import APIClient
 
@@ -9,54 +9,39 @@ from academic.models import AcademicClass, Attendance, Parent, Student, Subject,
 from users.models import UserAccount
 
 
-class AttendanceAccessControlTests(FastTenantTestCase):
+class AttendanceAccessControlTests(TestCase):
     @staticmethod
     def _items(response):
         if isinstance(response.data, dict):
             return response.data.get("results", [])
         return response.data
 
-    @classmethod
-    def setup_tenant(cls, tenant):
-        tenant.name = "Attendance Security School"
-
-    @classmethod
-    def setup_domain(cls, domain):
-        domain.is_primary = True
-
     def setUp(self):
-        self.client = APIClient(
-            HTTP_HOST=self.get_test_tenant_domain(),
-            HTTP_X_TENANT_ID=self.tenant.schema_name,
-        )
+        self.client = APIClient()
 
         self.teacher_user = UserAccount.objects.create_user(
             username="att_teacher",
             email="att_teacher@example.com",
             password="Teacher@1234",
             role="teacher",
-            tenant=self.tenant,
         )
         self.student_user = UserAccount.objects.create_user(
             username="att_student",
             email="att_student@example.com",
             password="Student@1234",
             role="student",
-            tenant=self.tenant,
         )
         self.other_student_user = UserAccount.objects.create_user(
             username="att_other_student",
             email="att_other_student@example.com",
             password="Student@1234",
             role="student",
-            tenant=self.tenant,
         )
         self.parent_user = UserAccount.objects.create_user(
             username="att_parent",
             email="att_parent@example.com",
             password="Parent@1234",
             role="parent",
-            tenant=self.tenant,
         )
 
         class_8 = AcademicClass.objects.create(name="Grade 8", order=8)

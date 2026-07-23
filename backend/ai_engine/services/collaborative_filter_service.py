@@ -36,9 +36,6 @@ TOP_N = 8
 
 
 class CollaborativeFilterService:
-    def __init__(self, *, tenant):
-        self.tenant = tenant
-
     def recommend_lessons(self, student, using="default") -> list[dict[str, Any]]:
         """
         Return a ranked list of lesson recommendations for a student based on
@@ -154,10 +151,7 @@ class CollaborativeFilterService:
         skill_tags_by_lesson: dict[int, set] = {}
         for tag in (
             SkillTag.objects.using(using)
-            .filter(
-                lessons__id__in=candidate_ids,
-                tenant=self.tenant,
-            )
+            .filter(lessons__id__in=candidate_ids)
             .prefetch_related("lessons")
         ):
             for lesson in tag.lessons.filter(id__in=candidate_ids):

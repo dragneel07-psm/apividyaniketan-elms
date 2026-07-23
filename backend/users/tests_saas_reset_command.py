@@ -29,7 +29,6 @@ class ResetSaasAdminPasswordCommandTests(TestCase):
             email="saas-cli@elearning.dev",
             password=self.OLD_PASSWORD,
             role="saas_admin",
-            tenant=None,
             is_staff=True,
             is_superuser=True,
             is_active=True,

@@ -6,16 +6,13 @@ from django.db import models
 
 class GlobalSettings(models.Model):
     """
-    Singleton model to store global system settings for the SaaS platform.
+    Singleton model to store global system settings.
     Examples: Maintenance mode, site name, support email.
     """
 
     site_name = models.CharField(max_length=255, default="E-Learning SaaS")
     maintenance_mode = models.BooleanField(
         default=False, help_text="If active, only admins can access the site."
-    )
-    allow_registration = models.BooleanField(
-        default=True, help_text="Allow new tenants/schools to register."
     )
     support_email = models.EmailField(default="support@example.com")
     default_language = models.CharField(

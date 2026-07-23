@@ -6,7 +6,6 @@ import uuid
 from django.conf import settings
 from django.db import models
 
-from core.models.tenant import Tenant
 
 
 class Badge(models.Model):
@@ -19,7 +18,6 @@ class Badge(models.Model):
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, db_constraint=False)
     name = models.CharField(max_length=100)
     description = models.TextField()
     icon_name = models.CharField(max_length=50, default="award")  # Lucide icon name
@@ -35,7 +33,6 @@ class Badge(models.Model):
 
 class StudentBadge(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, db_constraint=False)
     student = models.ForeignKey(
         "academic.Student",
         on_delete=models.CASCADE,
@@ -54,7 +51,6 @@ class StudentBadge(models.Model):
 
 class PointTransaction(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, db_constraint=False)
     student = models.ForeignKey(
         "academic.Student",
         on_delete=models.CASCADE,
@@ -74,7 +70,6 @@ class PointTransaction(models.Model):
 
 class GamificationProfile(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, db_constraint=False)
     student = models.OneToOneField(
         "academic.Student",
         on_delete=models.CASCADE,

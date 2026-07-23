@@ -27,12 +27,6 @@ class AdmissionEnquiry(models.Model):
     enquiry_id = models.UUIDField(
         primary_key=True, default=uuid_lib.uuid4, editable=False
     )
-    tenant = models.ForeignKey(
-        "core.Tenant",
-        on_delete=models.CASCADE,
-        related_name="admission_enquiries",
-        db_constraint=False,
-    )
 
     first_name = models.CharField(max_length=150)
     last_name = models.CharField(max_length=150, blank=True, default="")
@@ -76,10 +70,10 @@ class AdmissionEnquiry(models.Model):
         ordering = ["-created_at"]
         indexes = [
             models.Index(
-                fields=["tenant", "status"], name="admission_tenant_status_idx"
+                fields=["status"], name="admission_tenant_status_idx"
             ),
             models.Index(
-                fields=["tenant", "created_at"], name="admission_tenant_created_idx"
+                fields=["created_at"], name="admission_tenant_created_idx"
             ),
         ]
 

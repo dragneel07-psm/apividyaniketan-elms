@@ -42,13 +42,12 @@ class GradingProfileViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        tenant = getattr(self.request.user, "tenant", None)
-        return NepalGradingProfile.objects.filter(tenant=tenant) if tenant else NepalGradingProfile.objects.none()
+        return NepalGradingProfile.objects.all()
 
     def perform_create(self, serializer):
         if not _is_admin(self.request.user):
             raise PermissionDenied("Only School Admin can manage grading profiles.")
-        serializer.save(tenant=self.request.user.tenant)
+        serializer.save()
 
     def perform_update(self, serializer):
         if not _is_admin(self.request.user):
@@ -66,7 +65,7 @@ class GradingProfileViewSet(viewsets.ModelViewSet):
     def ensure_default(self, request):
         if not _is_admin(request.user):
             raise PermissionDenied("Only School Admin can initialize grading rules.")
-        return Response(self.get_serializer(ensure_nepal_2081_profile(request.user.tenant)).data)
+        return Response(self.get_serializer(ensure_nepal_2081_profile()).data)
 
 
 class ExamTermViewSet(viewsets.ModelViewSet):
@@ -74,8 +73,7 @@ class ExamTermViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        tenant = getattr(self.request.user, "tenant", None)
-        qs = ExamTerm.objects.filter(tenant=tenant).select_related("academic_year", "grading_profile") if tenant else ExamTerm.objects.none()
+        qs = ExamTerm.objects.select_related("academic_year", "grading_profile").all()
         if getattr(self.request.user, "role", None) in {"student", "parent"}:
             qs = qs.filter(status="published")
         return qs
@@ -83,8 +81,8 @@ class ExamTermViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         if not _is_admin(self.request.user):
             raise PermissionDenied("Only School Admin can create exam terms.")
-        profile = serializer.validated_data.get("grading_profile") or ensure_nepal_2081_profile(self.request.user.tenant)
-        serializer.save(tenant=self.request.user.tenant, created_by=self.request.user, grading_profile=profile)
+        profile = serializer.validated_data.get("grading_profile") or ensure_nepal_2081_profile()
+        serializer.save(created_by=self.request.user, grading_profile=profile)
 
     def perform_update(self, serializer):
         if not _is_admin(self.request.user):
@@ -116,8 +114,7 @@ class ExamSubjectViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        tenant = getattr(self.request.user, "tenant", None)
-        qs = ExamSubject.objects.filter(term__tenant=tenant).select_related("term", "subject", "section", "section__academic_class", "examiner__user") if tenant else ExamSubject.objects.none()
+        qs = ExamSubject.objects.select_related("term", "subject", "section", "section__academic_class", "examiner__user").all()
         term = self.request.query_params.get("term")
         if term:
             qs = qs.filter(term_id=term)
@@ -129,9 +126,6 @@ class ExamSubjectViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         if not _is_admin(self.request.user):
             raise PermissionDenied("Only School Admin can configure exam subjects.")
-        term = serializer.validated_data["term"]
-        if term.tenant_id != self.request.user.tenant_id:
-            raise ValidationError({"term": "Invalid tenant exam term."})
         serializer.save()
 
     def perform_update(self, serializer):
@@ -221,8 +215,7 @@ class PaperCodeViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        tenant = getattr(self.request.user, "tenant", None)
-        qs = AnswerPaperCode.objects.filter(exam_subject__term__tenant=tenant).select_related("exam_subject__subject", "exam_subject__section__academic_class") if tenant else AnswerPaperCode.objects.none()
+        qs = AnswerPaperCode.objects.select_related("exam_subject__subject", "exam_subject__section__academic_class").all()
         teacher = _teacher(self.request.user)
         if teacher:
             qs = qs.filter(exam_subject__examiner=teacher)
@@ -277,8 +270,7 @@ class StudentTermResultViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        tenant = getattr(self.request.user, "tenant", None)
-        qs = StudentTermResult.objects.filter(term__tenant=tenant, term__status="published").select_related("term__academic_year", "student__user") if tenant else StudentTermResult.objects.none()
+        qs = StudentTermResult.objects.filter(term__status="published").select_related("term__academic_year", "student__user")
         role = getattr(self.request.user, "role", None)
         if _is_admin(self.request.user):
             return qs
@@ -294,16 +286,18 @@ class StudentTermResultViewSet(viewsets.ReadOnlyModelViewSet):
 
     @action(detail=True, methods=["get"])
     def marksheet(self, request, pk=None):
+        from core.models import SchoolProfile
+
         result = self.get_object()
         snapshot = result.snapshot or {}
-        tenant = result.term.tenant
+        school_profile = SchoolProfile.get_solo()
         response = generate_pdf_response(
             "reports/nepal_marksheet.html",
             {
                 "result": result,
                 "term": result.term,
                 "student": result.student,
-                "school": tenant,
+                "school": school_profile,
                 "snapshot": snapshot,
                 "subjects": snapshot.get("subjects", []),
                 "regulation": snapshot.get("regulation", {}),

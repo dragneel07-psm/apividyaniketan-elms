@@ -17,7 +17,7 @@ _SCHEMA_PERMISSIONS = [AllowAny] if settings.DEBUG else [IsAdminUser]
 
 schema_view = get_schema_view(
     title="E-Learning WebApp API",
-    description="Tenant-aware LMS + school ERP APIs",
+    description="School LMS + ERP APIs",
     version="v1",
     permission_classes=_SCHEMA_PERMISSIONS,
 )
@@ -32,7 +32,6 @@ urlpatterns = [
     path("api/core/", include("core.urls")),
     path("api/users/", include("users.urls")),
     path("api/academic/", include("academic.urls")),
-    path("api/billing/saas/", include("billing_saas.urls")),
     path("api/billing/school/", include("billing_school.urls")),
     path("api/billing/", include("billing.urls")),
     path("api/ai/", include("ai_engine.urls")),
@@ -48,7 +47,6 @@ urlpatterns = [
     path("api/v1/core/", include("core.urls")),
     path("api/v1/users/", include("users.urls")),
     path("api/v1/academic/", include("academic.urls")),
-    path("api/v1/billing/saas/", include("billing_saas.urls")),
     path("api/v1/billing/school/", include("billing_school.urls")),
     path("api/v1/billing/", include("billing.urls")),
     path("api/v1/ai/", include("ai_engine.urls")),

@@ -2,24 +2,13 @@
 # Unauthorized copying, modification, or distribution of this file,
 # via any medium, is strictly prohibited. Proprietary and confidential.
 from django.test import override_settings
-from django_tenants.test.cases import FastTenantTestCase
+from django.test import TestCase
 from rest_framework.test import APIClient
 
 
-class SecurityHeadersAndCorsTests(FastTenantTestCase):
-    @classmethod
-    def setup_tenant(cls, tenant):
-        tenant.name = "Security Header School"
-
-    @classmethod
-    def setup_domain(cls, domain):
-        domain.is_primary = True
-
+class SecurityHeadersAndCorsTests(TestCase):
     def setUp(self):
-        self.client = APIClient(
-            HTTP_HOST=self.get_test_tenant_domain(),
-            HTTP_X_TENANT_ID=self.tenant.schema_name,
-        )
+        self.client = APIClient()
         self.url = "/api/core/tenant-check/"
 
     @override_settings(

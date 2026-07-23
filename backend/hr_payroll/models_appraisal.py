@@ -11,12 +11,6 @@ class AppraisalCycle(models.Model):
     cycle_id = models.UUIDField(
         primary_key=True, default=uuid_lib.uuid4, editable=False
     )
-    tenant = models.ForeignKey(
-        "core.Tenant",
-        on_delete=models.CASCADE,
-        related_name="appraisal_cycles",
-        db_constraint=False,
-    )
     name = models.CharField(max_length=100)
     period_start = models.DateField()
     period_end = models.DateField()
@@ -33,12 +27,6 @@ class AppraisalCycle(models.Model):
 
 class AppraisalForm(models.Model):
     form_id = models.UUIDField(primary_key=True, default=uuid_lib.uuid4, editable=False)
-    tenant = models.ForeignKey(
-        "core.Tenant",
-        on_delete=models.CASCADE,
-        related_name="appraisal_forms",
-        db_constraint=False,
-    )
     cycle = models.ForeignKey(
         AppraisalCycle,
         on_delete=models.CASCADE,

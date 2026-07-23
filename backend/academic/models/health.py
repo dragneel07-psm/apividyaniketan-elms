@@ -24,12 +24,6 @@ class StudentHealthRecord(models.Model):
     health_id = models.UUIDField(
         primary_key=True, default=uuid_lib.uuid4, editable=False
     )
-    tenant = models.ForeignKey(
-        "core.Tenant",
-        on_delete=models.CASCADE,
-        related_name="student_health_records",
-        db_constraint=False,
-    )
     student = models.OneToOneField(
         "academic.Student",
         on_delete=models.CASCADE,
@@ -77,7 +71,6 @@ class StudentHealthRecord(models.Model):
 
     class Meta:
         indexes = [
-            models.Index(fields=["tenant"], name="sis_health_tenant_idx"),
         ]
 
     def __str__(self):

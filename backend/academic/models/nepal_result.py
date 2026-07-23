@@ -11,7 +11,6 @@ class NepalGradingProfile(models.Model):
     """Versioned grading rules; published results retain their original profile."""
 
     profile_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    tenant = models.ForeignKey("core.Tenant", on_delete=models.CASCADE, db_constraint=False)
     name = models.CharField(max_length=180)
     directive_name = models.CharField(max_length=255, default="Letter Grading Directive 2078")
     amendment = models.CharField(max_length=100, default="Fourth Amendment 2081")
@@ -34,7 +33,7 @@ class NepalGradingProfile(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        unique_together = ("tenant", "name", "effective_from_bs")
+        unique_together = ("name", "effective_from_bs")
         ordering = ["-effective_from_bs", "name"]
 
 
@@ -51,7 +50,6 @@ class ExamTerm(models.Model):
     ]
 
     term_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    tenant = models.ForeignKey("core.Tenant", on_delete=models.CASCADE, db_constraint=False)
     academic_year = models.ForeignKey("academic.AcademicYear", on_delete=models.PROTECT)
     grading_profile = models.ForeignKey(NepalGradingProfile, on_delete=models.PROTECT)
     name = models.CharField(max_length=180)
@@ -73,7 +71,7 @@ class ExamTerm(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        unique_together = ("tenant", "academic_year", "name")
+        unique_together = ("academic_year", "name")
         ordering = ["-start_date", "name"]
 
 

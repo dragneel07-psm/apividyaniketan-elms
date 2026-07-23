@@ -22,7 +22,6 @@ from .exam import ExamSeatingViewSet, ExamViewSet
 from .inventory import AssetViewSet, ConsumableStockViewSet, MaintenanceRequestViewSet
 from .lesson import ChapterViewSet, LessonMaterialViewSet, LessonViewSet
 from .live_session import LiveSessionViewSet
-from .notice import NoticeViewSet
 from .nepal_result import (
     ExamSubjectViewSet,
     ExamTermViewSet,
@@ -30,6 +29,7 @@ from .nepal_result import (
     PaperCodeViewSet,
     StudentTermResultViewSet,
 )
+from .notice import NoticeViewSet
 from .profiles import (
     ParentTeacherMeetingViewSet,
     ParentViewSet,
@@ -42,6 +42,18 @@ from .sis import (
     SISDashboardViewSet,
     StudentDocumentViewSet,
     StudentHealthRecordViewSet,
+)
+from .site_content import (
+    AdmissionFaqViewSet,
+    CoreValueViewSet,
+    FieldTripViewSet,
+    GalleryItemViewSet,
+    HistoryMilestoneViewSet,
+    NewsArticleViewSet,
+    ProgramViewSet,
+    StudentLifeActivityViewSet,
+    TestimonialViewSet,
+    WellbeingSupportViewSet,
 )
 from .student_leave import StudentLeaveViewSet
 from .timetable import TimetableViewSet

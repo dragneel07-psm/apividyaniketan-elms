@@ -6,13 +6,11 @@ import uuid as uuid_lib
 from django.conf import settings
 from django.db import models
 
-from core.models.tenant import Tenant
 from core.vector import VectorField
 
 
 class AIInteractionLog(models.Model):
     log_id = models.UUIDField(primary_key=True, default=uuid_lib.uuid4, editable=False)
-    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, db_constraint=False)
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True
     )
@@ -37,7 +35,6 @@ class StudentAIReport(models.Model):
     report_id = models.UUIDField(
         primary_key=True, default=uuid_lib.uuid4, editable=False
     )
-    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, db_constraint=False)
     student = models.ForeignKey(
         "academic.Student", on_delete=models.CASCADE, related_name="ai_reports"
     )
@@ -54,7 +51,6 @@ class StudentAIReport(models.Model):
 
 class LearningPath(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid_lib.uuid4, editable=False)
-    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, db_constraint=False)
     student = models.ForeignKey(
         "academic.Student", on_delete=models.CASCADE, related_name="learning_paths"
     )
@@ -140,7 +136,6 @@ class LearningNode(models.Model):
 
 class StudyEvent(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid_lib.uuid4, editable=False)
-    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, db_constraint=False)
     student = models.ForeignKey(
         "academic.Student", on_delete=models.CASCADE, related_name="study_events"
     )
@@ -187,12 +182,6 @@ class ContentChunk(models.Model):
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid_lib.uuid4, editable=False)
-    tenant = models.ForeignKey(
-        Tenant,
-        on_delete=models.CASCADE,
-        db_constraint=False,
-        related_name="content_chunks",
-    )
     source_type = models.CharField(max_length=20, choices=SOURCE_TYPE_CHOICES)
     source_id = models.CharField(max_length=64, db_index=True)
     text = models.TextField()
@@ -205,10 +194,10 @@ class ContentChunk(models.Model):
     class Meta:
         indexes = [
             models.Index(
-                fields=["tenant", "source_type"], name="ai_chunk_tenant_type_idx"
+                fields=["source_type"], name="ai_chunk_tenant_type_idx"
             ),
             models.Index(
-                fields=["tenant", "source_id"], name="ai_chunk_tenant_source_idx"
+                fields=["source_id"], name="ai_chunk_tenant_source_idx"
             ),
         ]
 
@@ -237,12 +226,6 @@ class AiGeneratedArtifact(models.Model):
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid_lib.uuid4, editable=False)
-    tenant = models.ForeignKey(
-        Tenant,
-        on_delete=models.CASCADE,
-        db_constraint=False,
-        related_name="ai_generated_artifacts",
-    )
     artifact_type = models.CharField(max_length=32, choices=ARTIFACT_TYPE_CHOICES)
     source_type = models.CharField(
         max_length=20, choices=SOURCE_TYPE_CHOICES, default="lesson"
@@ -258,15 +241,15 @@ class AiGeneratedArtifact(models.Model):
     class Meta:
         indexes = [
             models.Index(
-                fields=["tenant", "artifact_type", "source_type"],
+                fields=["artifact_type", "source_type"],
                 name="ai_artifact_tenant_type_idx",
             ),
             models.Index(
-                fields=["tenant", "source_type", "source_id"],
+                fields=["source_type", "source_id"],
                 name="ai_artifact_source_idx",
             ),
             models.Index(
-                fields=["tenant", "lang", "created_at"],
+                fields=["lang", "created_at"],
                 name="ai_artifact_lang_created_idx",
             ),
         ]
@@ -283,9 +266,6 @@ class SkillTag(models.Model):
     """
 
     id = models.UUIDField(primary_key=True, default=uuid_lib.uuid4, editable=False)
-    tenant = models.ForeignKey(
-        Tenant, on_delete=models.CASCADE, db_constraint=False, related_name="skill_tags"
-    )
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True, default="")
     subject = models.ForeignKey(
@@ -307,10 +287,10 @@ class SkillTag(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        unique_together = [("tenant", "name", "subject")]
+        unique_together = [("name", "subject")]
         indexes = [
             models.Index(
-                fields=["tenant", "subject"], name="ai_skill_tenant_subject_idx"
+                fields=["subject"], name="ai_skill_tenant_subject_idx"
             ),
         ]
 
@@ -414,12 +394,6 @@ class TutorConversation(models.Model):
     MODE_CHOICES = [("direct", "Direct"), ("socratic", "Socratic")]
 
     id = models.UUIDField(primary_key=True, default=uuid_lib.uuid4, editable=False)
-    tenant = models.ForeignKey(
-        Tenant,
-        on_delete=models.CASCADE,
-        db_constraint=False,
-        related_name="tutor_conversations",
-    )
     student = models.ForeignKey(
         "academic.Student",
         on_delete=models.CASCADE,
@@ -452,7 +426,7 @@ class TutorConversation(models.Model):
         ordering = ["-updated_at"]
         indexes = [
             models.Index(
-                fields=["tenant", "user", "-updated_at"], name="ai_conv_tenant_user_idx"
+                fields=["user", "-updated_at"], name="ai_conv_tenant_user_idx"
             ),
         ]
 
@@ -504,12 +478,6 @@ class TutorMessage(models.Model):
 
 class GradingRubric(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid_lib.uuid4, editable=False)
-    tenant = models.ForeignKey(
-        Tenant,
-        on_delete=models.CASCADE,
-        db_constraint=False,
-        related_name="grading_rubrics",
-    )
     title = models.CharField(max_length=255)
     criteria = models.JSONField(default=list, blank=True)
     total_points = models.PositiveIntegerField(default=100)
@@ -521,9 +489,9 @@ class GradingRubric(models.Model):
 
     class Meta:
         indexes = [
-            models.Index(fields=["tenant", "title"], name="ai_rubric_tenant_title_idx"),
+            models.Index(fields=["title"], name="ai_rubric_tenant_title_idx"),
             models.Index(
-                fields=["tenant", "created_at"], name="ai_rubric_tenant_created_idx"
+                fields=["created_at"], name="ai_rubric_tenant_created_idx"
             ),
         ]
 
@@ -539,12 +507,6 @@ class AIGradingDraft(models.Model):
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid_lib.uuid4, editable=False)
-    tenant = models.ForeignKey(
-        Tenant,
-        on_delete=models.CASCADE,
-        db_constraint=False,
-        related_name="ai_grading_drafts",
-    )
     submission = models.ForeignKey(
         "academic.Submission",
         on_delete=models.CASCADE,
@@ -577,9 +539,9 @@ class AIGradingDraft(models.Model):
 
     class Meta:
         indexes = [
-            models.Index(fields=["tenant", "status"], name="ai_grd_draft_tnt_st_idx"),
+            models.Index(fields=["status"], name="ai_grd_draft_tnt_st_idx"),
             models.Index(
-                fields=["tenant", "submission", "created_at"],
+                fields=["submission", "created_at"],
                 name="ai_grade_draft_submission_idx",
             ),
         ]
@@ -639,12 +601,6 @@ class AITokenBudget(models.Model):
     """
 
     id = models.UUIDField(primary_key=True, default=uuid_lib.uuid4, editable=False)
-    tenant = models.ForeignKey(
-        Tenant,
-        on_delete=models.CASCADE,
-        db_constraint=False,
-        related_name="ai_token_budgets",
-    )
     student = models.ForeignKey(
         "academic.Student",
         on_delete=models.CASCADE,
@@ -672,13 +628,13 @@ class AITokenBudget(models.Model):
 
     class Meta:
         # At most one active budget per (tenant, student) pair
-        unique_together = [("tenant", "student")]
+        unique_together = [("student",)]
         indexes = [
             models.Index(
-                fields=["tenant", "is_active"], name="ai_budget_tenant_active_idx"
+                fields=["is_active"], name="ai_budget_tenant_active_idx"
             ),
             models.Index(
-                fields=["tenant", "student"], name="ai_budget_tenant_student_idx"
+                fields=["student"], name="ai_budget_tenant_student_idx"
             ),
         ]
 

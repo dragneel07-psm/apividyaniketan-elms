@@ -8,26 +8,33 @@ from .views import (
     AcademicClassViewSet,
     AcademicYearViewSet,
     AdmissionEnquiryViewSet,
+    AdmissionFaqViewSet,
     AssessmentViewSet,
     AssetViewSet,
     AttendanceViewSet,
     ChapterViewSet,
     ComplaintViewSet,
     ConsumableStockViewSet,
+    CoreValueViewSet,
     DisciplinaryIncidentViewSet,
     ExamSeatingViewSet,
+    ExamSubjectViewSet,
+    ExamTermViewSet,
     ExamViewSet,
+    FieldTripViewSet,
+    GalleryItemViewSet,
+    GradingProfileViewSet,
+    HistoryMilestoneViewSet,
     LessonMaterialViewSet,
     LessonViewSet,
     LiveSessionViewSet,
-    ExamSubjectViewSet,
-    ExamTermViewSet,
-    GradingProfileViewSet,
-    PaperCodeViewSet,
     MaintenanceRequestViewSet,
+    NewsArticleViewSet,
     NoticeViewSet,
+    PaperCodeViewSet,
     ParentTeacherMeetingViewSet,
     ParentViewSet,
+    ProgramViewSet,
     QuestionViewSet,
     ReportViewSet,
     ResultViewSet,
@@ -38,12 +45,15 @@ from .views import (
     StudentDocumentViewSet,
     StudentHealthRecordViewSet,
     StudentLeaveViewSet,
-    StudentViewSet,
+    StudentLifeActivityViewSet,
     StudentTermResultViewSet,
+    StudentViewSet,
     SubjectViewSet,
     SubmissionViewSet,
     TeacherViewSet,
+    TestimonialViewSet,
     TimetableViewSet,
+    WellbeingSupportViewSet,
 )
 from .views.admin_actions import (
     GenerateAIReportsView,
@@ -57,6 +67,18 @@ from .views.public import (
     PublicAdmissionEnquiryView,
     PublicEventListView,
     PublicNoticeListView,
+)
+from .views.site_content_public import (
+    PublicAdmissionFaqListView,
+    PublicCoreValueListView,
+    PublicFieldTripListView,
+    PublicGalleryItemListView,
+    PublicHistoryMilestoneListView,
+    PublicNewsArticleListView,
+    PublicProgramListView,
+    PublicStudentLifeActivityListView,
+    PublicTestimonialListView,
+    PublicWellbeingSupportListView,
 )
 from .views.stats import AcademicStatsView
 
@@ -105,12 +127,80 @@ router.register(r"inventory/stock", ConsumableStockViewSet, basename="inventory-
 router.register(r"student-leaves", StudentLeaveViewSet, basename="student-leave")
 router.register(r"complaints", ComplaintViewSet, basename="complaint")
 router.register(r"live-sessions", LiveSessionViewSet, basename="live-session")
+router.register(r"news-articles", NewsArticleViewSet, basename="news-article")
+router.register(r"gallery-items", GalleryItemViewSet, basename="gallery-item")
+router.register(r"testimonials", TestimonialViewSet, basename="testimonial")
+router.register(r"programs", ProgramViewSet, basename="program")
+router.register(r"core-values", CoreValueViewSet, basename="core-value")
+router.register(
+    r"history-milestones", HistoryMilestoneViewSet, basename="history-milestone"
+)
+router.register(
+    r"student-life-activities",
+    StudentLifeActivityViewSet,
+    basename="student-life-activity",
+)
+router.register(r"field-trips", FieldTripViewSet, basename="field-trip")
+router.register(
+    r"wellbeing-support", WellbeingSupportViewSet, basename="wellbeing-support"
+)
+router.register(r"admission-faqs", AdmissionFaqViewSet, basename="admission-faq")
 
 urlpatterns = [
     path("stats/", AcademicStatsView.as_view(), name="academic-stats"),
-    path("public-admissions/", PublicAdmissionEnquiryView.as_view(), name="public-admissions"),
+    path(
+        "public-admissions/",
+        PublicAdmissionEnquiryView.as_view(),
+        name="public-admissions",
+    ),
     path("public-notices/", PublicNoticeListView.as_view(), name="public-notices"),
     path("public-events/", PublicEventListView.as_view(), name="public-events"),
+    path(
+        "public-news-articles/",
+        PublicNewsArticleListView.as_view(),
+        name="public-news-articles",
+    ),
+    path(
+        "public-gallery-items/",
+        PublicGalleryItemListView.as_view(),
+        name="public-gallery-items",
+    ),
+    path(
+        "public-testimonials/",
+        PublicTestimonialListView.as_view(),
+        name="public-testimonials",
+    ),
+    path("public-programs/", PublicProgramListView.as_view(), name="public-programs"),
+    path(
+        "public-core-values/",
+        PublicCoreValueListView.as_view(),
+        name="public-core-values",
+    ),
+    path(
+        "public-history-milestones/",
+        PublicHistoryMilestoneListView.as_view(),
+        name="public-history-milestones",
+    ),
+    path(
+        "public-student-life-activities/",
+        PublicStudentLifeActivityListView.as_view(),
+        name="public-student-life-activities",
+    ),
+    path(
+        "public-field-trips/",
+        PublicFieldTripListView.as_view(),
+        name="public-field-trips",
+    ),
+    path(
+        "public-wellbeing-support/",
+        PublicWellbeingSupportListView.as_view(),
+        name="public-wellbeing-support",
+    ),
+    path(
+        "public-admission-faqs/",
+        PublicAdmissionFaqListView.as_view(),
+        name="public-admission-faqs",
+    ),
     path("erp/overview/", SchoolERPOverviewView.as_view(), name="school-erp-overview"),
     path(
         "analytics/dashboard/",

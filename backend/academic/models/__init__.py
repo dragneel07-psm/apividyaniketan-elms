@@ -22,7 +22,6 @@ from .inventory import Asset, AssetAssignment, ConsumableStock, MaintenanceReque
 from .lesson import Chapter, Lesson, LessonMaterial, LessonProgress
 from .live_session import LiveSession
 from .meeting import ParentTeacherMeeting
-from .notice import Notice, NoticeRead
 from .nepal_result import (
     AnswerPaperCode,
     ExamSubject,
@@ -32,7 +31,20 @@ from .nepal_result import (
     NepalGradingProfile,
     StudentTermResult,
 )
+from .notice import Notice, NoticeRead
 from .parent import Parent
+from .site_content import (
+    AdmissionFaq,
+    CoreValue,
+    FieldTrip,
+    GalleryItem,
+    HistoryMilestone,
+    NewsArticle,
+    Program,
+    StudentLifeActivity,
+    Testimonial,
+    WellbeingSupport,
+)
 from .student import Student
 from .student_leave import StudentLeave
 from .subject import Subject

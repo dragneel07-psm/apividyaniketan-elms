@@ -7,10 +7,6 @@ import uuid as uuid_lib
 from django.conf import settings
 from django.db import models
 
-from core.models.tenant import Tenant
-
-from .models_base import SchemaScopedBillingModel
-
 
 class FeeDiscount(models.Model):
     """Reusable discount template (scholarship, sibling discount, staff child, etc.)"""
@@ -47,12 +43,6 @@ class FeeDiscount(models.Model):
     ]
 
     discount_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    tenant = models.ForeignKey(
-        "core.Tenant",
-        on_delete=models.CASCADE,
-        related_name="fee_discounts",
-        db_constraint=False,
-    )
     name = models.CharField(max_length=100)
     DISCOUNT_TYPES = [("percentage", "Percentage"), ("flat", "Flat Amount")]
     discount_type = models.CharField(
@@ -104,19 +94,12 @@ class FeeDiscount(models.Model):
         return min(disc, amount)  # Can't discount more than the amount
 
 
-class FeeStructure(SchemaScopedBillingModel, models.Model):
+class FeeStructure(models.Model):
     """
     Defines the types of fees and their default amounts.
     """
 
-    SCHEMA_SCOPE = "tenant"
     fee_id = models.UUIDField(primary_key=True, default=uuid_lib.uuid4, editable=False)
-    tenant = models.ForeignKey(
-        Tenant,
-        on_delete=models.CASCADE,
-        related_name="fee_structures",
-        db_constraint=False,
-    )
     name = models.CharField(max_length=100)
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     academic_class = models.ForeignKey(
@@ -165,7 +148,7 @@ class FeeStructure(SchemaScopedBillingModel, models.Model):
         return f"{self.name} - {self.amount}"
 
 
-class FeeHead(SchemaScopedBillingModel, models.Model):
+class FeeHead(models.Model):
     """
     A single line on a fee structure (Phase C).
 
@@ -175,11 +158,7 @@ class FeeHead(SchemaScopedBillingModel, models.Model):
     accountant can see head-wise income on reports.
     """
 
-    SCHEMA_SCOPE = "tenant"
     head_id = models.UUIDField(primary_key=True, default=uuid_lib.uuid4, editable=False)
-    tenant = models.ForeignKey(
-        Tenant, on_delete=models.CASCADE, related_name="fee_heads", db_constraint=False
-    )
     fee_structure = models.ForeignKey(
         FeeStructure,
         on_delete=models.CASCADE,
@@ -204,30 +183,18 @@ class FeeHead(SchemaScopedBillingModel, models.Model):
 
     class Meta:
         ordering = ["sort_order", "name"]
-        indexes = [
-            models.Index(
-                fields=["tenant", "fee_structure"], name="bill_feehead_t_struct_idx"
-            ),
-        ]
 
     def __str__(self):
         return f"{self.fee_structure.name} – {self.name}"
 
 
-class StudentFee(SchemaScopedBillingModel, models.Model):
+class StudentFee(models.Model):
     """
     Records a specific fee assigned to a student.
     """
 
-    SCHEMA_SCOPE = "tenant"
     student_fee_id = models.UUIDField(
         primary_key=True, default=uuid_lib.uuid4, editable=False
-    )
-    tenant = models.ForeignKey(
-        Tenant,
-        on_delete=models.CASCADE,
-        related_name="student_fees",
-        db_constraint=False,
     )
     student = models.ForeignKey(
         "academic.Student",
@@ -277,8 +244,8 @@ class StudentFee(SchemaScopedBillingModel, models.Model):
     class Meta:
         indexes = [
             models.Index(
-                fields=["tenant", "status", "due_date"],
-                name="bill_stfee_t_stat_due_idx",
+                fields=["status", "due_date"],
+                name="bill_stfee_stat_due_idx",
             ),
             models.Index(
                 fields=["student", "status"], name="bill_stfee_student_stat_idx"
@@ -289,17 +256,13 @@ class StudentFee(SchemaScopedBillingModel, models.Model):
         return f"{self.student} - {self.fee_structure.name} - {self.status}"
 
 
-class Payment(SchemaScopedBillingModel, models.Model):
+class Payment(models.Model):
     """
     Records a payment transaction.
     """
 
-    SCHEMA_SCOPE = "tenant"
     payment_id = models.UUIDField(
         primary_key=True, default=uuid_lib.uuid4, editable=False
-    )
-    tenant = models.ForeignKey(
-        Tenant, on_delete=models.CASCADE, related_name="payments", db_constraint=False
     )
     student = models.ForeignKey(
         "academic.Student",
@@ -319,14 +282,14 @@ class Payment(SchemaScopedBillingModel, models.Model):
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     payment_date = models.DateTimeField(auto_now_add=True)
 
-    # Sequential bill / receipt number per tenant per fiscal year, e.g. BL-2082/83-00001.
+    # Sequential bill / receipt number per fiscal year, e.g. BL-2082/83-00001.
     # Allocated by billing.bill_numbering.allocate_bill_number on create.
     bill_number = models.CharField(
         max_length=40,
         blank=True,
         default="",
         db_index=True,
-        help_text="Sequential bill number per tenant per FY (Nepali IRD convention).",
+        help_text="Sequential bill number per FY (Nepali IRD convention).",
     )
 
     METHOD_CHOICES = (
@@ -350,19 +313,17 @@ class Payment(SchemaScopedBillingModel, models.Model):
 
     class Meta:
         indexes = [
-            models.Index(
-                fields=["tenant", "payment_date"], name="bill_pay_tenant_date_idx"
-            ),
+            models.Index(fields=["payment_date"], name="bill_pay_date_idx"),
             models.Index(
                 fields=["student", "payment_date"], name="bill_pay_student_date_idx"
             ),
         ]
         constraints = [
-            # Bill numbers must be unique per tenant once allocated (blank ones are OK during migration backfill).
+            # Bill numbers must be unique once allocated (blank ones are OK during migration backfill).
             models.UniqueConstraint(
-                fields=["tenant", "bill_number"],
+                fields=["bill_number"],
                 condition=~models.Q(bill_number=""),
-                name="bill_pay_tenant_billno_uniq",
+                name="bill_pay_billno_uniq",
             ),
         ]
 
@@ -370,17 +331,13 @@ class Payment(SchemaScopedBillingModel, models.Model):
         return f"{self.student} - {self.amount} - {self.payment_date}"
 
 
-class Expense(SchemaScopedBillingModel, models.Model):
+class Expense(models.Model):
     """
     Records school operational expenses.
     """
 
-    SCHEMA_SCOPE = "tenant"
     expense_id = models.UUIDField(
         primary_key=True, default=uuid_lib.uuid4, editable=False
-    )
-    tenant = models.ForeignKey(
-        Tenant, on_delete=models.CASCADE, related_name="expenses", db_constraint=False
     )
 
     title = models.CharField(max_length=200)
@@ -413,33 +370,21 @@ class Expense(SchemaScopedBillingModel, models.Model):
 
     class Meta:
         indexes = [
-            models.Index(fields=["tenant", "date"], name="bill_exp_tenant_date_idx"),
-            models.Index(
-                fields=["tenant", "category", "date"], name="bill_exp_t_cat_d_idx"
-            ),
+            models.Index(fields=["date"], name="bill_exp_date_idx"),
+            models.Index(fields=["category", "date"], name="bill_exp_cat_d_idx"),
         ]
 
     def __str__(self):
         return f"{self.title} - {self.amount}"
 
 
-class BillingIdempotencyKey(SchemaScopedBillingModel, models.Model):
+class BillingIdempotencyKey(models.Model):
     """
     Stores idempotency state for billing write endpoints.
     """
 
-    SCHEMA_SCOPE = "tenant"
-
     idempotency_id = models.UUIDField(
         primary_key=True, default=uuid_lib.uuid4, editable=False
-    )
-    tenant = models.ForeignKey(
-        Tenant,
-        on_delete=models.CASCADE,
-        related_name="billing_idempotency_keys",
-        null=True,
-        blank=True,
-        db_constraint=False,
     )
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -465,9 +410,7 @@ class BillingIdempotencyKey(SchemaScopedBillingModel, models.Model):
             )
         ]
         indexes = [
-            models.Index(
-                fields=["tenant", "created_at"], name="bill_idem_tenant_c_idx"
-            ),
+            models.Index(fields=["created_at"], name="bill_idem_created_idx"),
             models.Index(fields=["endpoint", "created_at"], name="bill_idem_ep_c_idx"),
         ]
 

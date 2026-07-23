@@ -2,11 +2,10 @@
 # Unauthorized copying, modification, or distribution of this file,
 # via any medium, is strictly prohibited. Proprietary and confidential.
 """
-Public (AllowAny), tenant-scoped, throttled endpoints for the school
-marketing site (/school/*). request.tenant is already resolved by the
-tenant middleware regardless of auth — same pattern as
-core.views.TenantCheckView — so these just need permission_classes and a
-throttle scope, no new tenant-resolution logic.
+Public (AllowAny), throttled endpoints for the school marketing site
+(/school/*). Single-tenant deployment — there's exactly one school, so
+these just need permission_classes and a throttle scope, no tenant
+resolution.
 """
 from datetime import timedelta
 
@@ -22,13 +21,6 @@ from ..models.event import SchoolEvent
 from ..models.notice import Notice
 from ..serializers.notice import NoticeSerializer
 from .events import SchoolEventSerializer
-
-
-def _resolve_tenant(request):
-    tenant = getattr(request, "tenant", None)
-    if not tenant or tenant.schema_name == "public":
-        return None
-    return tenant
 
 
 class PublicAdmissionEnquirySerializer(serializers.ModelSerializer):
@@ -59,7 +51,6 @@ class PublicAdmissionEnquirySerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         validated_data.pop("honeypot", None)
-        validated_data["tenant"] = self.context["tenant"]
         validated_data["source"] = "website"
         return AdmissionEnquiry.objects.create(**validated_data)
 
@@ -75,15 +66,7 @@ class PublicAdmissionEnquiryView(APIView):
     throttle_classes = [PublicAdmissionEnquiryRateThrottle]
 
     def post(self, request):
-        tenant = _resolve_tenant(request)
-        if not tenant:
-            return Response(
-                {"detail": "Unable to resolve school for this request."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        serializer = PublicAdmissionEnquirySerializer(
-            data=request.data, context={"tenant": tenant}
-        )
+        serializer = PublicAdmissionEnquirySerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         enquiry = serializer.save()
         return Response(
@@ -106,12 +89,9 @@ class PublicNoticeListView(APIView):
     throttle_classes = [PublicNoticeRateThrottle]
 
     def get(self, request):
-        tenant = _resolve_tenant(request)
-        if not tenant:
-            return Response([], status=status.HTTP_200_OK)
         today = timezone.localdate()
         notices = (
-            Notice.objects.filter(tenant=tenant, target_audience="school")
+            Notice.objects.filter(target_audience="school")
             .filter(Q(expiry_date__isnull=True) | Q(expiry_date__gte=today))
             .order_by("-published_date")[:20]
         )
@@ -130,12 +110,9 @@ class PublicEventListView(APIView):
     throttle_classes = [PublicEventRateThrottle]
 
     def get(self, request):
-        tenant = _resolve_tenant(request)
-        if not tenant:
-            return Response([], status=status.HTTP_200_OK)
         window_start = timezone.localdate() - timedelta(days=14)
         qs = SchoolEvent.objects.filter(
-            tenant=tenant, audience="all", start_date__gte=window_start
+            audience="all", start_date__gte=window_start
         ).order_by("start_date", "start_time")
         event_id = request.query_params.get("id")
         if event_id:

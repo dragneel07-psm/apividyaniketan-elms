@@ -29,8 +29,7 @@ from academic.models import (
     Teacher,
     Timetable,
 )
-from core.middleware.tenant import _thread_locals
-from core.models import Tenant
+from core.models import SchoolProfile
 from gamification.models import Badge, PointTransaction, StudentBadge
 from library.models import Book, BookIssue
 from users.models import UserAccount
@@ -39,33 +38,8 @@ from users.models import UserAccount
 def populate():
     print("🚀 Starting system population...")
 
-    # 1. Get Tenant
-    tenant = Tenant.objects.filter(subdomain="demo").first()
-    if not tenant:
-        tenant = Tenant.objects.first()
-
-    if not tenant:
-        print("❌ No tenant found. Please create a tenant first.")
-        return
-
-    # Set thread local for routing
-    _thread_locals.tenant = tenant
-    _thread_locals.db_alias = tenant.db_alias
-
-    # Dynamic Database Registration (Mirroring Middleware)
-    from django.conf import settings
-    from django.db import connections
-
-    if tenant.db_alias not in settings.DATABASES:
-        new_db_config = settings.DATABASES["default"].copy()
-        new_db_config["NAME"] = settings.BASE_DIR / tenant.db_name
-        settings.DATABASES[tenant.db_alias] = new_db_config
-        # Update connections.databases which is what Django uses at runtime
-        connections.databases[tenant.db_alias] = new_db_config
-
-    print(
-        f"🌍 Using Tenant: {tenant.name} ({tenant.subdomain}) -> DB Alias: {tenant.db_alias}"
-    )
+    school = SchoolProfile.get_solo()
+    print(f"🌍 Using School: {school.name}")
 
     # 2. Academic Year
     year, _ = AcademicYear.objects.get_or_create(
@@ -116,7 +90,6 @@ def populate():
                 "first_name": first,
                 "last_name": last,
                 "role": "teacher",
-                "tenant": tenant,
             },
         )
         if created:
@@ -179,7 +152,6 @@ def populate():
                     "first_name": first,
                     "last_name": last,
                     "role": "student",
-                    "tenant": tenant,
                 },
             )
             if created:
@@ -361,7 +333,6 @@ def populate():
     for name, desc, icon, ctype, xp in badges_data:
         Badge.objects.get_or_create(
             name=name,
-            tenant=tenant,
             defaults={
                 "description": desc,
                 "icon_name": icon,

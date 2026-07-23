@@ -12,24 +12,13 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 django.setup()
 
 from academic.models import Student
-from core.models.tenant import Tenant
 from library.models import Book, BookIssue
 
 
 def verify_library():
     print("🧪 Verifying Library Flow...")
 
-    # 1. Setup Tenant DB
-    tenant = Tenant.objects.get(subdomain="demo")
-    db_alias = "demo_school"
-    db_name = "school_demo.sqlite3"
-
-    from django.conf import settings
-
-    if db_alias not in settings.DATABASES:
-        new_db_config = settings.DATABASES["default"].copy()
-        new_db_config["NAME"] = settings.BASE_DIR / db_name
-        settings.DATABASES[db_alias] = new_db_config
+    db_alias = "default"
 
     # 2. Get Test Data
     student = Student.objects.using(db_alias).first()

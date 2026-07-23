@@ -19,24 +19,10 @@ from .serializers import (
 logger = logging.getLogger(__name__)
 
 
-class TenantFilterMixin:
-    """Filters queryset by tenant from request.user."""
-
-    def get_queryset(self):
-        tenant = getattr(self.request.user, "tenant", None)
-        if tenant is None:
-            return self.queryset.model.objects.none()
-        return self.queryset.filter(tenant=tenant)
-
-
-class RouteViewSet(TenantFilterMixin, viewsets.ModelViewSet):
+class RouteViewSet(viewsets.ModelViewSet):
     serializer_class = RouteSerializer
     permission_classes = [IsAuthenticated]
     queryset = Route.objects.all()
-
-    def perform_create(self, serializer):
-        tenant = getattr(self.request.user, "tenant", None)
-        serializer.save(tenant=tenant)
 
     @action(detail=False, methods=["get"])
     def summary(self, request):
@@ -49,17 +35,13 @@ class RouteViewSet(TenantFilterMixin, viewsets.ModelViewSet):
         )
 
 
-class VehicleViewSet(TenantFilterMixin, viewsets.ModelViewSet):
+class VehicleViewSet(viewsets.ModelViewSet):
     serializer_class = VehicleSerializer
     permission_classes = [IsAuthenticated]
     queryset = Vehicle.objects.select_related("route").all()
 
-    def perform_create(self, serializer):
-        tenant = getattr(self.request.user, "tenant", None)
-        serializer.save(tenant=tenant)
 
-
-class StudentTransportAssignmentViewSet(TenantFilterMixin, viewsets.ModelViewSet):
+class StudentTransportAssignmentViewSet(viewsets.ModelViewSet):
     serializer_class = StudentTransportAssignmentSerializer
     permission_classes = [IsAuthenticated]
     queryset = StudentTransportAssignment.objects.select_related(
@@ -67,11 +49,10 @@ class StudentTransportAssignmentViewSet(TenantFilterMixin, viewsets.ModelViewSet
     ).all()
 
     def perform_create(self, serializer):
-        tenant = getattr(self.request.user, "tenant", None)
-        assignment = serializer.save(tenant=tenant)
-        self._create_transport_fee(assignment, tenant)
+        assignment = serializer.save()
+        self._create_transport_fee(assignment)
 
-    def _create_transport_fee(self, assignment, tenant):
+    def _create_transport_fee(self, assignment):
         """Auto-generate a pending StudentFee for the monthly transport fee."""
         try:
             monthly_fee = assignment.monthly_fee
@@ -82,7 +63,6 @@ class StudentTransportAssignmentViewSet(TenantFilterMixin, viewsets.ModelViewSet
             from billing.models_school import FeeStructure, StudentFee
 
             fee_structure, _ = FeeStructure.objects.get_or_create(
-                tenant=tenant,
                 name="Transport Fee",
                 defaults={
                     "amount": monthly_fee,
@@ -96,7 +76,6 @@ class StudentTransportAssignmentViewSet(TenantFilterMixin, viewsets.ModelViewSet
                 else datetime.date.today().replace(day=1)
             )
             StudentFee.objects.get_or_create(
-                tenant=tenant,
                 student=assignment.student,
                 fee_structure=fee_structure,
                 due_date=due_date,
@@ -122,9 +101,7 @@ class StudentTransportAssignmentViewSet(TenantFilterMixin, viewsets.ModelViewSet
     @action(detail=False, methods=["get"])
     def dashboard(self, request):
         qs = self.get_queryset().filter(is_active=True)
-        routes = Route.objects.filter(
-            tenant=request.user.tenant, is_active=True
-        ).annotate(
+        routes = Route.objects.filter(is_active=True).annotate(
             student_count=Count(
                 "student_assignments", filter=Q(student_assignments__is_active=True)
             )

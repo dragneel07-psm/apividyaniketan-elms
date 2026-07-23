@@ -123,7 +123,7 @@ _append_allowed_host("healthcheck.railway.app")
 _append_allowed_host(os.environ.get("RAILWAY_PUBLIC_DOMAIN", ""))
 _append_allowed_host(os.environ.get("RAILWAY_PRIVATE_DOMAIN", ""))
 
-# Primary SaaS domain used for wildcard tenant hostnames (e.g. demo.example.com).
+# Primary public domain for the app (used for allowed-host checks and email links).
 BASE_DOMAIN = (os.environ.get("BASE_DOMAIN", "") or "").strip().lower()
 if BASE_DOMAIN:
     _append_allowed_host(BASE_DOMAIN)
@@ -132,11 +132,9 @@ if BASE_DOMAIN:
 
 # Application definition
 
-# Multi-Tenancy Configuration
-SHARED_APPS = [
+INSTALLED_APPS = [
     "daphne",  # ASGI server — must be first for runserver to use ASGI
     "channels",  # WebSocket layer
-    "django_tenants",  # mandatory
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -149,25 +147,9 @@ SHARED_APPS = [
     "corsheaders",
     "core",
     "billing",
-    "billing_saas",
-    "users",  # Hybrid App (Exists in both)
-    "auditlog",
-]
-
-TENANT_APPS = [
-    "django.contrib.admin",
-    "django.contrib.auth",
-    "django.contrib.contenttypes",
-    "django.contrib.sessions",
-    "django.contrib.messages",
-    "django.contrib.staticfiles",
-    "rest_framework",
-    "rest_framework_simplejwt",
-    "rest_framework_simplejwt.token_blacklist",
-    "corsheaders",
     "users",
+    "auditlog",
     "academic.apps.AcademicConfig",
-    "billing",
     "billing_school",
     "ai_engine",
     "reports",
@@ -181,41 +163,6 @@ TENANT_APPS = [
     "projects",
 ]
 
-INSTALLED_APPS = list(SHARED_APPS) + [
-    app for app in TENANT_APPS if app not in SHARED_APPS
-]
-
-# Hybrid *project* apps are allowed only when explicitly approved.
-# Framework-level overlaps (django/rest/auth/cors) are expected in django-tenants.
-ALLOWED_HYBRID_APPS = set(_csv_env_list("ALLOWED_HYBRID_APPS", ["users", "billing"]))
-OVERLAPPING_APPS = set(SHARED_APPS).intersection(TENANT_APPS)
-FRAMEWORK_OVERLAP_PREFIXES = ("django.",)
-FRAMEWORK_OVERLAP_APPS = {
-    "rest_framework",
-    "rest_framework_simplejwt",
-    "rest_framework_simplejwt.token_blacklist",
-    "corsheaders",
-}
-PROJECT_OVERLAPPING_APPS = {
-    app
-    for app in OVERLAPPING_APPS
-    if not app.startswith(FRAMEWORK_OVERLAP_PREFIXES)
-    and app not in FRAMEWORK_OVERLAP_APPS
-}
-UNEXPECTED_HYBRID_APPS = sorted(
-    PROJECT_OVERLAPPING_APPS.difference(ALLOWED_HYBRID_APPS)
-)
-if UNEXPECTED_HYBRID_APPS:
-    raise ImproperlyConfigured(
-        "Unexpected SHARED_APPS/TENANT_APPS overlap detected: "
-        f"{', '.join(UNEXPECTED_HYBRID_APPS)}. "
-        "Move app to a single schema scope or add explicit override via ALLOWED_HYBRID_APPS."
-    )
-
-TENANT_MODEL = "core.Tenant"
-TENANT_DOMAIN_MODEL = "core.Domain"
-
-
 AUTH_USER_MODEL = "users.UserAccount"
 
 MIDDLEWARE = [
@@ -224,7 +171,6 @@ MIDDLEWARE = [
     "core.middleware.SecurityHeadersMiddleware",
     "core.middleware.RequestContextMiddleware",
     "core.metrics.PrometheusMetricsMiddleware",
-    "core.middleware.TenantFromHeaderMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -234,8 +180,6 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "auditlog.middleware.AuditlogMiddleware",
 ]
-
-DATABASE_ROUTERS = ("django_tenants.routers.TenantSyncRouter",)
 
 ROOT_URLCONF = "config.urls"
 
@@ -270,7 +214,7 @@ if not DATABASE_URL:
 DATABASES = {
     "default": dj_database_url.parse(
         DATABASE_URL,
-        engine="django_tenants.postgresql_backend",
+        engine="django.db.backends.postgresql",
         conn_max_age=600,
     )
 }
@@ -394,14 +338,12 @@ CSRF_TRUSTED_ORIGINS = _csrf_safe_origins(
 
 from corsheaders.defaults import default_headers
 
-CORS_ALLOW_HEADERS = list(default_headers) + [
-    "x-tenant-id",
-]
+CORS_ALLOW_HEADERS = list(default_headers)
 
 # REST Framework Configuration - Allow public access for demo
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
-        "users.authentication.TenantAwareJWTAuthentication",
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
         "rest_framework.authentication.SessionAuthentication",
     ],
     "DEFAULT_PERMISSION_CLASSES": [
@@ -430,6 +372,7 @@ REST_FRAMEWORK = {
         "public_school_info": os.environ.get("THROTTLE_PUBLIC_SCHOOL_INFO", "60/min"),
         "public_notices": os.environ.get("THROTTLE_PUBLIC_NOTICES", "60/min"),
         "public_events": os.environ.get("THROTTLE_PUBLIC_EVENTS", "60/min"),
+        "public_site_content": os.environ.get("THROTTLE_PUBLIC_SITE_CONTENT", "60/min"),
         "public_admission_enquiry": os.environ.get(
             "THROTTLE_PUBLIC_ADMISSION_ENQUIRY", "5/hour"
         ),
@@ -459,23 +402,6 @@ SIMPLE_JWT = {
 
 JWT_ROLE_TOKEN_LIFETIMES = {
     # High-risk roles get shorter lifetimes.
-    "saas_admin": {
-        "access": timedelta(
-            minutes=int(os.environ.get("JWT_ACCESS_MINUTES_SAAS_ADMIN", "15"))
-        ),
-        # Session-scoped: 8-hour workday maximum; configure via JWT_REFRESH_HOURS_SAAS_ADMIN
-        "refresh": timedelta(
-            hours=int(os.environ.get("JWT_REFRESH_HOURS_SAAS_ADMIN", "8"))
-        ),
-    },
-    "saas_staff": {
-        "access": timedelta(
-            minutes=int(os.environ.get("JWT_ACCESS_MINUTES_SAAS_STAFF", "30"))
-        ),
-        "refresh": timedelta(
-            hours=int(os.environ.get("JWT_REFRESH_HOURS_SAAS_STAFF", "8"))
-        ),
-    },
     "admin": {
         "access": timedelta(
             minutes=int(os.environ.get("JWT_ACCESS_MINUTES_ADMIN", "20"))
@@ -511,15 +437,6 @@ JWT_ROLE_TOKEN_LIFETIMES = {
 JWT_STRICT_REFRESH_ROTATION = (
     os.environ.get("JWT_STRICT_REFRESH_ROTATION", "true").lower() == "true"
 )
-
-# SaaS Admin IP Allowlist — comma-separated CIDRs/IPs.
-# Empty = allow all (dev default). Set in production to restrict SaaS admin login
-# to known office/VPN IPs. Example: "203.0.113.10,10.0.0.0/8"
-SAAS_ADMIN_ALLOWED_IPS: list[str] = [
-    ip.strip()
-    for ip in os.environ.get("SAAS_ADMIN_ALLOWED_IPS", "").split(",")
-    if ip.strip()
-]
 
 # TOTP issuer name shown in authenticator apps
 TOTP_ISSUER_NAME = os.environ.get("TOTP_ISSUER_NAME", "E-Learning Platform")
@@ -568,7 +485,7 @@ if (
 # AI Embeddings / RAG
 # Phase 12: Upgraded to text-embedding-3-large (3072 dims) for higher-quality retrieval.
 # Existing ContentChunk rows embedded with the old model must be re-indexed:
-#   python manage.py ai_index_content --tenant <schema>
+#   python manage.py ai_index_content
 # Set AI_EMBEDDING_MODEL=text-embedding-3-small in .env to keep the old model temporarily.
 AI_EMBEDDING_DIMENSIONS = int(os.environ.get("AI_EMBEDDING_DIMENSIONS", "3072"))
 AI_EMBEDDING_MODEL = os.environ.get(
@@ -631,12 +548,6 @@ KHALTI_LOOKUP_URL = os.environ.get(
     "KHALTI_LOOKUP_URL", "https://a.khalti.com/api/v2/epayment/lookup/"
 ).strip()
 
-# Tenant trust policy:
-# - dev_only (default): allow x-tenant-id only in DEBUG + localhost/127.0.0.1/*.local hosts
-# - never: ignore x-tenant-id in all envs
-TENANT_HEADER_TRUST_MODE = os.environ.get(
-    "TENANT_HEADER_TRUST_MODE", "dev_only"
-).lower()
 # Legacy `/api/billing/*` sunset date (RFC-1123 header generated by billing.legacy mixin).
 BILLING_LEGACY_SUNSET = os.environ.get("BILLING_LEGACY_SUNSET", "2026-12-31")
 
@@ -720,7 +631,7 @@ if os.environ.get("SECURE_PROXY_SSL_HEADER"):
     if len(_proxy_parts) == 2 and _proxy_parts[0] and _proxy_parts[1]:
         SECURE_PROXY_SSL_HEADER = (_proxy_parts[0], _proxy_parts[1])
 
-# Enable only when running behind a trusted proxy that forwards tenant hostnames.
+# Enable only when running behind a trusted proxy.
 USE_X_FORWARDED_HOST = os.environ.get("USE_X_FORWARDED_HOST", "false").lower() == "true"
 
 # Caching Configuration
@@ -785,7 +696,7 @@ AUDITLOG_DISABLE_REMOTE_ADDR = False
 AUDITLOG_CID_GETTER = None
 AUDITLOG_CID_HEADER = None
 
-# Structured logging with request and tenant correlation
+# Structured logging with request correlation
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").upper()
 LOGGING = {
     "version": 1,

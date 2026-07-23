@@ -20,8 +20,14 @@ import { Badge } from '@/components/ui/badge';
 import { PlaceholderPhoto } from '@/components/school/PlaceholderPhoto';
 import { SectionHeading } from '@/components/school/SectionHeading';
 import { GarlandDivider } from '@/components/school/GarlandDivider';
-import { getPublicEvents, getPublicNotices, getSchoolInfo } from '@/lib/school-content/school-info';
-import { PROGRAMS, TESTIMONIALS, type Program } from '@/lib/school-content/sample-data';
+import {
+    getPrograms,
+    getPublicEvents,
+    getPublicNotices,
+    getSchoolInfo,
+    getTestimonials,
+} from '@/lib/school-content/school-info';
+import type { Program } from '@/lib/api';
 
 const PROGRAM_ICONS: Record<Program['icon'], typeof BookOpen> = {
     book: BookOpen,
@@ -40,10 +46,12 @@ const QUICK_LINKS = [
 ];
 
 export default async function SchoolHomePage() {
-    const [school, notices, events] = await Promise.all([
+    const [school, notices, events, programs, testimonials] = await Promise.all([
         getSchoolInfo(),
         getPublicNotices(),
         getPublicEvents(),
+        getPrograms(),
+        getTestimonials(),
     ]);
     const latestNotices = notices.slice(0, 3);
     const upcomingEvents = events.slice(0, 3);
@@ -153,7 +161,7 @@ export default async function SchoolHomePage() {
                     className="mx-auto"
                 />
                 <div className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-                    {PROGRAMS.map((program) => {
+                    {programs.map((program) => {
                         const Icon = PROGRAM_ICONS[program.icon];
                         return (
                             <Card key={program.id} className="border-school-forest/10 shadow-none transition-shadow hover:shadow-md">
@@ -242,7 +250,7 @@ export default async function SchoolHomePage() {
             <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
                 <SectionHeading eyebrow="From our community" title="What families & students say" align="center" className="mx-auto" />
                 <div className="mt-10 grid gap-6 md:grid-cols-3">
-                    {TESTIMONIALS.map((t) => (
+                    {testimonials.map((t) => (
                         <Card key={t.id} className="border-school-forest/10 shadow-none">
                             <CardContent className="pt-2">
                                 <p className="font-fraunces text-base italic leading-relaxed text-school-ink/85">&ldquo;{t.quote}&rdquo;</p>

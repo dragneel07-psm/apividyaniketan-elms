@@ -6,8 +6,8 @@ import Link from 'next/link';
 import { ShieldCheck } from 'lucide-react';
 import { SectionHeading } from '@/components/school/SectionHeading';
 import { PlaceholderPhoto } from '@/components/school/PlaceholderPhoto';
-import { getSchoolInfo } from '@/lib/school-content/school-info';
-import { CORE_VALUES, HISTORY_MILESTONES, LEADERSHIP } from '@/lib/school-content/sample-data';
+import { getCoreValues, getHistoryMilestones, getSchoolInfo } from '@/lib/school-content/school-info';
+import { LEADERSHIP } from '@/lib/school-content/sample-data';
 
 export const metadata: Metadata = {
     title: 'About Us',
@@ -15,7 +15,11 @@ export const metadata: Metadata = {
 };
 
 export default async function AboutPage() {
-    const school = await getSchoolInfo();
+    const [school, historyMilestones, coreValues] = await Promise.all([
+        getSchoolInfo(),
+        getHistoryMilestones(),
+        getCoreValues(),
+    ]);
 
     return (
         <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8">
@@ -41,7 +45,7 @@ export default async function AboutPage() {
                         same community that has trusted us with their children ever since.
                     </p>
                     <ol className="mt-6 space-y-4 border-l-2 border-school-marigold pl-5">
-                        {HISTORY_MILESTONES.map((m) => (
+                        {historyMilestones.map((m) => (
                             <li key={m.id}>
                                 <span className="font-mono text-xs font-semibold text-school-terracotta">{m.year}</span>
                                 <p className="font-public-sans text-sm font-semibold text-school-ink">{m.title}</p>
@@ -74,7 +78,7 @@ export default async function AboutPage() {
             <section className="mt-16">
                 <h2 className="font-fraunces text-2xl text-school-ink">Our Values</h2>
                 <div className="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-                    {CORE_VALUES.map((v) => (
+                    {coreValues.map((v) => (
                         <div key={v.id} className="rounded-2xl border border-school-forest/10 p-5">
                             <h3 className="font-fraunces text-lg text-school-ink">{v.title}</h3>
                             <p className="mt-2 font-public-sans text-sm leading-relaxed text-school-ink/70">{v.description}</p>

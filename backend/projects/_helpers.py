@@ -74,10 +74,10 @@ def project_visibility_q(user) -> Q:
     return Q(pk__in=[])
 
 
-def tenant_has_projects_enabled(tenant) -> bool:
-    if tenant is None:
-        return False
-    features = getattr(tenant, "features", None) or {}
+def projects_feature_enabled() -> bool:
+    from core.models import SchoolProfile
+
+    features = SchoolProfile.get_solo().features or {}
     value = features.get("projects", False)
     if isinstance(value, dict):
         return bool(value.get("enabled", False))

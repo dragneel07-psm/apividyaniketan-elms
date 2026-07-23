@@ -27,12 +27,6 @@ AUDIENCE_CHOICES = [
 
 class SchoolEvent(models.Model):
     event_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    tenant = models.ForeignKey(
-        "core.Tenant",
-        on_delete=models.CASCADE,
-        related_name="school_events",
-        db_constraint=False,
-    )
     title = models.CharField(max_length=200)
     description = models.TextField(blank=True)
     event_type = models.CharField(
@@ -66,9 +60,9 @@ class SchoolEvent(models.Model):
         ordering = ["start_date", "start_time"]
         indexes = [
             models.Index(
-                fields=["tenant", "start_date"], name="event_tenant_start_idx"
+                fields=["start_date"], name="event_tenant_start_idx"
             ),
-            models.Index(fields=["tenant", "event_type"], name="event_tenant_type_idx"),
+            models.Index(fields=["event_type"], name="event_tenant_type_idx"),
         ]
 
     def __str__(self):

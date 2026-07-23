@@ -156,34 +156,6 @@ export default function TeacherDashboard() {
                     return feature.includes('grading') || feature.includes('evaluation') || feature.includes('eval');
                 }).length;
 
-                const classIds = Array.from(
-                    new Set(
-                        subjects
-                            .map((subject) => Number(subject.academic_class))
-                            .filter((value) => Number.isFinite(value) && value > 0)
-                    )
-                );
-                if (classIds.length > 0) {
-                    const riskByClass = await Promise.all(
-                        classIds.map((classId) => aiAPI.getAtRiskStudents(classId, true).catch(() => []))
-                    );
-                    const merged: Record<string, AtRiskStudent> = {};
-                    for (const rows of riskByClass) {
-                        for (const row of rows) {
-                            const key = String(row.student_id);
-                            if (!merged[key] || Number(row.risk_score) > Number(merged[key].risk_score)) {
-                                merged[key] = row;
-                            }
-                        }
-                    }
-                    const topRisk = Object.values(merged)
-                        .sort((a, b) => Number(b.risk_score) - Number(a.risk_score))
-                        .slice(0, 5);
-                    setAtRiskStudents(topRisk);
-                } else {
-                    setAtRiskStudents([]);
-                }
-
                 setStats({
                     totalStudents: students.length,
                     classesAssigned: subjects.length,
@@ -194,6 +166,18 @@ export default function TeacherDashboard() {
                 });
 
                 if (analyticsData) {
+                    setAtRiskStudents(
+                        (Array.isArray(analyticsData.at_risk_students)
+                            ? analyticsData.at_risk_students
+                            : []
+                        ).slice(0, 5).map((row) => ({
+                            student_id: String(row.id),
+                            student_name: row.name,
+                            risk_score: Number(row.score || 0),
+                            reasons: Array.isArray(row.reasons) ? row.reasons : [],
+                            suggested_actions: [],
+                        }))
+                    );
                     const trend = Array.isArray(analyticsData.performance_trends)
                         ? analyticsData.performance_trends.map((row: any) => ({
                             name: row.week || 'Week',
@@ -239,6 +223,7 @@ export default function TeacherDashboard() {
                     }
                     setAlerts(newAlerts);
                 } else {
+                    setAtRiskStudents([]);
                     setPerformanceTrends([]);
                     setAlerts([
                         {

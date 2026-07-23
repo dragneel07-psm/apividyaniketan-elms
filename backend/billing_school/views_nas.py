@@ -56,10 +56,6 @@ from core.utils.audit import record_audit_event
 logger = logging.getLogger(__name__)
 
 
-def _tenant(request):
-    return getattr(request.user, "tenant", None)
-
-
 # ─────────────────────────────────────────────────────────────────────────────
 # Serialisation helpers (lightweight, no separate serializers file needed)
 # ─────────────────────────────────────────────────────────────────────────────
@@ -117,10 +113,7 @@ class ChartOfAccountViewSet(viewsets.ViewSet):
     permission_classes = [IsSchoolFinanceManager]
 
     def list(self, request):
-        tenant = _tenant(request)
-        qs = ChartOfAccount.objects.filter(
-            tenant=tenant, is_active=True
-        ).select_related("parent")
+        qs = ChartOfAccount.objects.filter(is_active=True).select_related("parent")
         account_type = request.query_params.get("account_type")
         if account_type:
             qs = qs.filter(account_type=account_type)
@@ -128,16 +121,14 @@ class ChartOfAccountViewSet(viewsets.ViewSet):
 
     def retrieve(self, request, pk=None):
         try:
-            obj = ChartOfAccount.objects.get(pk=pk, tenant=_tenant(request))
+            obj = ChartOfAccount.objects.get(pk=pk)
         except ChartOfAccount.DoesNotExist:
             return Response({"error": "Not found."}, status=404)
         return Response(_coa_data(obj))
 
     def create(self, request):
-        tenant = _tenant(request)
         data = request.data
         obj = ChartOfAccount.objects.create(
-            tenant=tenant,
             account_code=data["account_code"],
             name=data["name"],
             name_np=data.get("name_np", ""),
@@ -155,7 +146,7 @@ class ChartOfAccountViewSet(viewsets.ViewSet):
 
     def update(self, request, pk=None):
         try:
-            obj = ChartOfAccount.objects.get(pk=pk, tenant=_tenant(request))
+            obj = ChartOfAccount.objects.get(pk=pk)
         except ChartOfAccount.DoesNotExist:
             return Response({"error": "Not found."}, status=404)
         if obj.is_system and request.data.get("account_code"):
@@ -170,7 +161,7 @@ class ChartOfAccountViewSet(viewsets.ViewSet):
 
     def destroy(self, request, pk=None):
         try:
-            obj = ChartOfAccount.objects.get(pk=pk, tenant=_tenant(request))
+            obj = ChartOfAccount.objects.get(pk=pk)
         except ChartOfAccount.DoesNotExist:
             return Response({"error": "Not found."}, status=404)
         if obj.is_system:
@@ -189,13 +180,17 @@ class ChartOfAccountViewSet(viewsets.ViewSet):
     @action(detail=False, methods=["post"], url_path="seed-defaults")
     def seed_defaults(self, request):
         """Seed NAS-compliant Chart of Accounts for a Nepali school."""
-        tenant = _tenant(request)
-        created = _seed_default_coa(tenant)
+        created = _seed_default_coa()
         return Response({"created": created, "message": f"{created} accounts seeded."})
 
 
-def _seed_default_coa(tenant) -> int:
-    """Create default NAS chart of accounts. Idempotent (skips existing codes)."""
+def _seed_default_coa(tenant=None) -> int:
+    """Create default NAS chart of accounts. Idempotent (skips existing codes).
+
+    `tenant` is unused and kept only so the existing call from
+    core/management/commands/seed_school_demo_data.py keeps working; the
+    school is now a singleton so ChartOfAccount is no longer tenant-scoped.
+    """
     defaults = [
         # ASSETS
         ("1000", "Assets", "asset", "current_asset", True),
@@ -271,15 +266,12 @@ def _seed_default_coa(tenant) -> int:
         ("5900", "Other Expenditure", "expenditure", "other_expense", True),
     ]
     existing = set(
-        ChartOfAccount.objects.filter(tenant=tenant).values_list(
-            "account_code", flat=True
-        )
+        ChartOfAccount.objects.values_list("account_code", flat=True)
     )
     created = 0
     for code, name, atype, stype, is_sys in defaults:
         if code not in existing:
             ChartOfAccount.objects.create(
-                tenant=tenant,
                 account_code=code,
                 name=name,
                 account_type=atype,
@@ -299,8 +291,7 @@ class JournalEntryViewSet(viewsets.ViewSet):
     permission_classes = [IsSchoolFinanceManager]
 
     def list(self, request):
-        tenant = _tenant(request)
-        qs = JournalEntry.objects.filter(tenant=tenant).select_related("created_by")
+        qs = JournalEntry.objects.select_related("created_by")
         entry_type = request.query_params.get("entry_type")
         fiscal_year = request.query_params.get("fiscal_year")
         from_date = request.query_params.get("from_date")
@@ -334,13 +325,12 @@ class JournalEntryViewSet(viewsets.ViewSet):
 
     def retrieve(self, request, pk=None):
         try:
-            je = JournalEntry.objects.get(pk=pk, tenant=_tenant(request))
+            je = JournalEntry.objects.get(pk=pk)
         except JournalEntry.DoesNotExist:
             return Response({"error": "Not found."}, status=404)
         return Response(_je_data(je))
 
     def create(self, request):
-        tenant = _tenant(request)
         data = request.data
         lines_data = data.get("lines", [])
         if len(lines_data) < 2:
@@ -355,11 +345,9 @@ class JournalEntryViewSet(viewsets.ViewSet):
                 # C1: serialize voucher number generation — lock existing entries to get
                 # the true maximum, then increment.  select_for_update() prevents any
                 # concurrent transaction from inserting until this one commits.
-                max_num = (
-                    JournalEntry.objects.select_for_update()
-                    .filter(tenant=tenant)
-                    .aggregate(m=Max("entry_number"))["m"]
-                )
+                max_num = JournalEntry.objects.select_for_update().aggregate(
+                    m=Max("entry_number")
+                )["m"]
                 seq = 1
                 if max_num:
                     m_obj = _re.search(r"-(\d+)$", max_num)
@@ -370,7 +358,6 @@ class JournalEntryViewSet(viewsets.ViewSet):
                 entry_number = f"JV-{y}-{seq:05d}"
 
                 je = JournalEntry.objects.create(
-                    tenant=tenant,
                     entry_number=entry_number,
                     date_ad=data["date_ad"],
                     description=data["description"],
@@ -382,9 +369,7 @@ class JournalEntryViewSet(viewsets.ViewSet):
 
                 for ln in lines_data:
                     try:
-                        account = ChartOfAccount.objects.get(
-                            pk=ln["account_id"], tenant=tenant
-                        )
+                        account = ChartOfAccount.objects.get(pk=ln["account_id"])
                     except ChartOfAccount.DoesNotExist:
                         raise ValueError(f"Account {ln['account_id']} not found.")
                     # C2: call full_clean() so debit/credit validation in JournalLine.clean()
@@ -420,7 +405,7 @@ class JournalEntryViewSet(viewsets.ViewSet):
     def post_entry(self, request, pk=None):
         """Post a journal entry (locks it for editing)."""
         try:
-            je = JournalEntry.objects.get(pk=pk, tenant=_tenant(request))
+            je = JournalEntry.objects.get(pk=pk)
         except JournalEntry.DoesNotExist:
             return Response({"error": "Not found."}, status=404)
         if je.is_posted:
@@ -447,9 +432,8 @@ class JournalEntryViewSet(viewsets.ViewSet):
         """
         from django.core.exceptions import ValidationError as DjangoValidationError
 
-        tenant = _tenant(request)
         try:
-            original = JournalEntry.objects.get(pk=pk, tenant=tenant)
+            original = JournalEntry.objects.get(pk=pk)
         except JournalEntry.DoesNotExist:
             return Response({"error": "Not found."}, status=404)
         if not original.is_posted:
@@ -466,11 +450,9 @@ class JournalEntryViewSet(viewsets.ViewSet):
 
         try:
             with transaction.atomic():
-                max_num = (
-                    JournalEntry.objects.select_for_update()
-                    .filter(tenant=tenant)
-                    .aggregate(m=Max("entry_number"))["m"]
-                )
+                max_num = JournalEntry.objects.select_for_update().aggregate(
+                    m=Max("entry_number")
+                )["m"]
                 seq = 1
                 if max_num:
                     m_obj = _re.search(r"-(\d+)$", max_num)
@@ -479,7 +461,6 @@ class JournalEntryViewSet(viewsets.ViewSet):
 
                 y, _, _ = ad_to_bs(date.fromisoformat(reversal_date))
                 rev = JournalEntry.objects.create(
-                    tenant=tenant,
                     entry_number=f"JV-{y}-{seq:05d}",
                     date_ad=reversal_date,
                     description=reversal_desc,
@@ -529,7 +510,7 @@ class FundAccountViewSet(viewsets.ViewSet):
     permission_classes = [IsSchoolFinanceManager]
 
     def get_queryset(self):
-        return FundAccount.objects.filter(tenant=_tenant(self.request))
+        return FundAccount.objects.all()
 
     def list(self, request):
         qs = self.get_queryset()
@@ -552,10 +533,8 @@ class FundAccountViewSet(viewsets.ViewSet):
         )
 
     def create(self, request):
-        tenant = _tenant(request)
         d = request.data
         obj = FundAccount.objects.create(
-            tenant=tenant,
             name=d["name"],
             name_np=d.get("name_np", ""),
             fund_type=d.get("fund_type", "unrestricted"),
@@ -575,8 +554,7 @@ class TDSEntryViewSet(viewsets.ViewSet):
     permission_classes = [IsSchoolFinanceManager]
 
     def list(self, request):
-        tenant = _tenant(request)
-        qs = TDSEntry.objects.filter(tenant=tenant).select_related("recorded_by")
+        qs = TDSEntry.objects.select_related("recorded_by")
         fy = request.query_params.get("fiscal_year")
         deposited = request.query_params.get("is_deposited")
         if fy:
@@ -607,7 +585,6 @@ class TDSEntryViewSet(viewsets.ViewSet):
         )
 
     def create(self, request):
-        tenant = _tenant(request)
         d = request.data
         gross = Decimal(str(d["gross_amount"]))
         ptype = d["payment_type"]
@@ -619,14 +596,12 @@ class TDSEntryViewSet(viewsets.ViewSet):
             date.fromisoformat(d.get("payment_date", str(date.today())))
         )
         prior_fy = TDSEntry.objects.filter(
-            tenant=tenant,
             vendor_name=d["vendor_name"],
             payment_type=ptype,
             fiscal_year=fy_now,
         ).aggregate(s=Sum("gross_amount"))["s"] or Decimal("0")
         calc = calculate_tds(gross, ptype, prior_payments_fy=prior_fy)
         obj = TDSEntry.objects.create(
-            tenant=tenant,
             vendor_name=d["vendor_name"],
             pan_number=d.get("pan_number", ""),
             payment_type=ptype,
@@ -656,9 +631,8 @@ class TDSEntryViewSet(viewsets.ViewSet):
     @action(detail=False, methods=["get"], url_path="summary")
     def summary(self, request):
         """TDS register summary for a fiscal year."""
-        tenant = _tenant(request)
         fy = request.query_params.get("fiscal_year", fiscal_year_bs())
-        qs = TDSEntry.objects.filter(tenant=tenant, fiscal_year=fy)
+        qs = TDSEntry.objects.filter(fiscal_year=fy)
         total_tds = qs.aggregate(s=Sum("tds_amount"))["s"] or Decimal("0")
         deposited_tds = qs.filter(is_deposited=True).aggregate(s=Sum("tds_amount"))[
             "s"
@@ -703,7 +677,7 @@ class TDSEntryViewSet(viewsets.ViewSet):
     @action(detail=True, methods=["post"], url_path="mark-deposited")
     def mark_deposited(self, request, pk=None):
         try:
-            obj = TDSEntry.objects.get(pk=pk, tenant=_tenant(request))
+            obj = TDSEntry.objects.get(pk=pk)
         except TDSEntry.DoesNotExist:
             return Response({"error": "Not found."}, status=404)
         obj.is_deposited = True
@@ -734,7 +708,7 @@ class InventoryItemViewSet(viewsets.ViewSet):
     permission_classes = [IsSchoolFinanceManager]
 
     def _qs(self, request):
-        return InventoryItem.objects.filter(tenant=_tenant(request))
+        return InventoryItem.objects.all()
 
     def list(self, request):
         qs = self._qs(request)
@@ -750,10 +724,8 @@ class InventoryItemViewSet(viewsets.ViewSet):
         return Response([self._serialize(i) for i in qs])
 
     def create(self, request):
-        tenant = _tenant(request)
         d = request.data
         obj = InventoryItem.objects.create(
-            tenant=tenant,
             item_code=d.get("item_code", ""),
             name=d["name"],
             name_np=d.get("name_np", ""),
@@ -884,20 +856,19 @@ class NASFinancialStatementsView(APIView):
     permission_classes = [IsSchoolFinanceManager]
 
     def get(self, request):
-        tenant = _tenant(request)
         stmt = request.query_params.get("statement", "income_expenditure")
         from_d = request.query_params.get("from_date")
         to_d = request.query_params.get("to_date") or str(date.today())
         fy = request.query_params.get("fiscal_year", fiscal_year_bs())
 
         if stmt == "income_expenditure":
-            data = self._income_expenditure(tenant, from_d, to_d, fy)
+            data = self._income_expenditure(from_d, to_d, fy)
         elif stmt == "balance_sheet":
-            data = self._balance_sheet(tenant, to_d)
+            data = self._balance_sheet(to_d)
         elif stmt == "cash_flow":
-            data = self._cash_flow(tenant, from_d, to_d, fy)
+            data = self._cash_flow(from_d, to_d, fy)
         elif stmt == "changes_in_reserves":
-            data = self._changes_in_reserves(tenant, fy)
+            data = self._changes_in_reserves(fy)
         else:
             return Response({"error": f"Unknown statement: {stmt}"}, status=400)
 
@@ -914,14 +885,14 @@ class NASFinancialStatementsView(APIView):
 
     # ── Income & Expenditure ───────────────────────────────────────────────
 
-    def _income_expenditure(self, tenant, from_d, to_d, fy):
+    def _income_expenditure(self, from_d, to_d, fy):
         """Statement of Income & Expenditure (NAS NPO 2018 Section 5).
 
         C3 / M4 fix: now sourced from posted JournalLine records so that
         grant income, donations, and all manually-journalized entries are
         captured — not just the raw Payment/Expense tables.
         """
-        je_qs = JournalEntry.objects.filter(tenant=tenant, is_posted=True)
+        je_qs = JournalEntry.objects.filter(is_posted=True)
         if from_d:
             je_qs = je_qs.filter(date_ad__gte=from_d)
         if to_d:
@@ -1009,13 +980,13 @@ class NASFinancialStatementsView(APIView):
 
     # ── Balance Sheet ──────────────────────────────────────────────────────
 
-    def _balance_sheet(self, tenant, to_d):
+    def _balance_sheet(self, to_d):
         """Statement of Financial Position (NAS NPO 2018 Section 4).
 
         C3 fix: derived from posted JournalLine aggregates per ChartOfAccount
         sub_type — consistent with the double-entry ledger.
         """
-        je_qs = JournalEntry.objects.filter(tenant=tenant, is_posted=True)
+        je_qs = JournalEntry.objects.filter(is_posted=True)
         if to_d:
             je_qs = je_qs.filter(date_ad__lte=to_d)
 
@@ -1066,7 +1037,7 @@ class NASFinancialStatementsView(APIView):
         total_fund = total_equity
         check_sum = total_liab + total_fund
 
-        fund_accounts = FundAccount.objects.filter(tenant=tenant, is_active=True)
+        fund_accounts = FundAccount.objects.filter(is_active=True)
 
         return {
             "assets": {
@@ -1109,10 +1080,10 @@ class NASFinancialStatementsView(APIView):
 
     # ── Cash Flow (Direct Method) ──────────────────────────────────────────
 
-    def _cash_flow(self, tenant, from_d, to_d, fy):
+    def _cash_flow(self, from_d, to_d, fy):
         """Statement of Cash Flows — Direct Method (NAS NPO 2018 Section 6)."""
-        pq = Payment.objects.filter(tenant=tenant)
-        eq = Expense.objects.filter(tenant=tenant)
+        pq = Payment.objects.all()
+        eq = Expense.objects.all()
         if from_d:
             pq = pq.filter(payment_date__date__gte=from_d)
             eq = eq.filter(date__gte=from_d)
@@ -1133,7 +1104,7 @@ class NASFinancialStatementsView(APIView):
         payments_utilities = float(
             eq.filter(category="utilities").aggregate(s=Sum("amount"))["s"] or 0
         )
-        msf_qs = MerchantServiceFee.objects.filter(tenant=tenant)
+        msf_qs = MerchantServiceFee.objects.all()
         if from_d:
             msf_qs = msf_qs.filter(payment__payment_date__date__gte=from_d)
         if to_d:
@@ -1142,7 +1113,7 @@ class NASFinancialStatementsView(APIView):
 
         tds_deposited = float(
             TDSEntry.objects.filter(
-                tenant=tenant, is_deposited=True, fiscal_year=fy
+                is_deposited=True, fiscal_year=fy
             ).aggregate(s=Sum("tds_amount"))["s"]
             or 0
         )
@@ -1158,7 +1129,7 @@ class NASFinancialStatementsView(APIView):
         net_op_cf = op_inflow - op_outflow
 
         # H6: date-filter asset purchases so cash flow reflects the requested period
-        inv_qs = InventoryItem.objects.filter(tenant=tenant)
+        inv_qs = InventoryItem.objects.all()
         if from_d:
             inv_qs = inv_qs.filter(purchase_date__gte=from_d)
         if to_d:
@@ -1194,7 +1165,7 @@ class NASFinancialStatementsView(APIView):
 
     # ── Changes in Reserves ────────────────────────────────────────────────
 
-    def _changes_in_reserves(self, tenant, fy):
+    def _changes_in_reserves(self, fy):
         """Statement of Changes in Reserves — Restricted vs Unrestricted.
 
         M1 fix: calculates real additions/utilised amounts from posted journal
@@ -1202,13 +1173,13 @@ class NASFinancialStatementsView(APIView):
         surplus/deficit for the fiscal year from I&E journal lines.
         """
         funds = FundAccount.objects.filter(
-            tenant=tenant, is_active=True
+            is_active=True
         ).select_related("linked_account")
         restricted = [f for f in funds if f.fund_type == "restricted"]
         unrestricted = [f for f in funds if f.fund_type == "unrestricted"]
 
         je_qs_fy = JournalEntry.objects.filter(
-            tenant=tenant, is_posted=True, fiscal_year=fy
+            is_posted=True, fiscal_year=fy
         )
 
         # Surplus / deficit for the year from I&E journal lines
@@ -1345,7 +1316,7 @@ class ConnectIPSInitiateView(APIView):
         if not fee_id:
             return Response({"error": "student_fee_id is required."}, status=400)
         try:
-            fee = StudentFee.objects.get(pk=fee_id, tenant=request.user.tenant)
+            fee = StudentFee.objects.get(pk=fee_id)
         except StudentFee.DoesNotExist:
             return Response({"error": "Fee not found."}, status=404)
 
@@ -1419,7 +1390,6 @@ class ConnectIPSCallbackView(APIView):
         MerchantServiceFee.objects.get_or_create(
             payment=payment,
             defaults={
-                "tenant": fee.tenant,
                 "gateway": "connectips",
                 "gross_amount": msf_data["gross_amount"],
                 "msf_rate": msf_data["msf_rate"],

@@ -12,7 +12,6 @@ from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from core.mixins import TenantScopedQuerysetMixin
 from users.permissions import IsAdminOrSaaSAdmin
 
 from ..models import (
@@ -54,7 +53,7 @@ def _resolve_requested_year(request):
     return ensure_current_academic_year(), False
 
 
-class TeacherViewSet(TenantScopedQuerysetMixin, viewsets.ModelViewSet):
+class TeacherViewSet(viewsets.ModelViewSet):
     """ViewSet for managing Teachers"""
 
     queryset = Teacher.objects.select_related("user").prefetch_related(
@@ -66,8 +65,6 @@ class TeacherViewSet(TenantScopedQuerysetMixin, viewsets.ModelViewSet):
         if self.action in ["list", "retrieve", "profile_overview", "me"]:
             return [IsAuthenticated()]
         return [IsAdminOrSaaSAdmin()]
-
-    tenant_field = "user__tenant"
 
     def get_queryset(self):
         qs = super().get_queryset()
@@ -311,7 +308,7 @@ class TeacherViewSet(TenantScopedQuerysetMixin, viewsets.ModelViewSet):
         )
 
 
-class StudentViewSet(TenantScopedQuerysetMixin, viewsets.ModelViewSet):
+class StudentViewSet(viewsets.ModelViewSet):
     """
     ViewSet for managing Students
 
@@ -339,7 +336,6 @@ class StudentViewSet(TenantScopedQuerysetMixin, viewsets.ModelViewSet):
     # row twice or skip one (Postgres doesn't guarantee stable ordering for
     # ties across separate query executions).
     ordering = ["user__first_name", "user__last_name", "student_id"]
-    tenant_field = "user__tenant"  # Student is related to tenant through user
 
     def get_permissions(self):
         if self.action in ["me", "list", "retrieve", "profile_overview"]:
@@ -944,7 +940,6 @@ class StudentViewSet(TenantScopedQuerysetMixin, viewsets.ModelViewSet):
         password = request.data.get("password") or "Student@123"
         first_name = (request.data.get("first_name") or "").strip()
         last_name = (request.data.get("last_name") or "").strip()
-        tenant = getattr(request, "tenant", None)
 
         User = get_user_model()
 
@@ -975,7 +970,6 @@ class StudentViewSet(TenantScopedQuerysetMixin, viewsets.ModelViewSet):
                     first_name=first_name,
                     last_name=last_name,
                     role="student",
-                    tenant=tenant,
                 )
 
             # Re-link student to the (new or existing) user
@@ -1087,7 +1081,7 @@ class StudentViewSet(TenantScopedQuerysetMixin, viewsets.ModelViewSet):
         )
 
 
-class ParentViewSet(TenantScopedQuerysetMixin, viewsets.ReadOnlyModelViewSet):
+class ParentViewSet(viewsets.ReadOnlyModelViewSet):
     """
     ViewSet for Parents to view their profile and their students.
     """
@@ -1101,7 +1095,6 @@ class ParentViewSet(TenantScopedQuerysetMixin, viewsets.ReadOnlyModelViewSet):
     )
     serializer_class = ParentSerializer
     permission_classes = [IsAuthenticated]
-    tenant_field = "user__tenant"
 
     @action(detail=False, methods=["get"])
     def me(self, request):
@@ -1251,7 +1244,7 @@ class ParentViewSet(TenantScopedQuerysetMixin, viewsets.ReadOnlyModelViewSet):
         )
 
 
-class ParentTeacherMeetingViewSet(TenantScopedQuerysetMixin, viewsets.ModelViewSet):
+class ParentTeacherMeetingViewSet(viewsets.ModelViewSet):
     """
     Parents can create and view their meeting requests.
     Teachers / admin can confirm, cancel, or complete.
@@ -1263,7 +1256,6 @@ class ParentTeacherMeetingViewSet(TenantScopedQuerysetMixin, viewsets.ModelViewS
         "parent__user", "student__user", "teacher__user"
     ).all()
     permission_classes = [IsAuthenticated]
-    tenant_field = "parent__user__tenant"
 
     def get_serializer_class(self):
         from rest_framework import serializers

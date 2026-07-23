@@ -23,17 +23,9 @@ logger = logging.getLogger(__name__)
 
 
 class BadgeEvaluatorService:
-    def __init__(self, *, student, tenant=None, using="default"):
+    def __init__(self, *, student, using="default"):
         self.student = student
         self.using = using
-        # Resolve tenant
-        if tenant is not None:
-            self.tenant = tenant
-        else:
-            try:
-                self.tenant = student.user.tenant
-            except Exception:
-                self.tenant = None
 
     # ------------------------------------------------------------------ #
     #  Entry points — call the relevant one after each event
@@ -113,19 +105,14 @@ class BadgeEvaluatorService:
     # ------------------------------------------------------------------ #
 
     def _check_criteria(self, criteria_type: str, current_value: int):
-        if self.tenant is None:
-            return
-
         from gamification.models import Badge, PointTransaction, StudentBadge
 
         badges = Badge.objects.using(self.using).filter(
-            tenant=self.tenant,
             criteria_type=criteria_type,
         )
         for badge in badges:
             if current_value >= badge.criteria_value:
                 awarded, created = StudentBadge.objects.using(self.using).get_or_create(
-                    tenant=self.tenant,
                     student=self.student,
                     badge=badge,
                 )
@@ -175,7 +162,6 @@ class BadgeEvaluatorService:
         if badge.xp_reward <= 0:
             return
         PointTransaction.objects.using(self.using).create(
-            tenant=self.tenant,
             student=self.student,
             points=badge.xp_reward,
             description=f"Earned badge: {badge.name}",
@@ -183,7 +169,7 @@ class BadgeEvaluatorService:
         )
         try:
             profile, _ = GamificationProfile.objects.using(self.using).get_or_create(
-                tenant=self.tenant, student=self.student
+                student=self.student
             )
             profile.add_xp(badge.xp_reward)
         except Exception as exc:
@@ -199,7 +185,6 @@ class BadgeEvaluatorService:
                 recipient=self.student.user,
                 title=f"🏅 Badge Unlocked: {badge.name}",
                 message=badge.description,
-                tenant=self.tenant,
             )
         except Exception as exc:
             logger.warning("BadgeEvaluator: notification failed: %s", exc)

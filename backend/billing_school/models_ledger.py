@@ -13,12 +13,6 @@ class LedgerAccount(models.Model):
     account_id = models.UUIDField(
         primary_key=True, default=uuid_lib.uuid4, editable=False
     )
-    tenant = models.ForeignKey(
-        "core.Tenant",
-        on_delete=models.CASCADE,
-        related_name="ledger_accounts",
-        db_constraint=False,
-    )
     name = models.CharField(max_length=100)
     ACCOUNT_TYPES = [("cash", "Petty Cash"), ("bank", "Bank Account")]
     account_type = models.CharField(
@@ -51,12 +45,6 @@ class LedgerEntry(models.Model):
     entry_id = models.UUIDField(
         primary_key=True, default=uuid_lib.uuid4, editable=False
     )
-    tenant = models.ForeignKey(
-        "core.Tenant",
-        on_delete=models.CASCADE,
-        related_name="ledger_entries",
-        db_constraint=False,
-    )
     account = models.ForeignKey(
         LedgerAccount,
         on_delete=models.CASCADE,
@@ -83,7 +71,7 @@ class LedgerEntry(models.Model):
         ordering = ["-date", "-created_at"]
         indexes = [
             models.Index(
-                fields=["tenant", "account", "date"], name="bill_ledger_t_acc_d_idx"
+                fields=["account", "date"], name="bill_ledger_t_acc_d_idx"
             ),
         ]
 

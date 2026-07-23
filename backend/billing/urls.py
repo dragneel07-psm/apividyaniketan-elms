@@ -9,23 +9,11 @@ from .legacy_views import (
     ExpenseViewSet,
     FeeStructureViewSet,
     FinanceDashboardViewSet,
-    InvoiceViewSet,
     PaymentViewSet,
     StudentFeeViewSet,
-    SubscriptionPlanHistoryViewSet,
-    SubscriptionPlanViewSet,
-    SubscriptionViewSet,
 )
 
 router = DefaultRouter()
-router.register(r"subscriptions", SubscriptionViewSet)
-router.register(
-    r"subscription-history",
-    SubscriptionPlanHistoryViewSet,
-    basename="subscription-history",
-)
-router.register(r"plans", SubscriptionPlanViewSet)
-router.register(r"invoices", InvoiceViewSet)
 
 # School Finance
 router.register(r"fee-structures", FeeStructureViewSet)

@@ -6,7 +6,6 @@ import uuid as uuid_lib
 from django.core.exceptions import ValidationError
 from django.db import models
 
-from core.models.tenant import Tenant
 
 
 class ProjectMember(models.Model):
@@ -18,7 +17,6 @@ class ProjectMember(models.Model):
     membership_id = models.UUIDField(
         primary_key=True, default=uuid_lib.uuid4, editable=False
     )
-    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, db_constraint=False)
     project = models.ForeignKey(
         "projects.Project", on_delete=models.CASCADE, related_name="members"
     )

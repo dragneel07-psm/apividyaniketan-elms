@@ -164,7 +164,6 @@ def _notify_leave_decision(leave, decision: str):
     try:
         from notifications.services import NotificationService
 
-        tenant = getattr(leave.student, "tenant", None)
         student_user = getattr(leave.student, "user", None)
         emoji = "✅" if decision == "approved" else "❌"
         title = f"{emoji} Leave {decision.capitalize()}"
@@ -187,7 +186,6 @@ def _notify_leave_decision(leave, decision: str):
                 recipient=recipient,
                 title=title,
                 message=message,
-                tenant=tenant,
                 link="/student/leaves",
             )
     except Exception as exc:

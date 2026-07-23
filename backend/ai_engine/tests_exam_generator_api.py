@@ -5,8 +5,7 @@ from unittest.mock import patch
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from django_tenants.test.cases import FastTenantTestCase
-from django_tenants.utils import tenant_context
+from django.test import TestCase
 from rest_framework import status
 from rest_framework.test import APIClient
 
@@ -16,72 +15,60 @@ from ai_engine.models import AiGeneratedArtifact, ContentChunk
 User = get_user_model()
 
 
-class ExamGeneratorApiTests(FastTenantTestCase):
-    @classmethod
-    def setup_tenant(cls, tenant):
-        tenant.name = "Exam Generator School"
-
-    @classmethod
-    def setup_domain(cls, domain):
-        domain.is_primary = True
-
+class ExamGeneratorApiTests(TestCase):
     def setUp(self):
-        with tenant_context(self.tenant):
-            self.teacher = User.objects.create_user(
-                username="exam_teacher",
-                email="exam_teacher@example.com",
-                password="ExamTeacher@123",
-                role="teacher",
-                tenant=self.tenant,
-            )
-            self.student = User.objects.create_user(
-                username="exam_student",
-                email="exam_student@example.com",
-                password="ExamStudent@123",
-                role="student",
-                tenant=self.tenant,
-            )
-            self.academic_class = AcademicClass.objects.create(name="Grade 10")
-            self.subject = Subject.objects.create(
-                name="Science",
-                academic_class=self.academic_class,
-                is_active=True,
-            )
-            self.chapter_1 = Chapter.objects.create(
-                subject=self.subject,
-                title="Motion",
-                description="Motion basics",
-                order=1,
-                is_published=True,
-            )
-            self.chapter_2 = Chapter.objects.create(
-                subject=self.subject,
-                title="Force",
-                description="Force and mass",
-                order=2,
-                is_published=True,
-            )
-            self.lesson = Lesson.objects.create(
-                chapter=self.chapter_1,
-                title="Newton Laws",
-                content_type="text",
-                content="Newton's laws of motion.",
-                order=1,
-                is_published=True,
-                duration_minutes=40,
-            )
-            ContentChunk.objects.create(
-                tenant=self.tenant,
-                source_type="chapter",
-                source_id=str(self.chapter_1.id),
-                text="Chapter on motion includes speed, velocity, and acceleration.",
-                metadata={"chapter_id": self.chapter_1.id},
-                embedding=[0.01]
-                * max(1, int(getattr(settings, "AI_EMBEDDING_DIMENSIONS", 1536))),
-            )
+        self.teacher = User.objects.create_user(
+            username="exam_teacher",
+            email="exam_teacher@example.com",
+            password="ExamTeacher@123",
+            role="teacher",
+        )
+        self.student = User.objects.create_user(
+            username="exam_student",
+            email="exam_student@example.com",
+            password="ExamStudent@123",
+            role="student",
+        )
+        self.academic_class = AcademicClass.objects.create(name="Grade 10")
+        self.subject = Subject.objects.create(
+            name="Science",
+            academic_class=self.academic_class,
+            is_active=True,
+        )
+        self.chapter_1 = Chapter.objects.create(
+            subject=self.subject,
+            title="Motion",
+            description="Motion basics",
+            order=1,
+            is_published=True,
+        )
+        self.chapter_2 = Chapter.objects.create(
+            subject=self.subject,
+            title="Force",
+            description="Force and mass",
+            order=2,
+            is_published=True,
+        )
+        self.lesson = Lesson.objects.create(
+            chapter=self.chapter_1,
+            title="Newton Laws",
+            content_type="text",
+            content="Newton's laws of motion.",
+            order=1,
+            is_published=True,
+            duration_minutes=40,
+        )
+        ContentChunk.objects.create(
+            source_type="chapter",
+            source_id=str(self.chapter_1.id),
+            text="Chapter on motion includes speed, velocity, and acceleration.",
+            metadata={"chapter_id": self.chapter_1.id},
+            embedding=[0.01]
+            * max(1, int(getattr(settings, "AI_EMBEDDING_DIMENSIONS", 1536))),
+        )
 
     def _client_for(self, user):
-        client = APIClient(HTTP_HOST=self.get_test_tenant_domain())
+        client = APIClient()
         client.force_authenticate(user=user)
         return client
 
@@ -146,7 +133,6 @@ class ExamGeneratorApiTests(FastTenantTestCase):
         self.assertEqual(response.data["paper"]["total_marks"], 100)
 
         artifact = AiGeneratedArtifact.objects.filter(
-            tenant=self.tenant,
             artifact_type="exam_paper",
             source_type="subject",
             source_id=str(self.subject.id),

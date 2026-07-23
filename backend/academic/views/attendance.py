@@ -18,7 +18,6 @@ class AttendanceViewSet(TenantScopedQuerysetMixin, viewsets.ModelViewSet):
     queryset = Attendance.objects.all()
     serializer_class = AttendanceSerializer
     permission_classes = [IsAuthenticated]
-    tenant_field = "student__user__tenant"
 
     def _role(self):
         return (getattr(self.request.user, "role", "") or "").lower()
@@ -120,10 +119,6 @@ class AttendanceViewSet(TenantScopedQuerysetMixin, viewsets.ModelViewSet):
     def perform_create(self, serializer):
         student = serializer.validated_data.get("student")
         subject = serializer.validated_data.get("subject")
-        student_tenant = getattr(getattr(student, "user", None), "tenant", None)
-        user_tenant = getattr(self.request.user, "tenant", None)
-        if user_tenant and student_tenant and user_tenant != student_tenant:
-            raise PermissionDenied("Cross-tenant attendance update denied.")
         self._ensure_teacher_can_modify(student, subject)
         serializer.save()
 

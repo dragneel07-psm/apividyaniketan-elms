@@ -2,7 +2,7 @@
 # Unauthorized copying, modification, or distribution of this file,
 # via any medium, is strictly prohibited. Proprietary and confidential.
 from django.utils import timezone
-from django_tenants.test.cases import FastTenantTestCase
+from django.test import TestCase
 from rest_framework import status
 from rest_framework.test import APIClient
 
@@ -11,54 +11,39 @@ from library.models import Book, BookIssue
 from users.models import UserAccount
 
 
-class LibraryAccessControlTests(FastTenantTestCase):
+class LibraryAccessControlTests(TestCase):
     @staticmethod
     def _items(response):
         if isinstance(response.data, dict):
             return response.data.get("results", [])
         return response.data
 
-    @classmethod
-    def setup_tenant(cls, tenant):
-        tenant.name = "Library Security School"
-
-    @classmethod
-    def setup_domain(cls, domain):
-        domain.is_primary = True
-
     def setUp(self):
-        self.client = APIClient(
-            HTTP_HOST=self.get_test_tenant_domain(),
-            HTTP_X_TENANT_ID=self.tenant.schema_name,
-        )
+        self.client = APIClient()
 
         self.admin_user = UserAccount.objects.create_user(
             username="lib_admin",
             email="lib_admin@example.com",
             password="Admin@1234",
             role="admin",
-            tenant=self.tenant,
         )
         self.student_user = UserAccount.objects.create_user(
             username="lib_student",
             email="lib_student@example.com",
             password="Student@1234",
             role="student",
-            tenant=self.tenant,
         )
         self.other_student_user = UserAccount.objects.create_user(
             username="lib_other_student",
             email="lib_other_student@example.com",
             password="Student@1234",
             role="student",
-            tenant=self.tenant,
         )
         self.parent_user = UserAccount.objects.create_user(
             username="lib_parent",
             email="lib_parent@example.com",
             password="Parent@1234",
             role="parent",
-            tenant=self.tenant,
         )
 
         academic_class = AcademicClass.objects.create(name="Grade 6", order=6)

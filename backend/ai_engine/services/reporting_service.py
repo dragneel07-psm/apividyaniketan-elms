@@ -125,7 +125,6 @@ class ReportingService:
 
             if save:
                 StudentAIReport.objects.using(using).create(
-                    tenant_id=student.user.tenant_id,
                     student=student,
                     report_data=report_obj,
                     is_automated=is_automated,

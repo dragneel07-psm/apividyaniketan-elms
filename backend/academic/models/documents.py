@@ -26,12 +26,6 @@ class StudentDocument(models.Model):
     document_id = models.UUIDField(
         primary_key=True, default=uuid_lib.uuid4, editable=False
     )
-    tenant = models.ForeignKey(
-        "core.Tenant",
-        on_delete=models.CASCADE,
-        related_name="student_documents",
-        db_constraint=False,
-    )
     student = models.ForeignKey(
         "academic.Student",
         on_delete=models.CASCADE,
@@ -70,10 +64,10 @@ class StudentDocument(models.Model):
         ordering = ["-created_at"]
         indexes = [
             models.Index(
-                fields=["tenant", "document_type"], name="sis_doc_tenant_type_idx"
+                fields=["document_type"], name="sis_doc_tenant_type_idx"
             ),
             models.Index(
-                fields=["tenant", "student"], name="sis_doc_tenant_student_idx"
+                fields=["student"], name="sis_doc_tenant_student_idx"
             ),
         ]
 
@@ -93,10 +87,9 @@ class StudentDocument(models.Model):
             }
             prefix = prefix_map.get(self.document_type, "DOC")
             year = self.issued_date.year if self.issued_date else "00"
-            # Count existing docs of same type for this tenant this year
+            # Count existing docs of same type this year
             count = (
                 StudentDocument.objects.filter(
-                    tenant=self.tenant,
                     document_type=self.document_type,
                     issued_date__year=year,
                 ).count()

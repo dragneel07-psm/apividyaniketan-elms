@@ -50,12 +50,6 @@ class DisciplinaryIncident(models.Model):
     incident_id = models.UUIDField(
         primary_key=True, default=uuid_lib.uuid4, editable=False
     )
-    tenant = models.ForeignKey(
-        "core.Tenant",
-        on_delete=models.CASCADE,
-        related_name="disciplinary_incidents",
-        db_constraint=False,
-    )
     student = models.ForeignKey(
         "academic.Student",
         on_delete=models.CASCADE,
@@ -99,10 +93,10 @@ class DisciplinaryIncident(models.Model):
         ordering = ["-incident_date", "-created_at"]
         indexes = [
             models.Index(
-                fields=["tenant", "status"], name="sis_disc_tenant_status_idx"
+                fields=["status"], name="sis_disc_tenant_status_idx"
             ),
             models.Index(
-                fields=["tenant", "student"], name="sis_disc_tenant_student_idx"
+                fields=["student"], name="sis_disc_tenant_student_idx"
             ),
             models.Index(fields=["incident_date"], name="sis_disc_date_idx"),
         ]

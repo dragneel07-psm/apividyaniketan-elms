@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from typing import Dict, List, Optional
 
-from django.db import connection, transaction
+from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 
@@ -130,17 +130,15 @@ def _set_current_year(year: AcademicYear) -> AcademicYear:
 
 def _sync_tenant_current_academic_year(year: AcademicYear) -> None:
     """
-    Keep shared Tenant.current_academic_year aligned with tenant-schema AcademicYear.
+    Keep SchoolProfile.current_academic_year aligned with the active AcademicYear.
     """
     try:
-        from core.models import Tenant
+        from core.models import SchoolProfile
 
-        schema_name = getattr(connection, "schema_name", None)
-        if not schema_name:
-            return
-        Tenant.objects.filter(schema_name=schema_name).update(
-            current_academic_year=year.name
-        )
+        profile = SchoolProfile.get_solo()
+        if profile.current_academic_year != year.name:
+            profile.current_academic_year = year.name
+            profile.save(update_fields=["current_academic_year"])
     except Exception:
         # Best-effort sync only.
         return

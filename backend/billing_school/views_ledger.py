@@ -67,14 +67,10 @@ class LedgerAccountViewSet(viewsets.ModelViewSet):
     permission_classes = [IsSchoolFinanceManager]
 
     def get_queryset(self):
-        tenant = getattr(self.request.user, "tenant", None)
-        if not tenant:
-            return LedgerAccount.objects.none()
-        return LedgerAccount.objects.filter(tenant=tenant)
+        return LedgerAccount.objects.all()
 
     def perform_create(self, serializer):
-        tenant = getattr(self.request.user, "tenant", None)
-        serializer.save(tenant=tenant)
+        serializer.save()
 
     @action(detail=True, methods=["get"])
     def statement(self, request, pk=None):
@@ -121,12 +117,7 @@ class LedgerEntryViewSet(viewsets.ModelViewSet):
     permission_classes = [IsSchoolFinanceManager]
 
     def get_queryset(self):
-        tenant = getattr(self.request.user, "tenant", None)
-        if not tenant:
-            return LedgerEntry.objects.none()
-        qs = LedgerEntry.objects.filter(tenant=tenant).select_related(
-            "account", "recorded_by"
-        )
+        qs = LedgerEntry.objects.select_related("account", "recorded_by")
         account_id = self.request.query_params.get("account")
         if account_id:
             qs = qs.filter(account__account_id=account_id)
@@ -139,5 +130,4 @@ class LedgerEntryViewSet(viewsets.ModelViewSet):
         return qs
 
     def perform_create(self, serializer):
-        tenant = getattr(self.request.user, "tenant", None)
-        serializer.save(tenant=tenant, recorded_by=self.request.user)
+        serializer.save(recorded_by=self.request.user)

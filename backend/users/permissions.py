@@ -4,19 +4,6 @@
 from rest_framework import permissions
 
 
-class IsSaaSAdmin(permissions.BasePermission):
-    """
-    Allocates permissions for SaaS Super Admins
-    """
-
-    def has_permission(self, request, view):
-        return bool(
-            request.user
-            and request.user.is_authenticated
-            and request.user.role == "saas_admin"
-        )
-
-
 class IsAdmin(permissions.BasePermission):
     """
     Allocates permissions for School Admins (Principals/IT)
@@ -72,7 +59,7 @@ class IsParent(permissions.BasePermission):
 # Composite Permissions (Mixins)
 class IsTeacherOrAdmin(permissions.BasePermission):
     def has_permission(self, request, view):
-        allowed_roles = ["teacher", "admin", "saas_admin"]
+        allowed_roles = ["teacher", "admin"]
         return bool(
             request.user
             and request.user.is_authenticated
@@ -81,36 +68,22 @@ class IsTeacherOrAdmin(permissions.BasePermission):
 
 
 class IsAdminOrSaaSAdmin(permissions.BasePermission):
-    def has_permission(self, request, view):
-        allowed_roles = ["admin", "saas_admin"]
-        return bool(
-            request.user
-            and request.user.is_authenticated
-            and request.user.role in allowed_roles
-        )
-
-
-class IsSaaSAdminOrStaff(permissions.BasePermission):
-    """
-    Grants access to both saas_admin (super admin) and saas_staff.
-    Use this for SaaS portal views that staff members are allowed to use.
-    Use IsSaaSAdmin directly when only the super admin should have access (e.g. staff management).
-    """
+    """Kept name for compatibility with existing call sites — checks admin only."""
 
     def has_permission(self, request, view):
         return bool(
             request.user
             and request.user.is_authenticated
-            and request.user.role in ("saas_admin", "saas_staff")
+            and request.user.role == "admin"
         )
 
 
 class IsSISStaff(permissions.BasePermission):
     """
-    Student Information System access: admin / saas_admin or any staff
-    user whose staff_role is 'receptionist' (front-desk staff routinely
-    handle health records, leave requests, document issuance and
-    incident logging on the admin's behalf).
+    Student Information System access: admin, or any staff user whose
+    staff_role is 'receptionist' (front-desk staff routinely handle health
+    records, leave requests, document issuance and incident logging on the
+    admin's behalf).
     """
 
     def has_permission(self, request, view):
@@ -118,7 +91,7 @@ class IsSISStaff(permissions.BasePermission):
         if not user or not user.is_authenticated:
             return False
         role = (getattr(user, "role", "") or "").lower()
-        if role in ("admin", "saas_admin"):
+        if role == "admin":
             return True
         if (
             role == "staff"

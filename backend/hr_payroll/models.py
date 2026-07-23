@@ -10,19 +10,12 @@ from django.conf import settings
 from django.db import models
 
 from billing.models_base import SchemaScopedBillingModel
-from core.models.tenant import Tenant
 
 
 class Department(SchemaScopedBillingModel, models.Model):
     SCHEMA_SCOPE = "tenant"
 
     dept_id = models.UUIDField(primary_key=True, default=uuid_lib.uuid4, editable=False)
-    tenant = models.ForeignKey(
-        Tenant,
-        on_delete=models.CASCADE,
-        related_name="hr_departments",
-        db_constraint=False,
-    )
     name = models.CharField(max_length=100)
     code = models.CharField(max_length=20, blank=True)
     description = models.TextField(blank=True)
@@ -38,9 +31,8 @@ class Department(SchemaScopedBillingModel, models.Model):
 
     class Meta:
         indexes = [
-            models.Index(fields=["tenant"], name="hr_dept_tenant_idx"),
         ]
-        unique_together = [("tenant", "name")]
+        unique_together = [("name",)]
 
     def __str__(self):
         return self.name
@@ -62,9 +54,6 @@ class Employee(SchemaScopedBillingModel, models.Model):
 
     employee_id = models.UUIDField(
         primary_key=True, default=uuid_lib.uuid4, editable=False
-    )
-    tenant = models.ForeignKey(
-        Tenant, on_delete=models.CASCADE, related_name="employees", db_constraint=False
     )
     user = models.OneToOneField(
         settings.AUTH_USER_MODEL,
@@ -131,10 +120,10 @@ class Employee(SchemaScopedBillingModel, models.Model):
     class Meta:
         indexes = [
             models.Index(
-                fields=["tenant", "is_active"], name="hr_emp_tenant_active_idx"
+                fields=["is_active"], name="hr_emp_tenant_active_idx"
             ),
             models.Index(
-                fields=["tenant", "department"], name="hr_emp_tenant_dept_idx"
+                fields=["department"], name="hr_emp_tenant_dept_idx"
             ),
         ]
 
@@ -156,12 +145,6 @@ class LeaveType(SchemaScopedBillingModel, models.Model):
     leave_type_id = models.UUIDField(
         primary_key=True, default=uuid_lib.uuid4, editable=False
     )
-    tenant = models.ForeignKey(
-        Tenant,
-        on_delete=models.CASCADE,
-        related_name="leave_types",
-        db_constraint=False,
-    )
     name = models.CharField(max_length=80)
     code = models.CharField(max_length=10)
     max_days_per_year = models.PositiveSmallIntegerField(default=12)
@@ -172,9 +155,8 @@ class LeaveType(SchemaScopedBillingModel, models.Model):
 
     class Meta:
         indexes = [
-            models.Index(fields=["tenant"], name="hr_lvtype_tenant_idx"),
         ]
-        unique_together = [("tenant", "code")]
+        unique_together = [("code",)]
 
     def __str__(self):
         return f"{self.name} ({self.code})"
@@ -196,12 +178,6 @@ class LeaveApplication(SchemaScopedBillingModel, models.Model):
 
     leave_id = models.UUIDField(
         primary_key=True, default=uuid_lib.uuid4, editable=False
-    )
-    tenant = models.ForeignKey(
-        Tenant,
-        on_delete=models.CASCADE,
-        related_name="leave_applications",
-        db_constraint=False,
     )
     employee = models.ForeignKey(
         Employee,
@@ -239,10 +215,10 @@ class LeaveApplication(SchemaScopedBillingModel, models.Model):
     class Meta:
         indexes = [
             models.Index(
-                fields=["tenant", "status"], name="hr_leave_tenant_status_idx"
+                fields=["status"], name="hr_leave_tenant_status_idx"
             ),
             models.Index(
-                fields=["tenant", "employee", "status"], name="hr_leave_emp_status_idx"
+                fields=["employee", "status"], name="hr_leave_emp_status_idx"
             ),
             models.Index(fields=["start_date", "end_date"], name="hr_leave_dates_idx"),
         ]
@@ -273,12 +249,6 @@ class StaffAttendance(SchemaScopedBillingModel, models.Model):
     attendance_id = models.UUIDField(
         primary_key=True, default=uuid_lib.uuid4, editable=False
     )
-    tenant = models.ForeignKey(
-        Tenant,
-        on_delete=models.CASCADE,
-        related_name="staff_attendance",
-        db_constraint=False,
-    )
     employee = models.ForeignKey(
         Employee,
         on_delete=models.CASCADE,
@@ -304,9 +274,9 @@ class StaffAttendance(SchemaScopedBillingModel, models.Model):
 
     class Meta:
         indexes = [
-            models.Index(fields=["tenant", "date"], name="hr_att_tenant_date_idx"),
+            models.Index(fields=["date"], name="hr_att_tenant_date_idx"),
             models.Index(
-                fields=["tenant", "employee", "date"], name="hr_att_emp_date_idx"
+                fields=["employee", "date"], name="hr_att_emp_date_idx"
             ),
         ]
         constraints = [
@@ -337,12 +307,6 @@ class PayrollPeriod(SchemaScopedBillingModel, models.Model):
     period_id = models.UUIDField(
         primary_key=True, default=uuid_lib.uuid4, editable=False
     )
-    tenant = models.ForeignKey(
-        Tenant,
-        on_delete=models.CASCADE,
-        related_name="payroll_periods",
-        db_constraint=False,
-    )
     name = models.CharField(max_length=80)  # e.g. "March 2026"
     month = models.PositiveSmallIntegerField()  # 1–12
     year = models.PositiveSmallIntegerField()
@@ -367,15 +331,15 @@ class PayrollPeriod(SchemaScopedBillingModel, models.Model):
     class Meta:
         indexes = [
             models.Index(
-                fields=["tenant", "year", "month"], name="hr_period_tenant_ym_idx"
+                fields=["year", "month"], name="hr_period_tenant_ym_idx"
             ),
             models.Index(
-                fields=["tenant", "status"], name="hr_period_tenant_status_idx"
+                fields=["status"], name="hr_period_tenant_status_idx"
             ),
         ]
         constraints = [
             models.UniqueConstraint(
-                fields=["tenant", "month", "year"],
+                fields=["month", "year"],
                 name="hr_period_unique_tenant_month_year",
             )
         ]
@@ -409,12 +373,6 @@ class SalarySlip(SchemaScopedBillingModel, models.Model):
     )
 
     slip_id = models.UUIDField(primary_key=True, default=uuid_lib.uuid4, editable=False)
-    tenant = models.ForeignKey(
-        Tenant,
-        on_delete=models.CASCADE,
-        related_name="salary_slips",
-        db_constraint=False,
-    )
     employee = models.ForeignKey(
         Employee,
         on_delete=models.CASCADE,
@@ -517,10 +475,10 @@ class SalarySlip(SchemaScopedBillingModel, models.Model):
     class Meta:
         indexes = [
             models.Index(
-                fields=["tenant", "payroll_period"], name="hr_slip_tenant_period_idx"
+                fields=["payroll_period"], name="hr_slip_tenant_period_idx"
             ),
-            models.Index(fields=["tenant", "employee"], name="hr_slip_tenant_emp_idx"),
-            models.Index(fields=["tenant", "status"], name="hr_slip_tenant_status_idx"),
+            models.Index(fields=["employee"], name="hr_slip_tenant_emp_idx"),
+            models.Index(fields=["status"], name="hr_slip_tenant_status_idx"),
         ]
         constraints = [
             models.UniqueConstraint(

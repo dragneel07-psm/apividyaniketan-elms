@@ -32,7 +32,7 @@ def _compute_late_fee(structure, balance: Decimal) -> Decimal:
     return Decimal("0")
 
 
-def apply_late_fees(today: _date | None = None, *, tenant=None) -> dict:
+def apply_late_fees(today: _date | None = None) -> dict:
     """
     Walk eligible StudentFees and accrue late fees.
 
@@ -45,13 +45,11 @@ def apply_late_fees(today: _date | None = None, *, tenant=None) -> dict:
     today = today or timezone.now().date()
 
     qs = (
-        StudentFee.objects.select_related("fee_structure", "tenant")
+        StudentFee.objects.select_related("fee_structure")
         .exclude(status__in=["paid", "waived"])
         .filter(late_fee_applied=0)
         .filter(fee_structure__late_fee_type__in=["flat", "percent"])
     )
-    if tenant is not None:
-        qs = qs.filter(tenant=tenant)
 
     applied_count = 0
     skipped_count = 0

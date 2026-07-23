@@ -25,10 +25,11 @@ BACKEND_ROOT = Path(__file__).resolve().parent.parent
 # file (relative to backend/) -> count of AllowAny permission usages.
 # Each is justified in ALLOWANY_TRIAGE.md (all 16 reviewed 2026-06-14).
 APPROVED_ALLOWANY: dict[str, int] = {
-    "core/views.py": 4,  # Healthz, Readyz, Metrics (token-gated), TenantCheck (throttled)
+    "core/views.py": 6,  # Healthz, Readyz, Metrics (token-gated), SchoolProfile (public), contact form
     "config/urls.py": 1,  # OpenAPI schema — AllowAny only under DEBUG, else IsAdminUser
-    "users/views.py": 6,  # register, password-reset(+confirm), email-verify, 2FA setup/activate
-    "billing_saas/views.py": 2,  # public pricing-plan list
+    "users/views.py": 4,  # register, password-reset(+confirm), email-verify
+    "academic/views/public.py": 4,  # public admissions enquiry, notices, events (marketing site)
+    "academic/views/site_content_public.py": 2,  # public read-only marketing site content
     "billing_school/views_payment_gateway.py": 2,  # Esewa + Khalti gateway callbacks (verified)
     "billing_school/views_nas.py": 1,  # ConnectIPS gateway callback (verified + amount-checked)
 }

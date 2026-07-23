@@ -23,11 +23,7 @@ def _db_alias(instance):
 def _get_evaluator(student, using="default"):
     from gamification.badge_evaluator import BadgeEvaluatorService
 
-    try:
-        tenant = student.user.tenant
-    except Exception:
-        tenant = None
-    return BadgeEvaluatorService(student=student, tenant=tenant, using=using)
+    return BadgeEvaluatorService(student=student, using=using)
 
 
 @receiver(post_save, sender=LessonProgress)
@@ -47,25 +43,18 @@ def award_lesson_xp(sender, instance, created, **kwargs):
 
     if not exists:
         points = 50
-        try:
-            tenant = instance.student.user.tenant
-        except Exception:
-            tenant = None
-
-        if tenant:
-            PointTransaction.objects.using(using).create(
-                tenant=tenant,
-                student=instance.student,
-                points=points,
-                description=f"Completed lesson: {instance.lesson.title}",
-                activity_type="lesson",
-            )
-            logger.info(
-                "Awarded %d XP to %s for lesson %s",
-                points,
-                instance.student,
-                instance.lesson.title,
-            )
+        PointTransaction.objects.using(using).create(
+            student=instance.student,
+            points=points,
+            description=f"Completed lesson: {instance.lesson.title}",
+            activity_type="lesson",
+        )
+        logger.info(
+            "Awarded %d XP to %s for lesson %s",
+            points,
+            instance.student,
+            instance.lesson.title,
+        )
 
     try:
         evaluator = _get_evaluator(instance.student, using=using)

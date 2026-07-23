@@ -11,37 +11,18 @@ sys.path.append(os.getcwd())
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 django.setup()
 
-from django.conf import settings
-from django.db import connections
 from django.test import RequestFactory
 
 from academic.models import Exam, ExamSeating
 from academic.services.exam_service import ExamService
 from academic.views.reports import ReportViewSet
-from core.middleware.tenant import clear_current_tenant, set_current_tenant
-from core.models.tenant import Tenant
-
-
-def setup_tenant_db(tenant):
-    """Ensure the tenant database is registered in Django settings."""
-    if tenant.db_alias not in settings.DATABASES:
-        db_config = settings.DATABASES["default"].copy()
-        db_path = settings.BASE_DIR / tenant.db_name
-        db_config["NAME"] = str(db_path)
-        settings.DATABASES[tenant.db_alias] = db_config
-        connections.databases[tenant.db_alias] = db_config
-    return tenant.db_alias
 
 
 def test_complete_workflow():
     print("🧪 Testing Complete Exam & Hall Ticket Workflow...")
 
     try:
-        # Setup tenant context
-        tenant = Tenant.objects.get(subdomain="demo")
-        db_alias = setup_tenant_db(tenant)
-        set_current_tenant(tenant, db_alias)
-        print(f"✅ Using Tenant: {tenant.name}\n")
+        db_alias = "default"
 
         # Step 1: Get or allocate exam seating
         print("📋 Step 1: Ensuring Exam Seating Allocation...")
@@ -142,8 +123,6 @@ def test_complete_workflow():
         import traceback
 
         traceback.print_exc()
-    finally:
-        clear_current_tenant()
 
 
 if __name__ == "__main__":

@@ -22,13 +22,13 @@ class ConversationViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        # Filter by tenant and where the user is a participant
+        # Filter to conversations where the user is a participant
         return Conversation.objects.filter(
-            tenant=self.request.tenant, participants__user=self.request.user
+            participants__user=self.request.user
         ).distinct()
 
     def perform_create(self, serializer):
-        conversation = serializer.save(tenant=self.request.tenant)
+        conversation = serializer.save()
         # Auto-add the creator as a participant
         ConversationParticipant.objects.get_or_create(
             conversation=conversation,
@@ -65,7 +65,6 @@ class ConversationViewSet(viewsets.ModelViewSet):
         existing = (
             Conversation.objects.filter(
                 type="direct",
-                tenant=self.request.tenant,
                 participants__user=request.user,
             )
             .filter(participants__user_id=other_user_id)
@@ -78,9 +77,7 @@ class ConversationViewSet(viewsets.ModelViewSet):
             )
 
         # Create new direct conversation
-        conversation = Conversation.objects.create(
-            type="direct", tenant=self.request.tenant
-        )
+        conversation = Conversation.objects.create(type="direct")
         ConversationParticipant.objects.create(
             conversation=conversation, user=request.user
         )
@@ -103,9 +100,7 @@ class ConversationViewSet(viewsets.ModelViewSet):
                 {"error": "title is required"}, status=status.HTTP_400_BAD_REQUEST
             )
 
-        conversation = Conversation.objects.create(
-            type="group", title=title, tenant=self.request.tenant
-        )
+        conversation = Conversation.objects.create(type="group", title=title)
 
         # Add creator
         ConversationParticipant.objects.create(

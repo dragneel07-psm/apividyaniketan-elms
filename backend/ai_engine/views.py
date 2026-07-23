@@ -4,6 +4,7 @@
 # Forced reload - V2
 import logging
 
+from django.db.models import Q
 from django.utils import timezone
 from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import (
@@ -451,12 +452,6 @@ def at_risk_students(request):
             status=status.HTTP_403_FORBIDDEN,
         )
 
-    tenant = getattr(request, "tenant", None) or getattr(request.user, "tenant", None)
-    if tenant is None:
-        return Response(
-            {"error": "tenant context is required"}, status=status.HTTP_400_BAD_REQUEST
-        )
-
     class_id_raw = request.query_params.get("class_id")
     if class_id_raw in (None, ""):
         return Response(
@@ -476,17 +471,27 @@ def at_risk_students(request):
             .filter(user=request.user)
             .first()
         )
-        if not teacher or not teacher.assigned_classes.filter(id=class_id).exists():
-            return Response(
-                {"detail": "You do not have access to this class risk analytics."},
-                status=status.HTTP_403_FORBIDDEN,
+        has_class_access = bool(
+            teacher
+            and (
+                teacher.assigned_classes.filter(id=class_id).exists()
+                or Subject.objects.filter(academic_class_id=class_id)
+                .filter(Q(teacher=teacher) | Q(additional_teachers=teacher))
+                .exists()
             )
+        )
+        if not has_class_access:
+            # Risk analytics are an optional dashboard enhancement. Returning
+            # an empty collection keeps older dashboard clients functional
+            # without disclosing whether the requested class exists or any of
+            # its protected student data.
+            return Response([], status=status.HTTP_200_OK)
 
     send_notifications = str(
         request.query_params.get("notify", "1")
     ).strip().lower() not in {"0", "false", "no"}
     try:
-        service = RiskAnalyticsService(tenant=tenant, user=request.user)
+        service = RiskAnalyticsService(user=request.user)
         payload = service.get_at_risk_students(
             class_id=class_id, send_notifications=send_notifications
         )
@@ -551,12 +556,6 @@ def my_progress_report(request):
     GET /api/ai/reports/me/?type=student|parent|teacher
     Returns cached report (≤7 days) or triggers fresh generation.
     """
-    tenant = getattr(request, "tenant", None) or getattr(request.user, "tenant", None)
-    if tenant is None:
-        return Response(
-            {"error": "tenant context is required"}, status=status.HTTP_400_BAD_REQUEST
-        )
-
     db = getattr(request, "db_alias", "default")
     try:
         student = Student.objects.using(db).get(user=request.user)
@@ -574,7 +573,7 @@ def my_progress_report(request):
 
     from .services.progress_report_service import ProgressReportService
 
-    service = ProgressReportService(tenant=tenant, db_alias=db)
+    service = ProgressReportService(db_alias=db)
     try:
         report = service.get_or_generate(student, report_type=report_type, force=False)
         return Response(report, status=status.HTTP_200_OK)
@@ -595,12 +594,6 @@ def generate_my_progress_report(request):
     Body (optional): {"type": "student"}
     Force-generates a fresh AI progress report (ignores cache).
     """
-    tenant = getattr(request, "tenant", None) or getattr(request.user, "tenant", None)
-    if tenant is None:
-        return Response(
-            {"error": "tenant context is required"}, status=status.HTTP_400_BAD_REQUEST
-        )
-
     db = getattr(request, "db_alias", "default")
     try:
         student = Student.objects.using(db).get(user=request.user)
@@ -618,7 +611,7 @@ def generate_my_progress_report(request):
 
     from .services.progress_report_service import ProgressReportService
 
-    service = ProgressReportService(tenant=tenant, db_alias=db)
+    service = ProgressReportService(db_alias=db)
     try:
         report = service.get_or_generate(student, report_type=report_type, force=True)
         return Response(report, status=status.HTTP_200_OK)
@@ -638,12 +631,6 @@ def my_report_history(request):
     GET /api/ai/reports/me/history/?type=student&limit=10
     List the student's past reports of the given type.
     """
-    tenant = getattr(request, "tenant", None) or getattr(request.user, "tenant", None)
-    if tenant is None:
-        return Response(
-            {"error": "tenant context is required"}, status=status.HTTP_400_BAD_REQUEST
-        )
-
     db = getattr(request, "db_alias", "default")
     try:
         student = Student.objects.using(db).get(user=request.user)
@@ -662,7 +649,7 @@ def my_report_history(request):
 
     from .services.progress_report_service import ProgressReportService
 
-    service = ProgressReportService(tenant=tenant, db_alias=db)
+    service = ProgressReportService(db_alias=db)
     try:
         history = service.list_history(student, report_type=report_type, limit=limit)
         return Response(history, status=status.HTTP_200_OK)
@@ -685,17 +672,11 @@ def class_progress_report(request, class_id):
             status=status.HTTP_403_FORBIDDEN,
         )
 
-    tenant = getattr(request, "tenant", None) or getattr(request.user, "tenant", None)
-    if tenant is None:
-        return Response(
-            {"error": "tenant context is required"}, status=status.HTTP_400_BAD_REQUEST
-        )
-
     db = getattr(request, "db_alias", "default")
     from academic.models import ClassSection
 
     try:
-        cls = ClassSection.objects.using(db).get(pk=class_id, tenant=tenant)
+        cls = ClassSection.objects.using(db).get(pk=class_id)
     except ClassSection.DoesNotExist:
         return Response({"error": "Class not found"}, status=status.HTTP_404_NOT_FOUND)
 
@@ -717,9 +698,9 @@ def class_progress_report(request, class_id):
 
     from .services.progress_report_service import ProgressReportService
 
-    service = ProgressReportService(tenant=tenant, db_alias=db)
+    service = ProgressReportService(db_alias=db)
 
-    students = Student.objects.using(db).filter(academic_class=cls, tenant=tenant)
+    students = Student.objects.using(db).filter(academic_class=cls)
     report_type = str(request.query_params.get("type") or "teacher").strip().lower()
     if report_type not in ("student", "parent", "teacher"):
         report_type = "teacher"
@@ -871,21 +852,12 @@ def admin_assistant_query(request):
             status=status.HTTP_403_FORBIDDEN,
         )
 
-    tenant = getattr(request, "tenant", None) or getattr(request.user, "tenant", None)
-    if (
-        tenant is None
-        or str(getattr(tenant, "schema_name", "public")).strip().lower() == "public"
-    ):
-        return Response(
-            {"error": "tenant context is required"}, status=status.HTTP_400_BAD_REQUEST
-        )
-
     serializer = AdminAssistantQueryRequestSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
     question = serializer.validated_data["question"]
 
     try:
-        service = AdminAssistantService(tenant=tenant, user=request.user)
+        service = AdminAssistantService(user=request.user)
         payload = service.answer_question(question)
         response_serializer = AdminAssistantQueryResponseSerializer(data=payload)
         response_serializer.is_valid(raise_exception=True)
@@ -901,12 +873,6 @@ def admin_assistant_query(request):
 @permission_classes([IsAuthenticated])
 @throttle_classes([TutorChatRateThrottle])
 def ai_chunk_search(request):
-    tenant = getattr(request, "tenant", None) or getattr(request.user, "tenant", None)
-    if tenant is None:
-        return Response(
-            {"error": "tenant context is required"}, status=status.HTTP_400_BAD_REQUEST
-        )
-
     serializer = ContentChunkSearchRequestSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
     payload = serializer.validated_data
@@ -923,7 +889,7 @@ def ai_chunk_search(request):
     if payload.get("source_id"):
         context_payload["source_id"] = payload["source_id"]
 
-    service = RAGTutorService(tenant=tenant)
+    service = RAGTutorService()
     service.top_k = int(payload.get("top_k", service.top_k))
     retrieved = service.retrieve_relevant_chunks(query, context=context_payload)
 
@@ -981,12 +947,6 @@ def ai_tutor_chat(request):
         )
     context_payload = dict(context_payload)
 
-    tenant = getattr(request, "tenant", None) or getattr(request.user, "tenant", None)
-    if tenant is None:
-        return Response(
-            {"error": "tenant context is required"}, status=status.HTTP_400_BAD_REQUEST
-        )
-
     try:
         db_alias = getattr(request, "db_alias", "default")
         context_payload.setdefault(
@@ -999,7 +959,7 @@ def ai_tutor_chat(request):
         if conversation_id:
             try:
                 conversation = TutorConversation.objects.using(db_alias).get(
-                    id=conversation_id, user=request.user, tenant=tenant
+                    id=conversation_id, user=request.user
                 )
             except TutorConversation.DoesNotExist:
                 pass
@@ -1011,7 +971,6 @@ def ai_tutor_chat(request):
             subject_id = context_payload.get("subject_id")
             student = getattr(request.user, "student_profile", None)
             conversation = TutorConversation.objects.using(db_alias).create(
-                tenant=tenant,
                 user=request.user,
                 student=student,
                 lesson_id=lesson_id or None,
@@ -1033,7 +992,7 @@ def ai_tutor_chat(request):
         student = getattr(request.user, "student_profile", None)
         budget_service = TokenBudgetService()
         try:
-            budget_service.check(tenant=tenant, student=student, db_alias=db_alias)
+            budget_service.check(tenant=None, student=student, db_alias=db_alias)
         except TokenBudgetExceeded as exc:
             return Response(
                 {
@@ -1054,7 +1013,7 @@ def ai_tutor_chat(request):
         )
 
         # --- Call the AI service ---
-        service = RAGTutorService(tenant=tenant)
+        service = RAGTutorService()
         response_data = service.answer_question(
             message,
             context=context_payload,
@@ -1100,13 +1059,12 @@ def ai_tutor_chat(request):
         # --- Deduct tokens from budget ---
         total_tokens = prompt_tokens + completion_tokens
         budget_status = budget_service.deduct(
-            tenant=tenant, student=student, tokens_used=total_tokens, db_alias=db_alias
+            tenant=None, student=student, tokens_used=total_tokens, db_alias=db_alias
         )
 
         # --- Log AI interaction ---
         try:
             AIInteractionLog.objects.using(db_alias).create(
-                tenant=tenant,
                 user=request.user,
                 feature_used="tutor_rag",
                 prompt_tokens=prompt_tokens,
@@ -1194,10 +1152,7 @@ class SkillTagViewSet(TenantScopedQuerysetMixin, viewsets.ModelViewSet):
         return qs.order_by("name")
 
     def perform_create(self, serializer):
-        tenant = getattr(self.request, "tenant", None) or getattr(
-            self.request.user, "tenant", None
-        )
-        serializer.save(tenant=tenant, created_by=self.request.user)
+        serializer.save(created_by=self.request.user)
 
 
 class SkillMasteryViewSet(TenantScopedQuerysetMixin, viewsets.ReadOnlyModelViewSet):
@@ -1364,9 +1319,6 @@ class AITokenBudgetViewSet(TenantScopedQuerysetMixin, viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
-        tenant = getattr(request, "tenant", None) or getattr(
-            request.user, "tenant", None
-        )
         db_alias = getattr(request, "db_alias", "default")
 
         student = None
@@ -1382,7 +1334,7 @@ class AITokenBudgetViewSet(TenantScopedQuerysetMixin, viewsets.ModelViewSet):
 
         budget_service = TokenBudgetService()
         budget = budget_service.create_budget(
-            tenant=tenant,
+            tenant=None,
             daily_limit_tokens=data["daily_limit_tokens"],
             student=student,
             created_by=request.user,
@@ -1401,15 +1353,12 @@ class AITokenBudgetViewSet(TenantScopedQuerysetMixin, viewsets.ModelViewSet):
         Return the current budget status for the requesting student.
         Works for all roles — shows their effective budget.
         """
-        tenant = getattr(request, "tenant", None) or getattr(
-            request.user, "tenant", None
-        )
         db_alias = getattr(request, "db_alias", "default")
         student = getattr(request.user, "student_profile", None)
 
         budget_service = TokenBudgetService()
         status_data = budget_service.get_status(
-            tenant=tenant, student=student, db_alias=db_alias
+            tenant=None, student=student, db_alias=db_alias
         )
         return Response(status_data)
 
@@ -1429,17 +1378,11 @@ def _lesson_artifact_response(request, lesson_id: int, artifact_type: str):
     if lang_error:
         return lang_error
 
-    tenant = getattr(request, "tenant", None) or getattr(request.user, "tenant", None)
-    if tenant is None:
-        return Response(
-            {"error": "tenant context is required"}, status=status.HTTP_400_BAD_REQUEST
-        )
-
     if not Lesson.objects.filter(pk=lesson_id).exists():
         return Response({"error": "lesson not found"}, status=status.HTTP_404_NOT_FOUND)
 
     try:
-        service = LessonSummaryService(tenant=tenant, user=request.user)
+        service = LessonSummaryService(user=request.user)
         payload = service.generate(
             lesson_id=int(lesson_id),
             artifact_type=artifact_type,
@@ -1484,18 +1427,12 @@ def ai_quiz_generate(request):
             status=status.HTTP_403_FORBIDDEN,
         )
 
-    tenant = getattr(request, "tenant", None) or getattr(request.user, "tenant", None)
-    if tenant is None:
-        return Response(
-            {"error": "tenant context is required"}, status=status.HTTP_400_BAD_REQUEST
-        )
-
     serializer = QuizGenerationRequestSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
     payload = serializer.validated_data
 
     try:
-        service = QuizGeneratorService(tenant=tenant, user=request.user)
+        service = QuizGeneratorService(user=request.user)
         result = service.generate(
             source_type=payload["source_type"],
             source_id=str(payload["source_id"]),
@@ -1540,8 +1477,7 @@ def collaborative_recommendations(request):
             status=status.HTTP_403_FORBIDDEN,
         )
 
-    tenant = getattr(request, "tenant", None) or getattr(request.user, "tenant", None)
-    db_alias = getattr(getattr(tenant, "_state", None), "db", None) or "default"
+    db_alias = "default"
 
     try:
         student = request.user.student_profile
@@ -1552,7 +1488,7 @@ def collaborative_recommendations(request):
 
     from .services.collaborative_filter_service import CollaborativeFilterService
 
-    service = CollaborativeFilterService(tenant=tenant)
+    service = CollaborativeFilterService()
     recommendations = service.recommend_lessons(student, using=db_alias)
     return Response({"recommendations": recommendations})
 
@@ -1576,12 +1512,7 @@ def misconception_me(request):
             status=status.HTTP_403_FORBIDDEN,
         )
 
-    tenant = getattr(request, "tenant", None) or getattr(request.user, "tenant", None)
-    if tenant is None:
-        return Response(
-            {"error": "tenant context required"}, status=status.HTTP_400_BAD_REQUEST
-        )
-    db_alias = getattr(getattr(tenant, "_state", None), "db", None) or "default"
+    db_alias = "default"
 
     try:
         student = request.user.student_profile
@@ -1593,7 +1524,7 @@ def misconception_me(request):
     force = request.query_params.get("force", "").lower() in ("1", "true")
     from .services.misconception_service import MisconceptionDetectionService
 
-    service = MisconceptionDetectionService(tenant=tenant, user=request.user)
+    service = MisconceptionDetectionService(user=request.user)
     report = service.analyse_student(student, using=db_alias, force=force)
     return Response(report)
 
@@ -1611,12 +1542,7 @@ def misconception_student(request, student_id):
             status=status.HTTP_403_FORBIDDEN,
         )
 
-    tenant = getattr(request, "tenant", None) or getattr(request.user, "tenant", None)
-    if tenant is None:
-        return Response(
-            {"error": "tenant context required"}, status=status.HTTP_400_BAD_REQUEST
-        )
-    db_alias = getattr(getattr(tenant, "_state", None), "db", None) or "default"
+    db_alias = "default"
 
     student = (
         Student.objects.using(db_alias)
@@ -1632,7 +1558,7 @@ def misconception_student(request, student_id):
     force = request.query_params.get("force", "").lower() in ("1", "true")
     from .services.misconception_service import MisconceptionDetectionService
 
-    service = MisconceptionDetectionService(tenant=tenant, user=request.user)
+    service = MisconceptionDetectionService(user=request.user)
     report = service.analyse_student(student, using=db_alias, force=force)
     return Response(report)
 
@@ -1657,9 +1583,7 @@ def grade_forecast_me(request):
             status=status.HTTP_403_FORBIDDEN,
         )
 
-    tenant = getattr(request, "tenant", None) or getattr(request.user, "tenant", None)
-    db_alias = getattr(tenant, "_state", None)
-    db_alias = (db_alias.db if db_alias else None) or "default"
+    db_alias = "default"
 
     try:
         student = request.user.student_profile
@@ -1687,9 +1611,7 @@ def grade_forecast_student(request, student_id):
             status=status.HTTP_403_FORBIDDEN,
         )
 
-    tenant = getattr(request, "tenant", None) or getattr(request.user, "tenant", None)
-    db_alias = getattr(tenant, "_state", None)
-    db_alias = (db_alias.db if db_alias else None) or "default"
+    db_alias = "default"
 
     student = (
         Student.objects.using(db_alias)
@@ -1727,9 +1649,7 @@ def grade_forecast_class(request, class_id):
             status=status.HTTP_403_FORBIDDEN,
         )
 
-    tenant = getattr(request, "tenant", None) or getattr(request.user, "tenant", None)
-    db_alias = getattr(tenant, "_state", None)
-    db_alias = (db_alias.db if db_alias else None) or "default"
+    db_alias = "default"
 
     from .services.grade_forecast_service import grade_forecast_service
 
@@ -1774,18 +1694,12 @@ def ai_exam_generate(request):
             status=status.HTTP_403_FORBIDDEN,
         )
 
-    tenant = getattr(request, "tenant", None) or getattr(request.user, "tenant", None)
-    if tenant is None:
-        return Response(
-            {"error": "tenant context is required"}, status=status.HTTP_400_BAD_REQUEST
-        )
-
     serializer = ExamPaperGenerateRequestSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
     payload = serializer.validated_data
 
     try:
-        service = ExamPaperGeneratorService(tenant=tenant, user=request.user)
+        service = ExamPaperGeneratorService(user=request.user)
         result = service.generate(
             class_id=payload["class_id"],
             subject_id=payload["subject_id"],
@@ -1816,13 +1730,7 @@ def ai_generated_artifacts(request):
             status=status.HTTP_403_FORBIDDEN,
         )
 
-    tenant = getattr(request, "tenant", None) or getattr(request.user, "tenant", None)
-    if tenant is None:
-        return Response(
-            {"error": "tenant context is required"}, status=status.HTTP_400_BAD_REQUEST
-        )
-
-    queryset = AiGeneratedArtifact.objects.filter(tenant=tenant).order_by("-created_at")
+    queryset = AiGeneratedArtifact.objects.all().order_by("-created_at")
 
     artifact_type = str(request.query_params.get("artifact_type") or "").strip()
     source_type = str(request.query_params.get("source_type") or "").strip()
@@ -1857,14 +1765,8 @@ def ai_grading_rubrics(request):
             status=status.HTTP_403_FORBIDDEN,
         )
 
-    tenant = getattr(request, "tenant", None) or getattr(request.user, "tenant", None)
-    if tenant is None:
-        return Response(
-            {"error": "tenant context is required"}, status=status.HTTP_400_BAD_REQUEST
-        )
-
     if request.method == "GET":
-        rubrics = GradingRubric.objects.filter(tenant=tenant).order_by("-created_at")
+        rubrics = GradingRubric.objects.all().order_by("-created_at")
         serializer = GradingRubricSerializer(rubrics, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
@@ -1872,7 +1774,6 @@ def ai_grading_rubrics(request):
     serializer.is_valid(raise_exception=True)
     payload = serializer.validated_data
     rubric = GradingRubric.objects.create(
-        tenant=tenant,
         title=payload["title"],
         criteria=payload.get("criteria") or [],
         total_points=int(payload["total_points"]),
@@ -1894,13 +1795,7 @@ def ai_grading_drafts(request):
             status=status.HTTP_403_FORBIDDEN,
         )
 
-    tenant = getattr(request, "tenant", None) or getattr(request.user, "tenant", None)
-    if tenant is None:
-        return Response(
-            {"error": "tenant context is required"}, status=status.HTTP_400_BAD_REQUEST
-        )
-
-    queryset = AIGradingDraft.objects.filter(tenant=tenant).select_related(
+    queryset = AIGradingDraft.objects.all().select_related(
         "submission", "submission__assessment", "submission__assessment__subject"
     )
     submission_id = str(request.query_params.get("submission_id") or "").strip()
@@ -1931,12 +1826,6 @@ def ai_grade_submission(request):
             status=status.HTTP_403_FORBIDDEN,
         )
 
-    tenant = getattr(request, "tenant", None) or getattr(request.user, "tenant", None)
-    if tenant is None:
-        return Response(
-            {"error": "tenant context is required"}, status=status.HTTP_400_BAD_REQUEST
-        )
-
     serializer = GradeSubmissionRequestSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
     payload = serializer.validated_data
@@ -1963,7 +1852,7 @@ def ai_grade_submission(request):
         )
 
     try:
-        service = AssistedGradingService(tenant=tenant, user=request.user)
+        service = AssistedGradingService(user=request.user)
         draft = service.generate_draft(
             submission_id=str(payload["submission_id"]),
             rubric_id=str(payload["rubric_id"]),
@@ -2005,12 +1894,6 @@ def ai_approve_grading_draft(request):
             status=status.HTTP_403_FORBIDDEN,
         )
 
-    tenant = getattr(request, "tenant", None) or getattr(request.user, "tenant", None)
-    if tenant is None:
-        return Response(
-            {"error": "tenant context is required"}, status=status.HTTP_400_BAD_REQUEST
-        )
-
     serializer = ApproveGradingDraftRequestSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
     payload = serializer.validated_data
@@ -2019,10 +1902,7 @@ def ai_approve_grading_draft(request):
         AIGradingDraft.objects.select_related(
             "submission", "submission__assessment", "submission__assessment__subject"
         )
-        .filter(
-            id=payload["draft_id"],
-            tenant=tenant,
-        )
+        .filter(id=payload["draft_id"])
         .first()
     )
     if draft is None:
@@ -2040,7 +1920,7 @@ def ai_approve_grading_draft(request):
         )
 
     try:
-        service = AssistedGradingService(tenant=tenant, user=request.user)
+        service = AssistedGradingService(user=request.user)
         approved = service.approve_draft(
             draft_id=str(payload["draft_id"]), request=request
         )
@@ -2070,11 +1950,10 @@ def ai_approve_grading_draft(request):
 
 
 def _get_kg_service(request):
-    tenant = getattr(request, "tenant", None) or getattr(request.user, "tenant", None)
-    db_alias = getattr(getattr(tenant, "_state", None), "db", None) or "default"
+    db_alias = "default"
     from .services.knowledge_graph_service import KnowledgeGraphService
 
-    return KnowledgeGraphService(tenant=tenant, user=request.user), db_alias
+    return KnowledgeGraphService(user=request.user), db_alias
 
 
 @api_view(["GET"])

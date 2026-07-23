@@ -9,7 +9,7 @@ import {
     Accordion, AccordionContent, AccordionItem, AccordionTrigger,
 } from '@/components/ui/accordion';
 import { SectionHeading } from '@/components/school/SectionHeading';
-import { ADMISSIONS_FAQS } from '@/lib/school-content/sample-data';
+import { getAdmissionFaqs } from '@/lib/school-content/school-info';
 
 export const metadata: Metadata = {
     title: 'Admissions',
@@ -38,7 +38,9 @@ const DOCUMENTS = [
     "Parent/guardian citizenship copy",
 ];
 
-export default function AdmissionsPage() {
+export default async function AdmissionsPage() {
+    const faqs = await getAdmissionFaqs();
+
     return (
         <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8">
             <nav aria-label="Breadcrumb" className="font-public-sans text-sm text-school-ink/60">
@@ -112,8 +114,8 @@ export default function AdmissionsPage() {
             <section className="mt-14">
                 <h2 className="font-fraunces text-2xl text-school-ink">Frequently Asked Questions</h2>
                 <Accordion type="single" collapsible className="mt-6">
-                    {ADMISSIONS_FAQS.map((faq) => (
-                        <AccordionItem key={faq.id} value={faq.id}>
+                    {faqs.map((faq) => (
+                        <AccordionItem key={faq.id} value={String(faq.id)}>
                             <AccordionTrigger className="font-public-sans text-left text-base font-medium text-school-ink">
                                 {faq.question}
                             </AccordionTrigger>

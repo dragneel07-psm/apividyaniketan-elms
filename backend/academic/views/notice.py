@@ -6,7 +6,6 @@ from rest_framework import permissions, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
-from core.mixins import TenantScopedQuerysetMixin
 from notifications.services import NotificationService
 
 from ..models.notice import Notice, NoticeRead
@@ -14,7 +13,7 @@ from ..models.parent import Parent
 from ..serializers.notice import NoticeSerializer
 
 
-class NoticeViewSet(TenantScopedQuerysetMixin, viewsets.ModelViewSet):
+class NoticeViewSet(viewsets.ModelViewSet):
     queryset = Notice.objects.all()
     serializer_class = NoticeSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -64,20 +63,18 @@ class NoticeViewSet(TenantScopedQuerysetMixin, viewsets.ModelViewSet):
         return queryset.annotate(_is_read=Exists(read_subquery))
 
     def perform_create(self, serializer):
-        tenant = self.request.user.tenant
-        notice = serializer.save(tenant=tenant)
+        notice = serializer.save()
 
         try:
             if notice.target_audience == "school":
                 NotificationService.notify_role(
-                    tenant, "student", f"New Notice: {notice.title}", notice.content
+                    "student", f"New Notice: {notice.title}", notice.content
                 )
                 NotificationService.notify_role(
-                    tenant, "teacher", f"New Notice: {notice.title}", notice.content
+                    "teacher", f"New Notice: {notice.title}", notice.content
                 )
             elif notice.target_audience == "class" and notice.target_class:
                 NotificationService.notify_class(
-                    tenant,
                     notice.target_class,
                     f"Class Notice: {notice.title}",
                     notice.content,
@@ -87,7 +84,6 @@ class NoticeViewSet(TenantScopedQuerysetMixin, viewsets.ModelViewSet):
                     notice.target_student.user,
                     f"Personal Notice: {notice.title}",
                     notice.content,
-                    tenant=tenant,
                 )
         except Exception as e:
             # Don't let notification failures block notice creation.
@@ -97,13 +93,9 @@ class NoticeViewSet(TenantScopedQuerysetMixin, viewsets.ModelViewSet):
     def mark_read(self, request, pk=None):
         """Idempotently mark this notice as read by the current user."""
         notice = self.get_object()
-        tenant = getattr(request.user, "tenant", None) or getattr(
-            notice, "tenant", None
-        )
         NoticeRead.objects.get_or_create(
             notice=notice,
             user=request.user,
-            defaults={"tenant": tenant},
         )
         return Response({"status": "ok", "is_read": True})
 

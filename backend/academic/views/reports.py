@@ -101,10 +101,9 @@ class ReportViewSet(viewsets.ViewSet):
     permission_classes = [IsAuthenticated]
 
     def _school_name(self, request):
-        tenant = getattr(request, "tenant", None) or getattr(
-            getattr(request, "user", None), "tenant", None
-        )
-        return getattr(tenant, "name", None) or "Our School"
+        from core.models import SchoolProfile
+
+        return SchoolProfile.get_solo().name or "Our School"
 
     def _ensure_student_access(self, request, student: Student) -> None:
         user = request.user

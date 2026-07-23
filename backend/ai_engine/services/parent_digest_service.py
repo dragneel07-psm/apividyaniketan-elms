@@ -27,9 +27,6 @@ LOOKBACK_HOURS = 24
 
 
 class ParentDigestService:
-    def __init__(self, *, tenant):
-        self.tenant = tenant
-
     def generate_digest(self, student, using="default") -> str:
         """
         Return a 2-3 sentence digest string for a parent about their child's
@@ -187,7 +184,6 @@ class ParentDigestService:
 
             usage = resp.usage
             AIInteractionLog.objects.using(using).create(
-                tenant=self.tenant,
                 feature_used="parent_digest",
                 prompt_tokens=getattr(usage, "prompt_tokens", 0),
                 completion_tokens=getattr(usage, "completion_tokens", 0),

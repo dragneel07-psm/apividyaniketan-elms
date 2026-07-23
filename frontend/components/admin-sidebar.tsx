@@ -11,6 +11,7 @@ import {
     Settings, LogOut, Bell, BookOpen, Calendar, Library, Wallet, DollarSign,
     ClipboardList, FileText, MessageSquare, UserRoundPlus, ShieldAlert,
     Sparkles, Bus, Building2, UserCog, ChevronDown, Trophy, Receipt, Award, type LucideIcon,
+    Globe, Newspaper, Image as ImageIcon, Quote, Layers, Heart, History, MapPinned, HeartHandshake, HelpCircle,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -112,6 +113,25 @@ const NAV: NavItem[] = [
             { kind: 'leaf', name: 'Messages',      href: '/admin/messages',      icon: MessageSquare },
             { kind: 'leaf', name: 'Templates',     href: '/admin/communication/templates', icon: FileText },
             { kind: 'leaf', name: 'Notices',       href: '/admin/notices',       icon: Bell },
+        ],
+    },
+
+    {
+        kind: 'group',
+        name: 'School Website',
+        icon: Globe,
+        matchPrefix: '/admin/school-site',
+        children: [
+            { kind: 'leaf', name: 'News Articles',         href: '/admin/school-site/news',          icon: Newspaper },
+            { kind: 'leaf', name: 'Gallery Photos',        href: '/admin/school-site/gallery',        icon: ImageIcon },
+            { kind: 'leaf', name: 'Testimonials',          href: '/admin/school-site/testimonials',   icon: Quote },
+            { kind: 'leaf', name: 'Programs & Facilities', href: '/admin/school-site/programs',       icon: Layers },
+            { kind: 'leaf', name: 'Core Values',           href: '/admin/school-site/core-values',    icon: Heart },
+            { kind: 'leaf', name: 'School History',        href: '/admin/school-site/history',        icon: History },
+            { kind: 'leaf', name: 'Student Life',          href: '/admin/school-site/student-life',   icon: Users },
+            { kind: 'leaf', name: 'Field Trips',           href: '/admin/school-site/field-trips',    icon: MapPinned },
+            { kind: 'leaf', name: 'Wellbeing Support',     href: '/admin/school-site/wellbeing',      icon: HeartHandshake },
+            { kind: 'leaf', name: 'Admissions FAQs',       href: '/admin/school-site/faqs',           icon: HelpCircle },
         ],
     },
 

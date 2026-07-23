@@ -16,14 +16,6 @@ class Conversation(models.Model):
     conversation_id = models.UUIDField(
         primary_key=True, default=uuid.uuid4, editable=False
     )
-    tenant = models.ForeignKey(
-        "core.Tenant",
-        on_delete=models.CASCADE,
-        related_name="conversations",
-        null=True,
-        blank=True,
-        db_constraint=False,
-    )
     type = models.CharField(max_length=20, choices=CONVERSATION_TYPES, default="direct")
     title = models.CharField(max_length=255, null=True, blank=True)
 

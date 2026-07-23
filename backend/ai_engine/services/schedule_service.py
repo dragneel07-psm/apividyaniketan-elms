@@ -124,7 +124,6 @@ class ScheduleService:
                 node_index += 1
 
             event = StudyEvent.objects.create(
-                tenant=student.user.tenant,
                 student=student,
                 title=title,
                 description=desc,

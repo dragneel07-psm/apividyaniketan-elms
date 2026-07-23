@@ -10,7 +10,7 @@ Supported sources:
   • YouTube / Vimeo URLs — not supported (requires yt-dlp); returns None.
 
 Usage:
-  service = VideoTranscriptService(tenant=tenant)
+  service = VideoTranscriptService()
   transcript = service.transcribe_lesson(lesson, using="default")
   # Returns transcript text or None on failure.
 """
@@ -47,9 +47,6 @@ _MAX_BYTES = 50 * 1024 * 1024
 
 
 class VideoTranscriptService:
-    def __init__(self, *, tenant=None):
-        self.tenant = tenant
-
     # ------------------------------------------------------------------ #
     #  Public API
     # ------------------------------------------------------------------ #

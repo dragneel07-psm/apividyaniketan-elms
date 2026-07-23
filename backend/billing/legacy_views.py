@@ -3,12 +3,6 @@
 # via any medium, is strictly prohibited. Proprietary and confidential.
 from __future__ import annotations
 
-from billing_saas.views import InvoiceViewSet as SaaSInvoiceViewSet
-from billing_saas.views import (
-    SubscriptionPlanHistoryViewSet as SaaSSubscriptionPlanHistoryViewSet,
-)
-from billing_saas.views import SubscriptionPlanViewSet as SaaSSubscriptionPlanViewSet
-from billing_saas.views import SubscriptionViewSet as SaaSSubscriptionViewSet
 from billing_school.views import ExpenseViewSet as SchoolExpenseViewSet
 from billing_school.views import FeeStructureViewSet as SchoolFeeStructureViewSet
 from billing_school.views import (
@@ -21,26 +15,6 @@ from billing_school.views_reports import (
 )
 
 from .legacy import LegacyBillingDeprecationMixin
-
-
-class SubscriptionViewSet(LegacyBillingDeprecationMixin, SaaSSubscriptionViewSet):
-    pass
-
-
-class SubscriptionPlanViewSet(
-    LegacyBillingDeprecationMixin, SaaSSubscriptionPlanViewSet
-):
-    pass
-
-
-class SubscriptionPlanHistoryViewSet(
-    LegacyBillingDeprecationMixin, SaaSSubscriptionPlanHistoryViewSet
-):
-    pass
-
-
-class InvoiceViewSet(LegacyBillingDeprecationMixin, SaaSInvoiceViewSet):
-    pass
 
 
 class FeeStructureViewSet(LegacyBillingDeprecationMixin, SchoolFeeStructureViewSet):

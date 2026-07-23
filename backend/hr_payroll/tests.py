@@ -11,7 +11,7 @@ Run with: python manage.py test hr_payroll
 from datetime import date
 from decimal import Decimal
 
-from django_tenants.test.cases import FastTenantTestCase
+from django.test import TestCase
 from rest_framework import status
 from rest_framework.test import APIClient
 
@@ -19,29 +19,17 @@ from hr_payroll.models import Employee, PayrollPeriod, SalarySlip
 from users.models import UserAccount
 
 
-class SalarySlipSelfServiceTests(FastTenantTestCase):
+class SalarySlipSelfServiceTests(TestCase):
     """One tenant, two employees (teachers) and one HR admin."""
 
-    @classmethod
-    def setup_tenant(cls, tenant):
-        tenant.name = "Payroll Self-Service Test School"
-
-    @classmethod
-    def setup_domain(cls, domain):
-        domain.is_primary = True
-
     def setUp(self):
-        self.client = APIClient(
-            HTTP_HOST=self.get_test_tenant_domain(),
-            HTTP_X_TENANT_ID=self.tenant.schema_name,
-        )
+        self.client = APIClient()
 
         self.admin_user = UserAccount.objects.create_user(
             username="hr_admin",
             email="hr_admin@example.com",
             password="Pass@1234",
             role="admin",
-            tenant=self.tenant,
         )
 
         self.teacher_user = UserAccount.objects.create_user(
@@ -49,10 +37,8 @@ class SalarySlipSelfServiceTests(FastTenantTestCase):
             email="teacher_a@example.com",
             password="Pass@1234",
             role="teacher",
-            tenant=self.tenant,
         )
         self.employee = Employee.objects.create(
-            tenant=self.tenant,
             user=self.teacher_user,
             designation="Mathematics Teacher",
             join_date=date(2024, 1, 1),
@@ -63,17 +49,14 @@ class SalarySlipSelfServiceTests(FastTenantTestCase):
             email="teacher_b@example.com",
             password="Pass@1234",
             role="teacher",
-            tenant=self.tenant,
         )
         self.other_employee = Employee.objects.create(
-            tenant=self.tenant,
             user=self.other_teacher_user,
             designation="Science Teacher",
             join_date=date(2024, 1, 1),
         )
 
         self.period = PayrollPeriod.objects.create(
-            tenant=self.tenant,
             name="March 2026",
             month=3,
             year=2026,
@@ -82,14 +65,12 @@ class SalarySlipSelfServiceTests(FastTenantTestCase):
         )
 
         self.slip = SalarySlip.objects.create(
-            tenant=self.tenant,
             employee=self.employee,
             payroll_period=self.period,
             basic_salary=Decimal("50000"),
             status=SalarySlip.STATUS_FINALIZED,
         )
         self.other_slip = SalarySlip.objects.create(
-            tenant=self.tenant,
             employee=self.other_employee,
             payroll_period=self.period,
             basic_salary=Decimal("55000"),
@@ -124,7 +105,6 @@ class SalarySlipSelfServiceTests(FastTenantTestCase):
             email="no_profile@example.com",
             password="Pass@1234",
             role="teacher",
-            tenant=self.tenant,
         )
         self._login(bare_user)
         resp = self.client.get("/api/hr/salary-slips/")

@@ -11,7 +11,6 @@ class Complaint(models.Model):
     complaint_id = models.UUIDField(
         primary_key=True, default=uuid_lib.uuid4, editable=False
     )
-    tenant_schema = models.CharField(max_length=63, db_index=True)
     submitted_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -61,9 +60,7 @@ class Complaint(models.Model):
     class Meta:
         ordering = ["-created_at"]
         indexes = [
-            models.Index(
-                fields=["tenant_schema", "status"], name="acad_complaint_schema_idx"
-            ),
+            models.Index(fields=["status"], name="acad_complaint_status_idx"),
         ]
 
     def __str__(self):

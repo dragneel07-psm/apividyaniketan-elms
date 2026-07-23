@@ -83,14 +83,10 @@ class AppraisalCycleViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        tenant = getattr(self.request.user, "tenant", None)
-        if not tenant:
-            return AppraisalCycle.objects.none()
-        return AppraisalCycle.objects.filter(tenant=tenant).prefetch_related("forms")
+        return AppraisalCycle.objects.all().prefetch_related("forms")
 
     def perform_create(self, serializer):
-        tenant = getattr(self.request.user, "tenant", None)
-        serializer.save(tenant=tenant)
+        serializer.save()
 
     @action(detail=True, methods=["post"])
     def activate(self, request, pk=None):
@@ -112,20 +108,14 @@ class AppraisalFormViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        tenant = getattr(self.request.user, "tenant", None)
-        if not tenant:
-            return AppraisalForm.objects.none()
-        qs = AppraisalForm.objects.filter(tenant=tenant).select_related(
-            "cycle", "employee", "reviewer"
-        )
+        qs = AppraisalForm.objects.select_related("cycle", "employee", "reviewer")
         cycle_id = self.request.query_params.get("cycle")
         if cycle_id:
             qs = qs.filter(cycle__cycle_id=cycle_id)
         return qs
 
     def perform_create(self, serializer):
-        tenant = getattr(self.request.user, "tenant", None)
-        serializer.save(tenant=tenant)
+        serializer.save()
 
     @action(detail=True, methods=["post"])
     def submit_self_review(self, request, pk=None):

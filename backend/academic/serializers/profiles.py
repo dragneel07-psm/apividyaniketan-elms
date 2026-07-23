@@ -50,9 +50,6 @@ class TeacherSerializer(serializers.ModelSerializer):
 
         assigned_classes = validated_data.pop("assigned_classes", [])
 
-        request = self.context.get("request")
-        tenant = getattr(request, "tenant", None) if request else None
-
         with transaction.atomic():
             user = User.objects.create_user(
                 email=email,
@@ -61,7 +58,6 @@ class TeacherSerializer(serializers.ModelSerializer):
                 first_name=first_name,
                 last_name=last_name,
                 role="teacher",
-                tenant=tenant,
             )
 
             teacher = Teacher.objects.create(user=user, **validated_data)
@@ -345,33 +341,13 @@ class StudentCreateSerializer(serializers.ModelSerializer):
 
     def validate_email(self, value):
         """
-        Validate email with tenant/role-aware messaging.
-        Allows reusing an existing same-tenant student user if profile does not yet exist.
+        Validate email with role-aware messaging.
+        Allows reusing an existing student user if profile does not yet exist.
         """
         normalized_email = (value or "").strip().lower()
-        existing_user = (
-            User.objects.filter(email__iexact=normalized_email)
-            .select_related("tenant")
-            .first()
-        )
+        existing_user = User.objects.filter(email__iexact=normalized_email).first()
         if not existing_user:
             return normalized_email
-
-        request = self.context.get("request")
-        current_tenant = None
-        if request:
-            current_tenant = getattr(request, "tenant", None) or getattr(
-                getattr(request, "user", None), "tenant", None
-            )
-
-        if (
-            current_tenant
-            and existing_user.tenant_id
-            and existing_user.tenant_id != current_tenant.pk
-        ):
-            raise serializers.ValidationError(
-                "This email already belongs to a user in another school tenant."
-            )
 
         if existing_user.role != "student":
             role_label = (existing_user.role or "user").replace("_", " ")
@@ -423,17 +399,8 @@ class StudentCreateSerializer(serializers.ModelSerializer):
         date_of_birth = validated_data.pop("date_of_birth", None)
 
         with transaction.atomic():
-            # Get tenant from request context
-            request = self.context.get("request")
-            tenant = getattr(request, "tenant", None) if request else None
             user = User.objects.filter(email__iexact=email).first()
             if user:
-                if tenant and user.tenant_id and user.tenant_id != tenant.pk:
-                    raise serializers.ValidationError(
-                        {
-                            "email": "This email already belongs to another school tenant."
-                        }
-                    )
                 if user.role != "student":
                     raise serializers.ValidationError(
                         {
@@ -452,8 +419,6 @@ class StudentCreateSerializer(serializers.ModelSerializer):
                 user.last_name = last_name
                 user.phone_number = phone_number
                 user.date_of_birth = date_of_birth
-                if tenant and not user.tenant_id:
-                    user.tenant = tenant
                 if password:
                     user.set_password(password)
                 user.save()
@@ -476,7 +441,6 @@ class StudentCreateSerializer(serializers.ModelSerializer):
                     phone_number=phone_number,
                     date_of_birth=date_of_birth,
                     role="student",
-                    tenant=tenant,
                 )
 
             # Create student profile

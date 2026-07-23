@@ -22,14 +22,7 @@ from ..services.academic_year_service import ensure_current_academic_year
 class SchoolERPOverviewView(APIView):
     permission_classes = [IsAuthenticated]
 
-    def _tenant(self, request):
-        user_tenant = getattr(request.user, "tenant", None)
-        if user_tenant:
-            return user_tenant
-        return getattr(request, "tenant", None)
-
     def get(self, request):
-        tenant = self._tenant(request)
         today = timezone.localdate()
         current_year = ensure_current_academic_year()
 
@@ -40,12 +33,6 @@ class SchoolERPOverviewView(APIView):
         assessments_qs = Assessment.objects.select_related("academic_year")
         attendance_qs = Attendance.objects.select_related("student__user")
         admissions_qs = AdmissionEnquiry.objects.all()
-
-        if tenant is not None:
-            students_qs = students_qs.filter(user__tenant=tenant)
-            teachers_qs = teachers_qs.filter(user__tenant=tenant)
-            attendance_qs = attendance_qs.filter(student__user__tenant=tenant)
-            admissions_qs = admissions_qs.filter(tenant=tenant)
 
         if current_year is not None:
             subjects_qs = subjects_qs.filter(academic_year=current_year)
@@ -77,19 +64,11 @@ class SchoolERPOverviewView(APIView):
         try:
             from billing.models_school import Expense, Payment, StudentFee
 
-            if tenant is not None:
-                payments_qs = Payment.objects.filter(tenant=tenant)
-                expenses_qs = Expense.objects.filter(tenant=tenant)
-                pending_fees_qs = StudentFee.objects.filter(
-                    tenant=tenant,
-                    status__in=["pending", "partial", "overdue"],
-                )
-            else:
-                payments_qs = Payment.objects.all()
-                expenses_qs = Expense.objects.all()
-                pending_fees_qs = StudentFee.objects.filter(
-                    status__in=["pending", "partial", "overdue"]
-                )
+            payments_qs = Payment.objects.all()
+            expenses_qs = Expense.objects.all()
+            pending_fees_qs = StudentFee.objects.filter(
+                status__in=["pending", "partial", "overdue"]
+            )
 
             total_revenue = payments_qs.aggregate(total=Sum("amount")).get("total") or 0
             total_expenses = (
@@ -112,12 +91,16 @@ class SchoolERPOverviewView(APIView):
         except Exception:
             pass
 
+        from core.models import SchoolProfile
+
+        school_profile = SchoolProfile.get_solo()
+
         return Response(
             {
                 "academic_year": current_year.name if current_year else None,
                 "school": {
-                    "tenant_id": str(tenant.pk) if tenant else None,
-                    "tenant_name": tenant.name if tenant else None,
+                    "tenant_id": str(school_profile.pk),
+                    "tenant_name": school_profile.name,
                 },
                 "summary": {
                     "total_students": students_qs.count(),

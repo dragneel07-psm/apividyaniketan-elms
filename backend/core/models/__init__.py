@@ -5,5 +5,5 @@ from .audit_log import AuditLog
 from .base import TimeStampedModel, UUIDModel
 from .contact_message import ContactMessage
 from .job import Job
+from .school_profile import SchoolProfile
 from .settings import GlobalSettings
-from .tenant import Tenant

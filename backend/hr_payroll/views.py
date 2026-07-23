@@ -47,9 +47,6 @@ class _HRBase(
     require_tenant_schema = True
     allow_unscoped_for_saas = False
 
-    def _tenant(self):
-        return getattr(self.request.user, "tenant", None)
-
 
 class DepartmentViewSet(_HRBase):
     queryset = Department.objects.select_related("head__user").order_by("name")
@@ -57,7 +54,7 @@ class DepartmentViewSet(_HRBase):
     permission_classes = [IsHRManager]
 
     def perform_create(self, serializer):
-        dept = serializer.save(tenant=self._tenant())
+        dept = serializer.save()
         record_audit_event(
             action="hr.department_created",
             user=self.request.user,
@@ -110,7 +107,7 @@ class EmployeeViewSet(_HRBase):
         return qs
 
     def perform_create(self, serializer):
-        emp = serializer.save(tenant=self._tenant())
+        emp = serializer.save()
         record_audit_event(
             action="hr.employee_created",
             user=self.request.user,
@@ -176,7 +173,7 @@ class LeaveTypeViewSet(_HRBase):
     permission_classes = [IsHRManager]
 
     def perform_create(self, serializer):
-        lt = serializer.save(tenant=self._tenant())
+        lt = serializer.save()
         record_audit_event(
             action="hr.leave_type_created",
             user=self.request.user,
@@ -225,7 +222,7 @@ class LeaveApplicationViewSet(_HRBase):
         return qs
 
     def perform_create(self, serializer):
-        leave = serializer.save(tenant=self._tenant())
+        leave = serializer.save()
         record_audit_event(
             action="hr.leave_applied",
             user=self.request.user,
@@ -345,7 +342,7 @@ class StaffAttendanceViewSet(_HRBase):
         return qs
 
     def perform_create(self, serializer):
-        record = serializer.save(tenant=self._tenant(), marked_by=self.request.user)
+        record = serializer.save(marked_by=self.request.user)
         record_audit_event(
             action="hr.attendance_marked",
             user=self.request.user,
@@ -367,21 +364,19 @@ class StaffAttendanceViewSet(_HRBase):
                 {"detail": "date and records are required."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        tenant = self._tenant()
         created, updated = 0, 0
         with transaction.atomic():
             for item in records_data:
                 emp_id = item.get("employee_id")
                 att_status = item.get("status", StaffAttendance.STATUS_PRESENT)
                 try:
-                    emp = Employee.objects.get(employee_id=emp_id, tenant=tenant)
+                    emp = Employee.objects.get(employee_id=emp_id)
                 except Employee.DoesNotExist:
                     continue
                 obj, was_created = StaffAttendance.objects.update_or_create(
                     employee=emp,
                     date=date,
                     defaults={
-                        "tenant": tenant,
                         "status": att_status,
                         "check_in_time": item.get("check_in_time"),
                         "check_out_time": item.get("check_out_time"),
@@ -406,7 +401,7 @@ class PayrollPeriodViewSet(_HRBase):
     permission_classes = [IsHRManager]
 
     def perform_create(self, serializer):
-        period = serializer.save(tenant=self._tenant())
+        period = serializer.save()
         record_audit_event(
             action="hr.payroll_period_created",
             user=self.request.user,
@@ -456,8 +451,7 @@ class PayrollPeriodViewSet(_HRBase):
                 {"detail": "Slips can only be generated for draft periods."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        tenant = self._tenant()
-        employees = Employee.objects.filter(tenant=tenant, is_active=True)
+        employees = Employee.objects.filter(is_active=True)
         created_count = 0
         skipped_count = 0
         with transaction.atomic():
@@ -468,7 +462,6 @@ class PayrollPeriodViewSet(_HRBase):
                     skipped_count += 1
                     continue
                 slip = SalarySlip(
-                    tenant=tenant,
                     employee=emp,
                     payroll_period=period,
                     working_days=period.working_days,
@@ -516,7 +509,7 @@ class SalarySlipViewSet(_HRBase):
         return qs
 
     def perform_create(self, serializer):
-        slip = serializer.save(tenant=self._tenant())
+        slip = serializer.save()
         record_audit_event(
             action="hr.salary_slip_created",
             user=self.request.user,
@@ -540,11 +533,11 @@ class SalarySlipViewSet(_HRBase):
     @action(detail=True, methods=["get"], url_path="payslip-pdf")
     def payslip_pdf(self, request, pk=None):
         """Generate and return a PDF payslip for this salary slip."""
+        from core.models import SchoolProfile
         from core.reports import generate_pdf_response
 
         slip = self.get_object()
-        tenant = getattr(request.user, "tenant", None)
-        school_name = tenant.name if tenant else "School"
+        school_name = SchoolProfile.get_solo().name or "School"
 
         def fmt(val):
             return f"{float(val):,.2f}"
@@ -683,26 +676,22 @@ class HRDashboardViewSet(BillingSchemaGuardMixin, viewsets.ViewSet):
     require_tenant_schema = True
     permission_classes = [IsHRManager]
 
-    def _tenant(self, request):
-        return getattr(request.user, "tenant", None)
-
     @action(detail=False, methods=["get"], url_path="stats")
     def stats(self, request):
-        tenant = self._tenant(request)
-        total_employees = Employee.objects.filter(tenant=tenant, is_active=True).count()
-        total_departments = Department.objects.filter(tenant=tenant).count()
+        total_employees = Employee.objects.filter(is_active=True).count()
+        total_departments = Department.objects.count()
         pending_leaves = LeaveApplication.objects.filter(
-            tenant=tenant, status=LeaveApplication.STATUS_PENDING
+            status=LeaveApplication.STATUS_PENDING
         ).count()
         open_periods = PayrollPeriod.objects.filter(
-            tenant=tenant, status=PayrollPeriod.STATUS_DRAFT
+            status=PayrollPeriod.STATUS_DRAFT
         ).count()
 
         # Contract type breakdown
         from django.db.models import Count
 
         contract_breakdown = list(
-            Employee.objects.filter(tenant=tenant, is_active=True)
+            Employee.objects.filter(is_active=True)
             .values("contract_type")
             .annotate(count=Count("employee_id"))
         )
@@ -710,7 +699,7 @@ class HRDashboardViewSet(BillingSchemaGuardMixin, viewsets.ViewSet):
         # Department headcount
         dept_headcount = list(
             Employee.objects.filter(
-                tenant=tenant, is_active=True, department__isnull=False
+                is_active=True, department__isnull=False
             )
             .values("department__name")
             .annotate(count=Count("employee_id"))

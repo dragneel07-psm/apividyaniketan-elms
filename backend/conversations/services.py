@@ -3,8 +3,6 @@
 # via any medium, is strictly prohibited. Proprietary and confidential.
 from django.contrib.auth import get_user_model
 
-from core.models import Tenant
-
 from .models import Conversation, ConversationParticipant
 
 User = get_user_model()
@@ -20,7 +18,6 @@ class GroupSyncService:
         if not student.section:
             return
 
-        tenant = student.user.tenant
         section = student.section
         class_obj = section.academic_class
 
@@ -31,7 +28,6 @@ class GroupSyncService:
         conversation, created = Conversation.objects.get_or_create(
             context_type="section",
             context_id=context_id,
-            tenant=tenant,
             defaults={
                 "type": "group",
                 "title": group_title,

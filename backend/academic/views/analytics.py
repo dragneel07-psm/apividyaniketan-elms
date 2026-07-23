@@ -37,7 +37,6 @@ class SchoolAnalyticsDashboardView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        tenant = getattr(request.user, "tenant", None)
         days = int(request.query_params.get("days", 30))
         class_id = request.query_params.get("class_id")
 
@@ -45,8 +44,6 @@ class SchoolAnalyticsDashboardView(APIView):
 
         # ── Attendance trends ─────────────────────────────────────────────────
         att_qs = Attendance.objects.filter(date__gte=since)
-        if tenant:
-            att_qs = att_qs.filter(student__user__tenant=tenant)
         if class_id:
             att_qs = att_qs.filter(student__academic_class_id=class_id)
 
@@ -88,8 +85,6 @@ class SchoolAnalyticsDashboardView(APIView):
         # ── Grade / score distribution (DB-level bucketing) ──────────────────
         # Publication belongs to Assessment; Result has no ``is_published`` field.
         result_qs = Result.objects.filter(assessment__results_published=True)
-        if tenant:
-            result_qs = result_qs.filter(student__user__tenant=tenant)
         if class_id:
             result_qs = result_qs.filter(student__academic_class_id=class_id)
 
@@ -208,12 +203,6 @@ class SchoolAnalyticsDashboardView(APIView):
 
         # ── Assessment activity (assessments published per month) ─────────────
         assess_qs = Assessment.objects.filter(results_published=True)
-        if tenant:
-            # Filter by tenant through the subject → class chain
-            assess_qs = assess_qs.filter(
-                Q(subject__academic_class__students__user__tenant=tenant)
-                | Q(section__students__user__tenant=tenant)
-            ).distinct()
         # Assessment has no created_at field. Use its scheduled/due date as the
         # activity date and omit unscheduled assessments from this time series.
         monthly_assess = (
@@ -261,18 +250,11 @@ class SchoolAnalyticsDashboardView(APIView):
             for row in top_students_qs
         ]
 
-        # ── School totals snapshot (tenant-scoped) ────────────────────────────
+        # ── School totals snapshot ─────────────────────────────────────────────
         student_qs = Student.objects.all()
         teacher_qs = Teacher.objects.all()
         class_qs = AcademicClass.objects.all()
         subject_qs = Subject.objects.all()
-        if tenant:
-            student_qs = student_qs.filter(user__tenant=tenant)
-            teacher_qs = teacher_qs.filter(user__tenant=tenant)
-            class_qs = class_qs.filter(students__user__tenant=tenant).distinct()
-            subject_qs = subject_qs.filter(
-                academic_class__students__user__tenant=tenant
-            ).distinct()
 
         return Response(
             {

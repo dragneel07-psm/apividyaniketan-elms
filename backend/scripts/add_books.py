@@ -7,38 +7,14 @@ import sys
 import django
 
 # Add the project directory to Python path
-sys.path.insert(0, "/Users/pramodsinghmanyal/Desktop/E-LearningWebApp/backend")
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 django.setup()
 
-from core.models import Tenant
+from core.models import SchoolProfile
 from library.models import Book
 
-tenant = Tenant.objects.get(domain_url="localhost")
-
-import copy
-import os
-
-# Manually add the tenant database to settings
-from django.conf import settings
-
-# Get the backend directory (parent of this script)
-backend_dir = os.path.dirname(os.path.abspath(__file__))
-# Database is in backend/config/school_demo.sqlite3
-# tenant.db_name is 'school_demo' (without extension based on observations)
-db_name = tenant.db_name
-if not db_name.endswith(".sqlite3"):
-    db_name = f"{db_name}.sqlite3"
-
-db_path = os.path.join(backend_dir, "config", db_name)
-
-# Copy default settings to ensure we get all defaults (TIME_ZONE, etc)
-tenant_db_config = copy.deepcopy(settings.DATABASES["default"])
-tenant_db_config["NAME"] = db_path
-settings.DATABASES[tenant.db_alias] = tenant_db_config
-
-print(f"🔌 Connected to tenant DB: {tenant.db_alias}")
-print(f"📂 DB Path: {db_path}")
+school = SchoolProfile.get_solo()
 
 books = [
     {
@@ -133,14 +109,11 @@ books = [
     },
 ]
 
-print(f"\n📚 Adding books to {tenant.name}...\n")
+print(f"\n📚 Adding books to {school.name}...\n")
 
 count = 0
 for bd in books:
-    # tenant field removed from model - handled by DB router
-    book, created = Book.objects.using(tenant.db_alias).get_or_create(
-        isbn=bd["isbn"], defaults=bd
-    )
+    book, created = Book.objects.get_or_create(isbn=bd["isbn"], defaults=bd)
     if created:
         print(f"✅ Created: {book.title}")
         count += 1
@@ -148,4 +121,4 @@ for bd in books:
         print(f"ℹ️  Exists: {book.title}")
 
 print(f"\n🎉 Library catalog complete!")
-print(f"📊 Total books: {Book.objects.using(tenant.db_alias).count()}")
+print(f"📊 Total books: {Book.objects.count()}")

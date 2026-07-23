@@ -9,9 +9,7 @@ except Exception:
     from core.async_jobs import background_task as shared_task
 
 from django.contrib.auth import get_user_model
-from django_tenants.utils import schema_context
 
-from core.models import Tenant
 from notifications.services import EmailService, SMSService
 
 
@@ -99,24 +97,19 @@ def send_notification_task(
 ):
     from notifications.services import NotificationService
 
-    schema_name = str(tenant_schema or "").strip().lower() or "public"
-    with schema_context(schema_name):
-        with schema_context("public"):
-            tenant = Tenant.objects.filter(schema_name=schema_name).first()
-        user_model = get_user_model()
-        recipient = user_model.objects.filter(pk=recipient_id).first()
-        if not recipient:
-            raise ValueError("Recipient not found")
+    user_model = get_user_model()
+    recipient = user_model.objects.filter(pk=recipient_id).first()
+    if not recipient:
+        raise ValueError("Recipient not found")
 
-        notification = NotificationService.create_notification(
-            recipient=recipient,
-            title=title,
-            message=message,
-            tenant=tenant,
-            link=link,
-            channels=channels or [],
-        )
-        return {
-            "notification_id": notification.id,
-            "recipient_id": str(recipient.pk),
-        }
+    notification = NotificationService.create_notification(
+        recipient=recipient,
+        title=title,
+        message=message,
+        link=link,
+        channels=channels or [],
+    )
+    return {
+        "notification_id": notification.id,
+        "recipient_id": str(recipient.pk),
+    }

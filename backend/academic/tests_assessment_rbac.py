@@ -1,7 +1,10 @@
 # Copyright (c) 2024-2026 Pramod Singh Manyal. All rights reserved.
 # Unauthorized copying, modification, or distribution of this file,
 # via any medium, is strictly prohibited. Proprietary and confidential.
-from django_tenants.test.cases import FastTenantTestCase
+from datetime import timedelta
+
+from django.test import TestCase
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APIClient
 
@@ -19,15 +22,7 @@ from academic.models.submission import Submission
 from users.models import UserAccount
 
 
-class AssessmentAccessControlTests(FastTenantTestCase):
-    @classmethod
-    def setup_tenant(cls, tenant):
-        tenant.name = "Assessment Security School"
-
-    @classmethod
-    def setup_domain(cls, domain):
-        domain.is_primary = True
-
+class AssessmentAccessControlTests(TestCase):
     @staticmethod
     def _items(response):
         if isinstance(response.data, dict):
@@ -35,52 +30,45 @@ class AssessmentAccessControlTests(FastTenantTestCase):
         return response.data
 
     def setUp(self):
-        self.client = APIClient(
-            HTTP_HOST=self.get_test_tenant_domain(),
-            HTTP_X_TENANT_ID=self.tenant.schema_name,
-        )
+        self.client = APIClient()
 
         self.admin_user = UserAccount.objects.create_user(
             username="assessment_admin",
             email="assessment_admin@example.com",
             password="Admin@1234",
             role="admin",
-            tenant=self.tenant,
         )
         self.teacher_user = UserAccount.objects.create_user(
             username="assessment_teacher",
             email="assessment_teacher@example.com",
             password="Teacher@1234",
             role="teacher",
-            tenant=self.tenant,
         )
         self.student_user = UserAccount.objects.create_user(
             username="assessment_student",
             email="assessment_student@example.com",
             password="Student@1234",
             role="student",
-            tenant=self.tenant,
         )
         self.other_student_user = UserAccount.objects.create_user(
             username="assessment_other_student",
             email="assessment_other_student@example.com",
             password="Student@1234",
             role="student",
-            tenant=self.tenant,
         )
         self.parent_user = UserAccount.objects.create_user(
             username="assessment_parent",
             email="assessment_parent@example.com",
             password="Parent@1234",
             role="parent",
-            tenant=self.tenant,
         )
 
+        today = timezone.localdate()
         self.year, _ = AcademicYear.objects.get_or_create(
             name="2025-2026",
             defaults={
-                "start_date": "2025-04-01",
-                "end_date": "2026-03-31",
+                "start_date": today - timedelta(days=30),
+                "end_date": today + timedelta(days=335),
                 "is_current": True,
             },
         )

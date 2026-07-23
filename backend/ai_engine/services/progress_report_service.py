@@ -69,8 +69,10 @@ def _extract_json(raw: str) -> dict:
 class ProgressReportService:
     """Generate and persist AI progress reports for students."""
 
-    def __init__(self, *, tenant, db_alias: str = "default"):
-        self.tenant = tenant
+    def __init__(self, *, tenant=None, db_alias: str = "default"):
+        # `tenant` is accepted for backward compatibility with callers
+        # outside this module's assigned cleanup scope; it is unused now
+        # that tenant scoping has been removed.
         self.db_alias = db_alias
         self._client = None
 
@@ -132,7 +134,6 @@ class ProgressReportService:
             from ai_engine.models import StudentAIReport
 
             StudentAIReport.objects.using(self.db_alias).create(
-                tenant=self.tenant,
                 student=student,
                 report_type=report_type,
                 report_data=report_data,
@@ -287,7 +288,7 @@ class ProgressReportService:
 
         budget = (
             AITokenBudget.objects.using(db)
-            .filter(tenant=self.tenant, student=student)
+            .filter(student=student)
             .first()
         )
         budget_pct = 0.0
