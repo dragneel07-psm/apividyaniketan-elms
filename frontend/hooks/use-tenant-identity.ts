@@ -11,15 +11,17 @@ type TenantIdentity = {
     tenantSchema: string | null;
     isTenantContext: boolean;
     isLoading: boolean;
-    /** true = school exists in DB; false = 404 returned (school not provisioned); null = check not done yet */
+    /**
+     * Single-tenant deployment: SchoolProfile.get_solo() always resolves, so
+     * this is `true` once the school-public-info check succeeds and `null`
+     * until then (never `false` — there's no "not provisioned" state anymore).
+     */
     tenantExists: boolean | null;
 };
 
 type TenantCheckResponse = {
     exists?: boolean;
     name?: string;
-    schema_name?: string;
-    id?: string;
 };
 
 function formatTenantNameFromSlug(slug: string): string {
@@ -51,65 +53,34 @@ export function useTenantIdentity(): TenantIdentity {
     useEffect(() => {
         if (!isTenantContext) return;
 
-        const cachedSchema = typeof window !== 'undefined' ? localStorage.getItem('tenant_id') : null;
         const cachedName = typeof window !== 'undefined' ? localStorage.getItem('tenant_name') : null;
-        const initialSchema = (cachedSchema || tenantSubdomain || '').trim().toLowerCase();
+        const initialSchema = (tenantSubdomain || '').trim().toLowerCase();
         if (initialSchema) {
             setTenantSchema(initialSchema);
             setTenantName(cachedName || formatTenantNameFromSlug(initialSchema));
         }
 
         const controller = new AbortController();
-        const staleFallbackSchema = (tenantSubdomain || '').trim().toLowerCase();
-        const usedCachedSchema = Boolean(cachedSchema && initialSchema === cachedSchema.trim().toLowerCase());
 
-        const fetchTenant = async (schemaToCheck: string, isStaleCacheRetry: boolean) => {
+        const fetchTenant = async () => {
             setIsLoading(true);
             try {
-                const headers: HeadersInit = {};
-                if (schemaToCheck) {
-                    headers['x-tenant-id'] = schemaToCheck;
-                }
-                const response = await fetch('/api/core/tenant-check/', {
+                // Single-tenant backend: SchoolProfile.get_solo() always
+                // resolves to this deployment's one school, so any 2xx
+                // response here means it exists — there's no per-subdomain
+                // tenant to look up anymore (see SchoolPublicInfoView).
+                const response = await fetch('/api/core/school-public-info/', {
                     method: 'GET',
-                    headers,
                     cache: 'no-store',
                     signal: controller.signal,
                 });
 
-                if (!response.ok) {
-                    if (response.status === 404) {
-                        // The cached tenant no longer resolves (e.g. re-provisioned under
-                        // a different/same schema after the cache was written) — clear the
-                        // stale cache and retry once against the live subdomain detection
-                        // before concluding the school truly isn't registered.
-                        if (!isStaleCacheRetry && usedCachedSchema && staleFallbackSchema && staleFallbackSchema !== schemaToCheck) {
-                            localStorage.removeItem('tenant_id');
-                            localStorage.removeItem('tenant_name');
-                            await fetchTenant(staleFallbackSchema, true);
-                            return;
-                        }
-                        setTenantExists(false);
-                    }
-                    return;
-                }
+                if (!response.ok) return;
 
                 const payload = (await response.json()) as TenantCheckResponse;
-                if (!payload?.exists) {
-                    setTenantExists(false);
-                    return;
-                }
-
                 setTenantExists(true);
-                const resolvedName = (payload.name || '').trim();
-                const resolvedSchema = (payload.schema_name || '').trim().toLowerCase();
 
-                if (resolvedSchema) {
-                    setTenantSchema(resolvedSchema);
-                    if (typeof window !== 'undefined') {
-                        localStorage.setItem('tenant_id', resolvedSchema);
-                    }
-                }
+                const resolvedName = (payload.name || '').trim();
                 if (resolvedName) {
                     setTenantName(resolvedName);
                     if (typeof window !== 'undefined') {
@@ -117,13 +88,13 @@ export function useTenantIdentity(): TenantIdentity {
                     }
                 }
             } catch {
-                // Network error — don't mark as not-found, keep derived/cached state.
+                // Network error — keep derived/cached state, don't mark as not-found.
             } finally {
                 setIsLoading(false);
             }
         };
 
-        fetchTenant(initialSchema, false);
+        fetchTenant();
 
         return () => controller.abort();
     }, [isTenantContext, tenantSubdomain]);
