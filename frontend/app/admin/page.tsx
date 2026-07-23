@@ -8,8 +8,7 @@ import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Users, GraduationCap, School, TrendingUp, ArrowUpRight, ArrowDownRight, UserPlus, FilePlus, Calendar, MoreVertical, CreditCard, BookOpen, UserRoundPlus, BarChart3 } from 'lucide-react';
-import { academicAPI, usersAPI, billingAPI } from '@/lib/api';
-import { getUser } from '@/lib/auth';
+import { academicAPI, analyticsAPI, billingAPI } from '@/lib/api';
 import { XAxis, YAxis, CartesianGrid, Tooltip, AreaChart, Area, PieChart, Pie, Cell, Legend } from 'recharts';
 import { SafeResponsiveContainer } from '@/components/ui/safe-responsive-container';
 import { MotionCard } from '@/components/interactive/motion-card';
@@ -56,62 +55,55 @@ export default function SchoolAdminDashboard() {
         return [];
     };
 
+    // Aggregate endpoints (analytics dashboard + finance dashboard/analytics)
+    // compute counts, sums, and monthly buckets with a handful of grouped SQL
+    // queries. Previously this page fetched every page of students/accounts/
+    // payments client-side (100+ requests once real data volume existed) just
+    // to recompute the same totals in JS — see analyticsAPI.getDashboard and
+    // billingAPI.getFinance{Dashboard,Analytics} for where each number below
+    // actually gets computed now.
     const loadData = useCallback(async () => {
         try {
             setStats((prev) => ({ ...prev, loading: true }));
-            const [
-                studentsRaw,
-                teachersRaw,
-                classesRaw,
-                accountsRaw,
-                finance,
-                attendanceRaw,
-                noticesRaw,
-                paymentsRaw,
-            ] = await Promise.all([
-                academicAPI.getStudents().catch((e) => { console.error("Students fetch failed:", e); return []; }),
-                academicAPI.getTeachers().catch((e) => { console.error("Teachers fetch failed:", e); return []; }),
-                academicAPI.getClasses().catch((e) => { console.error("Classes fetch failed:", e); return []; }),
-                // getAccounts is admin-only; staff (e.g. accountant) gets 403.
-                // Falls back to deriving studentCount from students[] below.
-                (getUser()?.role === 'admin'
-                    ? usersAPI.getAccounts().catch((e) => { console.error("Accounts fetch failed:", e); return []; })
-                    : Promise.resolve([])),
+            const [analytics, finance, financeAnalytics, noticesRaw] = await Promise.all([
+                analyticsAPI.getDashboard({ days: 180 }).catch((e) => {
+                    console.error("Analytics fetch failed:", e);
+                    return {
+                        snapshot: { students: 0, teachers: 0, classes: 0, subjects: 0, overall_attendance_rate: 0, pass_rate: 0, total_results: 0 },
+                        attendance_trend: [],
+                        grade_distribution: [],
+                        subject_performance: [],
+                        class_performance: [],
+                        class_distribution: [],
+                        assessment_activity: [],
+                        top_students: [],
+                    };
+                }),
                 billingAPI.getFinanceDashboard().catch((e) => {
                     console.error("Finance fetch failed:", e);
                     return { total_revenue: 0, total_pending: 0, total_expenses: 0, net_balance: 0, recent_payments: [], recent_expenses: [] };
                 }),
-                academicAPI.getAttendance().catch((e) => { console.error("Attendance fetch failed:", e); return []; }),
+                billingAPI.getFinancialAnalytics().catch((e) => {
+                    console.error("Finance analytics fetch failed:", e);
+                    return { monthly_collections: [], expense_by_category: [], fee_status_breakdown: [], collection_rate: 0, top_defaulters: [] };
+                }),
                 academicAPI.getNotices().catch((e) => { console.error("Notices fetch failed:", e); return []; }),
-                billingAPI.getPayments().catch((e) => { console.error("Payments fetch failed:", e); return []; }),
             ]);
 
-            const students = toList<any>(studentsRaw);
-            const teachers = toList<any>(teachersRaw);
-            const classes = toList<any>(classesRaw);
-            const accounts = toList<any>(accountsRaw);
-            const attendanceRecords = toList<any>(attendanceRaw);
             const notices = toList<any>(noticesRaw);
-            const payments = toList<any>(paymentsRaw);
-
-            const studentCount = accounts.filter((u) => u.role === 'student').length || students.length;
-            const presentLike = attendanceRecords.filter((entry) => entry.status === 'present' || entry.status === 'late').length;
-            const attendanceRate = attendanceRecords.length > 0 ? Math.round((presentLike / attendanceRecords.length) * 100) : 0;
+            const attendanceRate = Math.round(analytics.snapshot.overall_attendance_rate);
 
             setStats({
-                totalStudents: studentCount,
-                totalTeachers: teachers.length,
-                totalClasses: classes.length,
+                totalStudents: analytics.snapshot.students,
+                totalTeachers: analytics.snapshot.teachers,
+                totalClasses: analytics.snapshot.classes,
                 attendanceRate,
                 revenue: finance.total_revenue || 0,
                 pendingFees: finance.total_pending || 0,
                 loading: false
             });
 
-            const distribution = classes.map((academicClass) => ({
-                name: academicClass.name,
-                students: students.filter((student) => Number(student.academic_class) === Number(academicClass.id)).length,
-            }));
+            const distribution = analytics.class_distribution.map((row) => ({ name: row.class, students: row.students }));
             const activeDistribution = distribution.filter((item) => item.students > 0);
             setClassDistribution(activeDistribution.length > 0 ? activeDistribution : distribution.slice(0, 8));
 
@@ -122,22 +114,20 @@ export default function SchoolAdminDashboard() {
                 return Array.from({ length: n }, (_, i) => new Date(now.getFullYear(), now.getMonth() - (n - 1 - i), 1));
             };
 
-            const revByMonth: Record<string, number> = {};
-            for (const payment of payments) {
-                const d = new Date(payment.payment_date || '');
-                if (Number.isNaN(d.getTime())) continue;
-                revByMonth[monthKey(d)] = (revByMonth[monthKey(d)] || 0) + Number(payment.amount || 0);
+            const collectionsByMonth: Record<string, number> = {};
+            for (const row of financeAnalytics.monthly_collections) {
+                collectionsByMonth[row.month] = row.total;
             }
-            setRevenueTrend(lastMonths(6).map((d) => ({ label: monthLabel(d), value: Math.round(revByMonth[monthKey(d)] || 0) })));
+            setRevenueTrend(lastMonths(6).map((d) => ({ label: monthLabel(d), value: Math.round(collectionsByMonth[monthKey(d)] || 0) })));
 
             const attByMonth: Record<string, { present: number; total: number }> = {};
-            for (const record of attendanceRecords) {
-                const d = new Date(record.date || '');
+            for (const day of analytics.attendance_trend) {
+                const d = new Date(day.date);
                 if (Number.isNaN(d.getTime())) continue;
                 const key = monthKey(d);
                 attByMonth[key] = attByMonth[key] || { present: 0, total: 0 };
-                attByMonth[key].total += 1;
-                if (record.status === 'present' || record.status === 'late') attByMonth[key].present += 1;
+                attByMonth[key].total += day.total;
+                attByMonth[key].present += day.present + day.late;
             }
             setAttendanceTrendSeries(lastMonths(6).map((d) => {
                 const bucket = attByMonth[monthKey(d)];
@@ -151,8 +141,7 @@ export default function SchoolAdminDashboard() {
                 return parsed.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
             };
 
-            const paymentActivity: ActivityItem[] = payments
-                .sort((a, b) => new Date(b.payment_date || '').getTime() - new Date(a.payment_date || '').getTime())
+            const paymentActivity: ActivityItem[] = finance.recent_payments
                 .slice(0, 2)
                 .map((payment, idx) => ({
                     id: idx + 1,
@@ -171,11 +160,12 @@ export default function SchoolAdminDashboard() {
                     time: formatDate(notice.published_date),
                 }));
 
-            const attendanceActivity: ActivityItem[] = attendanceRecords.length > 0 ? [{
+            const latestDay = analytics.attendance_trend[analytics.attendance_trend.length - 1];
+            const attendanceActivity: ActivityItem[] = latestDay ? [{
                 id: 50,
                 type: 'attendance',
-                message: `${presentLike} attendance entries marked present/late out of ${attendanceRecords.length}.`,
-                time: 'Today',
+                message: `${latestDay.present + latestDay.late} attendance entries marked present/late out of ${latestDay.total} on ${latestDay.date}.`,
+                time: 'Recently',
             }] : [];
 
             const merged = [...paymentActivity, ...noticeActivity, ...attendanceActivity].slice(0, 6);

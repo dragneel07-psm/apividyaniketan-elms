@@ -256,6 +256,12 @@ class SchoolAnalyticsDashboardView(APIView):
         class_qs = AcademicClass.objects.all()
         subject_qs = Subject.objects.all()
 
+        # ── Enrollment per class (single grouped query, Meta.ordering applies) ──
+        class_distribution = [
+            {"class": row.name, "students": row.student_count}
+            for row in class_qs.annotate(student_count=Count("students"))
+        ]
+
         return Response(
             {
                 "snapshot": {
@@ -271,6 +277,7 @@ class SchoolAnalyticsDashboardView(APIView):
                 "grade_distribution": grade_distribution,
                 "subject_performance": subject_performance,
                 "class_performance": class_performance,
+                "class_distribution": class_distribution,
                 "assessment_activity": assessment_activity,
                 "top_students": top_students,
             }

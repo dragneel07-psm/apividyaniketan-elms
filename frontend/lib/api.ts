@@ -1232,24 +1232,31 @@ async function fetchAllPages<T>(endpoint: string): Promise<T[]> {
     if (Array.isArray(firstPage)) return firstPage;
     if (!firstPage || !Array.isArray(firstPage.results)) return [];
 
-    const all = [...firstPage.results];
-    const totalCount = typeof firstPage.count === 'number' ? firstPage.count : all.length;
-    let page = 2;
-    let hasMore = Boolean(firstPage.next);
-
-    while (hasMore && all.length < totalCount) {
-        const nextPage = await apiRequest<T[] | PaginatedResponse<T>>(`${endpoint}${sep}page=${page}`);
-        if (Array.isArray(nextPage)) {
-            all.push(...nextPage);
-            break;
-        }
-        const batch = Array.isArray(nextPage?.results) ? nextPage.results : [];
-        if (batch.length === 0) break;
-        all.push(...batch);
-        hasMore = Boolean(nextPage?.next);
-        page += 1;
+    const pageSize = firstPage.results.length;
+    const totalCount = typeof firstPage.count === 'number' ? firstPage.count : pageSize;
+    if (!firstPage.next || pageSize === 0 || totalCount <= pageSize) {
+        return firstPage.results;
     }
 
+    // Page 1 already tells us the total count and page size, so the remaining
+    // pages can be requested in parallel instead of awaiting one at a time —
+    // the old sequential version turned e.g. 640 rows into 32 round-trips
+    // taken one after another.
+    const totalPages = Math.ceil(totalCount / pageSize);
+    const remainingPages = await Promise.all(
+        Array.from({ length: totalPages - 1 }, (_, i) =>
+            apiRequest<T[] | PaginatedResponse<T>>(`${endpoint}${sep}page=${i + 2}`)
+        )
+    );
+
+    const all = [...firstPage.results];
+    for (const pageResult of remainingPages) {
+        if (Array.isArray(pageResult)) {
+            all.push(...pageResult);
+        } else if (pageResult && Array.isArray(pageResult.results)) {
+            all.push(...pageResult.results);
+        }
+    }
     return all;
 }
 
@@ -4498,6 +4505,7 @@ export interface AnalyticsDashboard {
     grade_distribution: Array<{ grade: string; count: number }>;
     subject_performance: Array<{ subject: string; avg_pct: number; count: number }>;
     class_performance: Array<{ class: string; avg_pct: number; students: number }>;
+    class_distribution: Array<{ class: string; students: number }>;
     assessment_activity: Array<{ month: string; label: string; count: number }>;
     top_students: Array<{ student_id: string; name: string; avg_pct: number; assessments: number }>;
 }
