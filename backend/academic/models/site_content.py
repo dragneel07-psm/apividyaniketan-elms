@@ -34,6 +34,34 @@ def gallery_item_image_upload_to(instance, filename):
     return scoped_upload_path("gallery", filename)
 
 
+def testimonial_image_upload_to(instance, filename):
+    return scoped_upload_path("testimonials", filename)
+
+
+def program_image_upload_to(instance, filename):
+    return scoped_upload_path("programs", filename)
+
+
+def core_value_image_upload_to(instance, filename):
+    return scoped_upload_path("core-values", filename)
+
+
+def history_milestone_image_upload_to(instance, filename):
+    return scoped_upload_path("history", filename)
+
+
+def student_life_activity_image_upload_to(instance, filename):
+    return scoped_upload_path("student-life", filename)
+
+
+def field_trip_image_upload_to(instance, filename):
+    return scoped_upload_path("field-trips", filename)
+
+
+def wellbeing_support_image_upload_to(instance, filename):
+    return scoped_upload_path("wellbeing", filename)
+
+
 class NewsArticle(SiteContentBase):
     CATEGORY_CHOICES = [
         ("academics", "Academics"),
@@ -90,6 +118,12 @@ class Testimonial(SiteContentBase):
     quote = models.TextField()
     name = models.CharField(max_length=150)
     role = models.CharField(max_length=150)
+    image = models.ImageField(
+        upload_to=testimonial_image_upload_to,
+        null=True,
+        blank=True,
+        validators=image_upload_validators(),
+    )
 
     def __str__(self):
         return f"{self.name} ({self.role})"
@@ -106,6 +140,12 @@ class Program(SiteContentBase):
     title = models.CharField(max_length=200)
     description = models.TextField()
     icon = models.CharField(max_length=20, choices=ICON_CHOICES, default="book")
+    image = models.ImageField(
+        upload_to=program_image_upload_to,
+        null=True,
+        blank=True,
+        validators=image_upload_validators(),
+    )
 
     def __str__(self):
         return self.title
@@ -114,6 +154,12 @@ class Program(SiteContentBase):
 class CoreValue(SiteContentBase):
     title = models.CharField(max_length=200)
     description = models.TextField()
+    image = models.ImageField(
+        upload_to=core_value_image_upload_to,
+        null=True,
+        blank=True,
+        validators=image_upload_validators(),
+    )
 
     def __str__(self):
         return self.title
@@ -124,6 +170,12 @@ class HistoryMilestone(SiteContentBase):
     year = models.CharField(max_length=50)
     title = models.CharField(max_length=200)
     description = models.TextField()
+    image = models.ImageField(
+        upload_to=history_milestone_image_upload_to,
+        null=True,
+        blank=True,
+        validators=image_upload_validators(),
+    )
 
     def __str__(self):
         return f"{self.year} — {self.title}"
@@ -142,6 +194,12 @@ class StudentLifeActivity(SiteContentBase):
     category = models.CharField(
         max_length=20, choices=CATEGORY_CHOICES, default="clubs"
     )
+    image = models.ImageField(
+        upload_to=student_life_activity_image_upload_to,
+        null=True,
+        blank=True,
+        validators=image_upload_validators(),
+    )
 
     def __str__(self):
         return self.name
@@ -151,6 +209,12 @@ class FieldTrip(SiteContentBase):
     title = models.CharField(max_length=200)
     description = models.TextField()
     grade_band = models.CharField(max_length=100)
+    image = models.ImageField(
+        upload_to=field_trip_image_upload_to,
+        null=True,
+        blank=True,
+        validators=image_upload_validators(),
+    )
 
     def __str__(self):
         return self.title
@@ -159,6 +223,12 @@ class FieldTrip(SiteContentBase):
 class WellbeingSupport(SiteContentBase):
     title = models.CharField(max_length=200)
     description = models.TextField()
+    image = models.ImageField(
+        upload_to=wellbeing_support_image_upload_to,
+        null=True,
+        blank=True,
+        validators=image_upload_validators(),
+    )
 
     def __str__(self):
         return self.title

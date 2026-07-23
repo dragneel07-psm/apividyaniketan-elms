@@ -19,6 +19,7 @@ const fields: FieldSchema<Program>[] = [
             { value: 'trophy', label: 'Trophy' },
         ],
     },
+    { name: 'image', label: 'Photo (optional — shown instead of the icon when set)', type: 'image' },
 ];
 
 export default function ProgramsAdminPage() {

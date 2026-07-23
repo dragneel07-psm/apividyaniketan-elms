@@ -68,6 +68,14 @@ export default async function StudentLifePage() {
                         <div className="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
                             {items.map((item) => (
                                 <div key={item.id} className="rounded-2xl border border-school-forest/10 p-5">
+                                    {item.image_url && (
+                                        // eslint-disable-next-line @next/next/no-img-element
+                                        <img
+                                            src={item.image_url}
+                                            alt={item.name}
+                                            className="mb-4 aspect-video w-full rounded-xl object-cover"
+                                        />
+                                    )}
                                     <h3 className="font-fraunces text-lg text-school-ink">{item.name}</h3>
                                     <p className="mt-2 font-public-sans text-sm leading-relaxed text-school-ink/70">{item.description}</p>
                                 </div>
@@ -84,10 +92,20 @@ export default async function StudentLifePage() {
                     <p className="mt-2 font-public-sans text-sm text-school-ink/60">Learning that leaves the classroom, grade by grade.</p>
                     <ul className="mt-6 space-y-4">
                         {fieldTrips.map((trip) => (
-                            <li key={trip.id} className="rounded-xl border border-school-forest/10 p-4">
-                                <p className="font-public-sans text-xs font-semibold uppercase tracking-wide text-school-terracotta">{trip.grade_band}</p>
-                                <p className="mt-1 font-public-sans text-sm font-semibold text-school-ink">{trip.title}</p>
-                                <p className="mt-1 font-public-sans text-sm text-school-ink/70">{trip.description}</p>
+                            <li key={trip.id} className="flex gap-4 rounded-xl border border-school-forest/10 p-4">
+                                {trip.image_url && (
+                                    // eslint-disable-next-line @next/next/no-img-element
+                                    <img
+                                        src={trip.image_url}
+                                        alt={trip.title}
+                                        className="h-16 w-16 shrink-0 rounded-lg object-cover"
+                                    />
+                                )}
+                                <div>
+                                    <p className="font-public-sans text-xs font-semibold uppercase tracking-wide text-school-terracotta">{trip.grade_band}</p>
+                                    <p className="mt-1 font-public-sans text-sm font-semibold text-school-ink">{trip.title}</p>
+                                    <p className="mt-1 font-public-sans text-sm text-school-ink/70">{trip.description}</p>
+                                </div>
                             </li>
                         ))}
                     </ul>
@@ -108,9 +126,19 @@ export default async function StudentLifePage() {
                 </div>
                 <div className="mt-6 grid gap-6 sm:grid-cols-2">
                     {wellbeingSupport.map((item) => (
-                        <div key={item.id} className="rounded-xl border border-school-forest/10 bg-white p-5">
-                            <h3 className="font-public-sans text-sm font-semibold text-school-ink">{item.title}</h3>
-                            <p className="mt-2 font-public-sans text-sm leading-relaxed text-school-ink/70">{item.description}</p>
+                        <div key={item.id} className="flex gap-4 rounded-xl border border-school-forest/10 bg-white p-5">
+                            {item.image_url && (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img
+                                    src={item.image_url}
+                                    alt={item.title}
+                                    className="h-14 w-14 shrink-0 rounded-lg object-cover"
+                                />
+                            )}
+                            <div>
+                                <h3 className="font-public-sans text-sm font-semibold text-school-ink">{item.title}</h3>
+                                <p className="mt-2 font-public-sans text-sm leading-relaxed text-school-ink/70">{item.description}</p>
+                            </div>
                         </div>
                     ))}
                 </div>

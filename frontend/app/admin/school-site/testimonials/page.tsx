@@ -11,6 +11,7 @@ const fields: FieldSchema<Testimonial>[] = [
     { name: 'quote', label: 'Quote', type: 'textarea', required: true },
     { name: 'name', label: 'Name', type: 'text', required: true },
     { name: 'role', label: 'Role (e.g. "Parent, Grade 4")', type: 'text', required: true },
+    { name: 'image', label: 'Photo', type: 'image' },
 ];
 
 export default function TestimonialsAdminPage() {

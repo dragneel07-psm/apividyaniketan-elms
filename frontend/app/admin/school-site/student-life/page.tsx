@@ -19,6 +19,7 @@ const fields: FieldSchema<StudentLifeActivity>[] = [
             { value: 'leadership', label: 'Leadership' },
         ],
     },
+    { name: 'image', label: 'Photo', type: 'image' },
 ];
 
 export default function StudentLifeAdminPage() {

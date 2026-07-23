@@ -11,6 +11,7 @@ const fields: FieldSchema<FieldTrip>[] = [
     { name: 'title', label: 'Title', type: 'text', required: true },
     { name: 'description', label: 'Description', type: 'textarea', required: true },
     { name: 'grade_band', label: 'Grade band (e.g. "Grade 3 – 5")', type: 'text', required: true },
+    { name: 'image', label: 'Photo', type: 'image' },
 ];
 
 export default function FieldTripsAdminPage() {

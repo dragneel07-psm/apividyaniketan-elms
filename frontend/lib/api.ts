@@ -1062,40 +1062,54 @@ export interface Testimonial extends SiteContentBase {
     quote: string;
     name: string;
     role: string;
+    image?: File | null;
+    image_url?: string | null;
 }
 
 export interface Program extends SiteContentBase {
     title: string;
     description: string;
     icon: 'book' | 'flask' | 'palette' | 'trophy';
+    image?: File | null;
+    image_url?: string | null;
 }
 
 export interface CoreValue extends SiteContentBase {
     title: string;
     description: string;
+    image?: File | null;
+    image_url?: string | null;
 }
 
 export interface HistoryMilestone extends SiteContentBase {
     year: string;
     title: string;
     description: string;
+    image?: File | null;
+    image_url?: string | null;
 }
 
 export interface StudentLifeActivity extends SiteContentBase {
     name: string;
     description: string;
     category: 'clubs' | 'sports' | 'arts' | 'leadership';
+    image?: File | null;
+    image_url?: string | null;
 }
 
 export interface FieldTrip extends SiteContentBase {
     title: string;
     description: string;
     grade_band: string;
+    image?: File | null;
+    image_url?: string | null;
 }
 
 export interface WellbeingSupport extends SiteContentBase {
     title: string;
     description: string;
+    image?: File | null;
+    image_url?: string | null;
 }
 
 export interface AdmissionFaq extends SiteContentBase {

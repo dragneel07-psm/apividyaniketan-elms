@@ -46,10 +46,20 @@ export default async function AboutPage() {
                     </p>
                     <ol className="mt-6 space-y-4 border-l-2 border-school-marigold pl-5">
                         {historyMilestones.map((m) => (
-                            <li key={m.id}>
-                                <span className="font-mono text-xs font-semibold text-school-terracotta">{m.year}</span>
-                                <p className="font-public-sans text-sm font-semibold text-school-ink">{m.title}</p>
-                                <p className="font-public-sans text-sm text-school-ink/70">{m.description}</p>
+                            <li key={m.id} className="flex gap-4">
+                                {m.image_url && (
+                                    // eslint-disable-next-line @next/next/no-img-element
+                                    <img
+                                        src={m.image_url}
+                                        alt={m.title}
+                                        className="h-16 w-16 shrink-0 rounded-lg object-cover"
+                                    />
+                                )}
+                                <div>
+                                    <span className="font-mono text-xs font-semibold text-school-terracotta">{m.year}</span>
+                                    <p className="font-public-sans text-sm font-semibold text-school-ink">{m.title}</p>
+                                    <p className="font-public-sans text-sm text-school-ink/70">{m.description}</p>
+                                </div>
                             </li>
                         ))}
                     </ol>
@@ -80,6 +90,14 @@ export default async function AboutPage() {
                 <div className="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
                     {coreValues.map((v) => (
                         <div key={v.id} className="rounded-2xl border border-school-forest/10 p-5">
+                            {v.image_url && (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img
+                                    src={v.image_url}
+                                    alt={v.title}
+                                    className="mb-4 aspect-video w-full rounded-xl object-cover"
+                                />
+                            )}
                             <h3 className="font-fraunces text-lg text-school-ink">{v.title}</h3>
                             <p className="mt-2 font-public-sans text-sm leading-relaxed text-school-ink/70">{v.description}</p>
                         </div>

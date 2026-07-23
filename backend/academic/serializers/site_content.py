@@ -89,46 +89,53 @@ class GalleryItemSerializer(ImageURLMixin, serializers.ModelSerializer):
         extra_kwargs = {"image": {"write_only": True}}
 
 
-class TestimonialSerializer(serializers.ModelSerializer):
+class TestimonialSerializer(ImageURLMixin, serializers.ModelSerializer):
     class Meta:
         model = Testimonial
-        fields = ["id", "quote", "name", "role", "order", "is_active"]
+        fields = ["id", "quote", "name", "role", "image", "image_url", "order", "is_active"]
+        extra_kwargs = {"image": {"write_only": True}}
 
 
-class ProgramSerializer(serializers.ModelSerializer):
+class ProgramSerializer(ImageURLMixin, serializers.ModelSerializer):
     class Meta:
         model = Program
-        fields = ["id", "title", "description", "icon", "order", "is_active"]
+        fields = ["id", "title", "description", "icon", "image", "image_url", "order", "is_active"]
+        extra_kwargs = {"image": {"write_only": True}}
 
 
-class CoreValueSerializer(serializers.ModelSerializer):
+class CoreValueSerializer(ImageURLMixin, serializers.ModelSerializer):
     class Meta:
         model = CoreValue
-        fields = ["id", "title", "description", "order", "is_active"]
+        fields = ["id", "title", "description", "image", "image_url", "order", "is_active"]
+        extra_kwargs = {"image": {"write_only": True}}
 
 
-class HistoryMilestoneSerializer(serializers.ModelSerializer):
+class HistoryMilestoneSerializer(ImageURLMixin, serializers.ModelSerializer):
     class Meta:
         model = HistoryMilestone
-        fields = ["id", "year", "title", "description", "order", "is_active"]
+        fields = ["id", "year", "title", "description", "image", "image_url", "order", "is_active"]
+        extra_kwargs = {"image": {"write_only": True}}
 
 
-class StudentLifeActivitySerializer(serializers.ModelSerializer):
+class StudentLifeActivitySerializer(ImageURLMixin, serializers.ModelSerializer):
     class Meta:
         model = StudentLifeActivity
-        fields = ["id", "name", "description", "category", "order", "is_active"]
+        fields = ["id", "name", "description", "category", "image", "image_url", "order", "is_active"]
+        extra_kwargs = {"image": {"write_only": True}}
 
 
-class FieldTripSerializer(serializers.ModelSerializer):
+class FieldTripSerializer(ImageURLMixin, serializers.ModelSerializer):
     class Meta:
         model = FieldTrip
-        fields = ["id", "title", "description", "grade_band", "order", "is_active"]
+        fields = ["id", "title", "description", "grade_band", "image", "image_url", "order", "is_active"]
+        extra_kwargs = {"image": {"write_only": True}}
 
 
-class WellbeingSupportSerializer(serializers.ModelSerializer):
+class WellbeingSupportSerializer(ImageURLMixin, serializers.ModelSerializer):
     class Meta:
         model = WellbeingSupport
-        fields = ["id", "title", "description", "order", "is_active"]
+        fields = ["id", "title", "description", "image", "image_url", "order", "is_active"]
+        extra_kwargs = {"image": {"write_only": True}}
 
 
 class AdmissionFaqSerializer(serializers.ModelSerializer):

@@ -166,9 +166,18 @@ export default async function SchoolHomePage() {
                         return (
                             <Card key={program.id} className="border-school-forest/10 shadow-none transition-shadow hover:shadow-md">
                                 <CardContent className="pt-2">
-                                    <span className="flex h-11 w-11 items-center justify-center rounded-full bg-school-marigold/15 text-school-terracotta">
-                                        <Icon className="h-5 w-5" />
-                                    </span>
+                                    {program.image_url ? (
+                                        // eslint-disable-next-line @next/next/no-img-element
+                                        <img
+                                            src={program.image_url}
+                                            alt={program.title}
+                                            className="h-11 w-11 rounded-full object-cover"
+                                        />
+                                    ) : (
+                                        <span className="flex h-11 w-11 items-center justify-center rounded-full bg-school-marigold/15 text-school-terracotta">
+                                            <Icon className="h-5 w-5" />
+                                        </span>
+                                    )}
                                     <h3 className="mt-4 font-fraunces text-lg text-school-ink">{program.title}</h3>
                                     <p className="mt-2 font-public-sans text-sm leading-relaxed text-school-ink/70">
                                         {program.description}
@@ -254,8 +263,20 @@ export default async function SchoolHomePage() {
                         <Card key={t.id} className="border-school-forest/10 shadow-none">
                             <CardContent className="pt-2">
                                 <p className="font-fraunces text-base italic leading-relaxed text-school-ink/85">&ldquo;{t.quote}&rdquo;</p>
-                                <p className="mt-4 font-public-sans text-sm font-semibold text-school-ink">{t.name}</p>
-                                <p className="font-public-sans text-xs text-school-ink/60">{t.role}</p>
+                                <div className="mt-4 flex items-center gap-3">
+                                    {t.image_url && (
+                                        // eslint-disable-next-line @next/next/no-img-element
+                                        <img
+                                            src={t.image_url}
+                                            alt={t.name}
+                                            className="h-10 w-10 rounded-full object-cover"
+                                        />
+                                    )}
+                                    <div>
+                                        <p className="font-public-sans text-sm font-semibold text-school-ink">{t.name}</p>
+                                        <p className="font-public-sans text-xs text-school-ink/60">{t.role}</p>
+                                    </div>
+                                </div>
                             </CardContent>
                         </Card>
                     ))}

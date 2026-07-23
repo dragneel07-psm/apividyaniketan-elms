@@ -10,6 +10,7 @@ import { wellbeingSupportAPI, type WellbeingSupport } from '@/lib/api';
 const fields: FieldSchema<WellbeingSupport>[] = [
     { name: 'title', label: 'Title', type: 'text', required: true },
     { name: 'description', label: 'Description', type: 'textarea', required: true },
+    { name: 'image', label: 'Photo', type: 'image' },
 ];
 
 export default function WellbeingAdminPage() {
