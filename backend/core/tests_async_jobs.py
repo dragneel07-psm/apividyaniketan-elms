@@ -1,6 +1,8 @@
 # Copyright (c) 2024-2026 Pramod Singh Manyal. All rights reserved.
 # Unauthorized copying, modification, or distribution of this file,
 # via any medium, is strictly prohibited. Proprietary and confidential.
+from unittest.mock import patch
+
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.test import SimpleTestCase, override_settings
@@ -24,8 +26,10 @@ class AsyncJobsFallbackTests(SimpleTestCase):
 
     @override_settings(ASYNC_TASK_BACKEND="celery")
     def test_enqueue_falls_back_to_sync_when_celery_unavailable(self):
-        # In current local test environment celery may be unavailable; fallback must still work.
-        result = enqueue(add_numbers, 10, 5)
+        # Simulate Celery being uninstalled/unreachable regardless of what's
+        # actually available in this dev environment; fallback must still work.
+        with patch("core.async_jobs.CELERY_AVAILABLE", False):
+            result = enqueue(add_numbers, 10, 5)
         self.assertEqual(result, 15)
 
     @override_settings(

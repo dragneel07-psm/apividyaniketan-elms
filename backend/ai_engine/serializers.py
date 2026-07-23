@@ -161,7 +161,6 @@ class StudyEventSerializer(serializers.ModelSerializer):
             "is_completed",
             "node_id",
             "skill_tag_id",
-            "tenant",
             "student",
             "created_at",
         ]
