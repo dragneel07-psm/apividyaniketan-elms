@@ -10,6 +10,7 @@ import { admissionFaqsAPI, type AdmissionFaq } from '@/lib/api';
 const fields: FieldSchema<AdmissionFaq>[] = [
     { name: 'question', label: 'Question', type: 'text', required: true },
     { name: 'answer', label: 'Answer', type: 'textarea', required: true },
+    { name: 'image', label: 'Photo (optional)', type: 'image' },
 ];
 
 export default function AdmissionFaqsAdminPage() {

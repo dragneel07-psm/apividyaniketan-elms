@@ -62,6 +62,10 @@ def wellbeing_support_image_upload_to(instance, filename):
     return scoped_upload_path("wellbeing", filename)
 
 
+def admission_faq_image_upload_to(instance, filename):
+    return scoped_upload_path("admission-faqs", filename)
+
+
 class NewsArticle(SiteContentBase):
     CATEGORY_CHOICES = [
         ("academics", "Academics"),
@@ -237,6 +241,12 @@ class WellbeingSupport(SiteContentBase):
 class AdmissionFaq(SiteContentBase):
     question = models.CharField(max_length=300)
     answer = models.TextField()
+    image = models.ImageField(
+        upload_to=admission_faq_image_upload_to,
+        null=True,
+        blank=True,
+        validators=image_upload_validators(),
+    )
 
     def __str__(self):
         return self.question

@@ -1115,6 +1115,8 @@ export interface WellbeingSupport extends SiteContentBase {
 export interface AdmissionFaq extends SiteContentBase {
     question: string;
     answer: string;
+    image?: File | null;
+    image_url?: string | null;
 }
 
 function contentCrudAPI<T extends { id: number }>(basePath: string) {

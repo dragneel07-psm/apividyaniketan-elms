@@ -138,7 +138,8 @@ class WellbeingSupportSerializer(ImageURLMixin, serializers.ModelSerializer):
         extra_kwargs = {"image": {"write_only": True}}
 
 
-class AdmissionFaqSerializer(serializers.ModelSerializer):
+class AdmissionFaqSerializer(ImageURLMixin, serializers.ModelSerializer):
     class Meta:
         model = AdmissionFaq
-        fields = ["id", "question", "answer", "order", "is_active"]
+        fields = ["id", "question", "answer", "image", "image_url", "order", "is_active"]
+        extra_kwargs = {"image": {"write_only": True}}

@@ -120,6 +120,14 @@ export default async function AdmissionsPage() {
                                 {faq.question}
                             </AccordionTrigger>
                             <AccordionContent className="font-public-sans text-sm leading-relaxed text-school-ink/70">
+                                {faq.image_url && (
+                                    // eslint-disable-next-line @next/next/no-img-element
+                                    <img
+                                        src={faq.image_url}
+                                        alt={faq.question}
+                                        className="mb-3 aspect-video w-full max-w-sm rounded-lg object-cover"
+                                    />
+                                )}
                                 {faq.answer}
                             </AccordionContent>
                         </AccordionItem>
