@@ -16,8 +16,7 @@ import json
 from unittest.mock import MagicMock
 
 from channels.testing import WebsocketCommunicator
-from django.test import TestCase, override_settings
-from django.test import TestCase
+from django.test import TestCase, TransactionTestCase, override_settings
 
 from academic.models import AcademicClass, Section, Student
 from core.models import SchoolProfile
@@ -70,8 +69,13 @@ class ProjectStreamConsumerAuthTests(TestCase):
         await comm.disconnect()
 
 
-class ProjectStreamConsumerVisibilityTests(TestCase):
-    """Connect-time visibility check uses the real DB."""
+class ProjectStreamConsumerVisibilityTests(TransactionTestCase):
+    """Connect-time visibility check uses the real DB.
+
+    TransactionTestCase (not TestCase): the consumer's @database_sync_to_async
+    queries call close_old_connections(), which force-closes the connection
+    when it detects TestCase's atomic-block autocommit mismatch.
+    """
 
     def setUp(self):
         _enable_projects()
@@ -145,7 +149,7 @@ class ProjectStreamConsumerVisibilityTests(TestCase):
             await comm.disconnect()
 
 
-class ProjectStreamFeatureFlagTests(TestCase):
+class ProjectStreamFeatureFlagTests(TransactionTestCase):
     """Feature flag off must reject the WebSocket connect with 4403."""
 
     def setUp(self):
@@ -176,7 +180,7 @@ class ProjectStreamFeatureFlagTests(TestCase):
             await comm.disconnect()
 
 
-class ProjectStreamBroadcastTests(TestCase):
+class ProjectStreamBroadcastTests(TransactionTestCase):
     """Verify channel-layer events from group_send reach the connected client."""
 
     def setUp(self):
@@ -246,7 +250,7 @@ class MentorDigestAuthTests(TestCase):
         await comm.disconnect()
 
 
-class MentorDigestVisibilityTests(TestCase):
+class MentorDigestVisibilityTests(TransactionTestCase):
     def setUp(self):
         _enable_projects()
         self.acad_class = AcademicClass.objects.create(name="Grade 12", order=12)
@@ -286,7 +290,7 @@ class MentorDigestVisibilityTests(TestCase):
             await comm.disconnect()
 
 
-class MentorDigestBroadcastTests(TestCase):
+class MentorDigestBroadcastTests(TransactionTestCase):
     """group_send to mentor_<id> reaches the connected client."""
 
     def setUp(self):

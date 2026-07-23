@@ -234,10 +234,12 @@ class RAGTutorService:
                         distance=CosineDistance("embedding", query_vector)
                     ).order_by("distance")[: max(self.top_k * 4, self.top_k)]
                 )
-                return [
-                    (row, 1.0 - float(getattr(row, "distance", 1.0) or 1.0))
-                    for row in candidates
-                ]
+                results = []
+                for row in candidates:
+                    distance = getattr(row, "distance", None)
+                    distance = 1.0 if distance is None else float(distance)
+                    results.append((row, 1.0 - distance))
+                return results
             except Exception as exc:
                 logger.warning(
                     "pgvector lookup failed; falling back to Python: %s", exc

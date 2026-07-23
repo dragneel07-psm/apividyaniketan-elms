@@ -70,11 +70,13 @@ class RBACPermissionTests(TestCase):
     def test_is_teacher_or_admin_composite(self):
         self.check_permission(IsTeacherOrAdmin, self.teacher, True)
         self.check_permission(IsTeacherOrAdmin, self.admin, True)
-        self.check_permission(IsTeacherOrAdmin, self.saas_admin, True)
+        self.check_permission(IsTeacherOrAdmin, self.saas_admin, False)  # Strict check
         self.check_permission(IsTeacherOrAdmin, self.student, False)
 
     def test_is_admin_or_saas_admin_composite(self):
+        # Despite the name (kept for call-site compatibility), this permission
+        # now checks admin only — see IsAdminOrSaaSAdmin's docstring.
         self.check_permission(IsAdminOrSaaSAdmin, self.admin, True)
-        self.check_permission(IsAdminOrSaaSAdmin, self.saas_admin, True)
+        self.check_permission(IsAdminOrSaaSAdmin, self.saas_admin, False)
         self.check_permission(IsAdminOrSaaSAdmin, self.teacher, False)
         self.check_permission(IsAdminOrSaaSAdmin, self.student, False)

@@ -96,6 +96,14 @@ from .tasks import ai_index_content_task, generate_quiz_task, generate_summary_t
 from .throttling import TutorChatRateThrottle
 
 
+def _coerce_pk(value):
+    """Return `value` as an int if it looks like a PK, else None."""
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
 class StudyEventViewSet(TenantScopedQuerysetMixin, viewsets.ModelViewSet):
     """
     Manage student study schedule.
@@ -967,14 +975,17 @@ def ai_tutor_chat(request):
         if conversation is None:
             # Auto-title from first message (truncated)
             auto_title = message[:80] + ("…" if len(message) > 80 else "")
-            lesson_id = context_payload.get("lesson_id")
-            subject_id = context_payload.get("subject_id")
+            # context lesson_id/subject_id may be non-PK identifiers used purely
+            # for RAG chunk filtering (see RAGTutorService._base_queryset); only
+            # link the conversation to a real row when it parses as a PK.
+            lesson_id = _coerce_pk(context_payload.get("lesson_id"))
+            subject_id = _coerce_pk(context_payload.get("subject_id"))
             student = getattr(request.user, "student_profile", None)
             conversation = TutorConversation.objects.using(db_alias).create(
                 user=request.user,
                 student=student,
-                lesson_id=lesson_id or None,
-                subject_id=subject_id or None,
+                lesson_id=lesson_id,
+                subject_id=subject_id,
                 title=auto_title,
             )
 

@@ -216,7 +216,7 @@ class RiskAnalyticsServiceTests(TestCase):
 
     @override_settings(AI_AT_RISK_NOTIFICATION_THRESHOLD=60, AI_AT_RISK_MIN_SCORE=40)
     def test_creates_notifications_for_teacher_and_parent_when_threshold_crossed(self):
-        service = RiskAnalyticsService(tenant=self.tenant, user=self.teacher_user)
+        service = RiskAnalyticsService(user=self.teacher_user)
         payload = service.get_at_risk_students(
             class_id=self.academic_class.id, send_notifications=True
         )

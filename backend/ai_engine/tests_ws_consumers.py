@@ -246,7 +246,7 @@ class TutorStreamConsumerTests(TestCase):
         fake_conv = MagicMock()
         fake_conv.id = "conv-uuid-1234"
 
-        async def _fake_get_or_create(self_consumer, u, tenant, conv_id, msg, ctx, db):
+        async def _fake_get_or_create(self_consumer, u, conv_id, msg, ctx, db):
             return fake_conv
 
         comm = WebsocketCommunicator(self._app(), "/ws/tutor/chat/")

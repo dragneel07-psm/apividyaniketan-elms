@@ -55,9 +55,7 @@ class TutorChatApiTests(TestCase):
             embedding=[0.01] * dimensions,
         )
 
-        self.client = cast(
-            APIClientLike, APIClient(HTTP_HOST=str(self.get_test_tenant_domain()))
-        )
+        self.client = cast(APIClientLike, APIClient())
         self.client.force_authenticate(user=self.user)
 
     @override_settings(AI_TUTOR_MIN_SIMILARITY=-1.0)
