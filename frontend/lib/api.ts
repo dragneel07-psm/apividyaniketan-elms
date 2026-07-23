@@ -1226,6 +1226,15 @@ export interface SchoolProfile {
     logo: string;
 }
 
+// For "how many X are there" UI (KPI cards, badges) — reads DRF's `count`
+// field off page 1 instead of walking every page just to call .length.
+export async function fetchCount(endpoint: string): Promise<number> {
+    const sep = endpoint.includes('?') ? '&' : '?';
+    const page = await apiRequest<unknown[] | PaginatedResponse<unknown>>(`${endpoint}${sep}page_size=1`);
+    if (Array.isArray(page)) return page.length;
+    return typeof page?.count === 'number' ? page.count : 0;
+}
+
 async function fetchAllPages<T>(endpoint: string): Promise<T[]> {
     const sep = endpoint.includes('?') ? '&' : '?';
     const firstPage = await apiRequest<T[] | PaginatedResponse<T>>(endpoint);

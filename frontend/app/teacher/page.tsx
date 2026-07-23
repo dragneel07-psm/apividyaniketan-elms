@@ -13,7 +13,7 @@ import {
     ChevronRight, ClipboardList, CheckCircle, TrendingUp, Video
 } from 'lucide-react';
 import { CreateLessonDialog } from '@/components/create-lesson-dialog';
-import { academicAPI, AtRiskStudent, User, usersAPI, aiAPI } from '@/lib/api';
+import { academicAPI, AtRiskStudent, User, usersAPI, aiAPI, fetchCount } from '@/lib/api';
 import { AITeachingAssistant } from '@/components/ai-teaching-assistant';
 import { MyProfileDialog } from '@/components/my-profile-dialog';
 import { AttendanceTrends } from '@/components/attendance-trends';
@@ -95,26 +95,26 @@ export default function TeacherDashboard() {
                 setSchoolName(formatTenantLabel(tenantFromStorage || me.tenant));
 
                 const [
-                    studentsRaw,
-                    subjectsRaw,
-                    submissionsRaw,
+                    totalStudents,
+                    classesAssigned,
+                    pendingReviews,
                     aiLogs,
                     timetableRaw,
                     teacherProfile,
                     analyticsData,
                 ] = await Promise.all([
-                    academicAPI.getStudents().catch(() => []),
-                    academicAPI.getSubjects().catch(() => []),
-                    academicAPI.getSubmissions().catch(() => []),
+                    // Counts only — these KPI cards just need .length, not the
+                    // full teacher-scoped row set (previously walked every
+                    // page of /academic/students/ and /subjects/ for this).
+                    fetchCount('/academic/students/').catch(() => 0),
+                    fetchCount('/academic/subjects/').catch(() => 0),
+                    fetchCount('/academic/submissions/?is_graded=false&exclude_status=draft').catch(() => 0),
                     aiAPI.getAILogs().catch(() => []),
                     academicAPI.getTimetable().catch(() => []),
                     academicAPI.getMyTeacherProfile().catch(() => null),
                     aiAPI.getTeacherAnalytics().catch(() => null),
                 ]);
 
-                const students = toList<any>(studentsRaw);
-                const subjects = toList<any>(subjectsRaw);
-                const submissions = toList<any>(submissionsRaw);
                 const timetable = toList<any>(timetableRaw);
                 const logs = Array.isArray(aiLogs) ? aiLogs : [];
                 const teacherName = `${me.first_name || ''} ${me.last_name || ''}`.trim().toLowerCase();
@@ -150,15 +150,14 @@ export default function TeacherDashboard() {
                 const nextClass = todaySchedule.find((slot) => slot.status === 'upcoming');
                 const nextClassInMins = nextClass ? Math.max(0, toMinutes(nextClass.time.split(' - ')[0]) - nowMinutes) : null;
 
-                const pendingReviews = submissions.filter((submission) => !submission.is_graded && submission.status !== 'draft').length;
                 const aiEvaluations = logs.filter((log: any) => {
                     const feature = String(log.feature_used || '').toLowerCase();
                     return feature.includes('grading') || feature.includes('evaluation') || feature.includes('eval');
                 }).length;
 
                 setStats({
-                    totalStudents: students.length,
-                    classesAssigned: subjects.length,
+                    totalStudents,
+                    classesAssigned,
                     pendingReviews,
                     aiEvaluations,
                     todaysClasses: todaySchedule.length,

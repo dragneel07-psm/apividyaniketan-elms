@@ -60,6 +60,14 @@ class SubmissionViewSet(viewsets.ModelViewSet):
         if assessment_id:
             queryset = queryset.filter(assessment_id=assessment_id)
 
+        is_graded = self.request.query_params.get("is_graded")
+        if is_graded is not None:
+            queryset = queryset.filter(is_graded=is_graded.strip().lower() == "true")
+
+        exclude_status = self.request.query_params.get("exclude_status")
+        if exclude_status:
+            queryset = queryset.exclude(status=exclude_status)
+
         role = _role(self.request.user)
         if role == "student":
             student = Student.objects.filter(user=self.request.user).first()
