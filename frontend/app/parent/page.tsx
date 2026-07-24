@@ -251,6 +251,17 @@ export default function ParentDashboard() {
             {/* AI Report Dialog */}
             <Dialog open={reportOpen} onOpenChange={setReportOpen}>
                 <DialogContent className="sm:max-w-[620px] max-h-[85vh] overflow-y-auto">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2 text-xl font-black">
+                            <Brain className="h-5 w-5 text-violet-600" /> {t('parent.dashboard.reportTitle')}
+                        </DialogTitle>
+                        {selectedReport && (
+                            <DialogDescription>
+                                {t('parent.dashboard.reportDesc', { name: selectedReport.student_name })}
+                            </DialogDescription>
+                        )}
+                    </DialogHeader>
+
                     {!selectedReport ? (
                         <div className="py-20 flex flex-col items-center gap-4">
                             <Loader2 className="h-10 w-10 animate-spin text-violet-500" />
@@ -258,15 +269,6 @@ export default function ParentDashboard() {
                         </div>
                     ) : (
                         <div className="space-y-6">
-                            <DialogHeader>
-                                <DialogTitle className="flex items-center gap-2 text-xl font-black">
-                                    <Brain className="h-5 w-5 text-violet-600" /> {t('parent.dashboard.reportTitle')}
-                                </DialogTitle>
-                                <DialogDescription>
-                                    {t('parent.dashboard.reportDesc', { name: selectedReport.student_name })}
-                                </DialogDescription>
-                            </DialogHeader>
-
                             <div className="bg-violet-50 p-4 rounded-xl border border-violet-100">
                                 <h4 className="font-bold text-violet-700 flex items-center gap-2 mb-2 text-sm">
                                     <CheckCircle className="h-4 w-4" /> {t('parent.dashboard.reportSummary')}

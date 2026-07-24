@@ -12,19 +12,22 @@ from rest_framework.response import Response
 from core.utils.audit import record_audit_event
 
 from .emailing import send_password_reset_email
-from .models import UserAccount
-from .permissions import IsAdminOrSaaSAdmin
+from .models import AdminPasswordResetRequest, UserAccount
+from .permissions import IsAdminOrSaaSAdmin, IsSaasAdmin
 from .serializers import (
+    AdminPasswordResetRequestSerializer,
     EmailVerificationSerializer,
     GroupSerializer,
     PasswordResetConfirmSerializer,
     PasswordResetSerializer,
     PermissionSerializer,
     RoleAwareTokenRefreshSerializer,
+    SaasStaffSerializer,
     UserAccountSerializer,
     UserManagementSerializer,
 )
 from .throttling import (
+    AdminResetRequestRateThrottle,
     EmailVerificationRateThrottle,
     LoginRateThrottle,
     PasswordResetConfirmRateThrottle,
@@ -120,6 +123,23 @@ class UserAccountViewSet(viewsets.ModelViewSet):
         return Response({"status": "registered"})
 
 
+class SaasStaffViewSet(viewsets.ModelViewSet):
+    """
+    /api/users/saas-staff/ — CRUD for role='saas_staff' platform staff
+    accounts (support, billing, schools_manager, reports sub-roles).
+    Super-admin only. "Delete" deactivates rather than removing the row.
+    """
+
+    queryset = UserAccount.objects.filter(role="saas_staff").order_by("-date_joined")
+    serializer_class = SaasStaffSerializer
+    permission_classes = [IsSaasAdmin]
+    pagination_class = None
+
+    def perform_destroy(self, instance):
+        instance.is_active = False
+        instance.save(update_fields=["is_active"])
+
+
 class GroupViewSet(viewsets.ModelViewSet):
     queryset = Group.objects.all()
     serializer_class = GroupSerializer
@@ -202,6 +222,181 @@ class AdminPasswordResetView(APIView):
                 {"error": "Password reset failed."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
+
+class AdminPasswordResetRequestCreateView(APIView):
+    """
+    POST /api/users/admin-password-reset-requests/create/
+
+    Unauthenticated by design — this exists precisely for the case where the
+    admin cannot log in. Body: {"email": "..."}. Always responds with a
+    generic message (never reveals whether the email matched an account) to
+    avoid leaking which addresses have admin accounts.
+    """
+
+    permission_classes = [permissions.AllowAny]
+    throttle_classes = [AdminResetRequestRateThrottle]
+
+    def post(self, request):
+        email = (request.data.get("email") or "").strip().lower()
+        generic_response = Response(
+            {
+                "message": "If that email belongs to an admin account, the Super "
+                "Admin has been notified and will reset your password."
+            }
+        )
+        if not email:
+            return Response(
+                {"error": "email is required."}, status=status.HTTP_400_BAD_REQUEST
+            )
+
+        target_user = UserAccount.objects.filter(
+            email__iexact=email, role="admin"
+        ).first()
+        if not target_user:
+            return generic_response
+
+        existing = AdminPasswordResetRequest.objects.filter(
+            user=target_user, status=AdminPasswordResetRequest.STATUS_PENDING
+        ).first()
+        if not existing:
+            AdminPasswordResetRequest.objects.create(user=target_user)
+            record_audit_event(
+                action="users.admin_password_reset_requested",
+                user=None,
+                request=request,
+                details={
+                    "target_user_id": str(target_user.user_id),
+                    "target_email": target_user.email,
+                },
+            )
+        return generic_response
+
+
+class AdminPasswordResetRequestViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    /api/users/admin-password-reset-requests/ — Super Admin only. Lists
+    pending requests and resolves them by setting the target admin's
+    password (same effect as AdminPasswordResetView's reset, plus marking
+    the request resolved).
+    """
+
+    queryset = AdminPasswordResetRequest.objects.select_related("user").filter(
+        status=AdminPasswordResetRequest.STATUS_PENDING
+    )
+    serializer_class = AdminPasswordResetRequestSerializer
+    permission_classes = [IsSaasAdmin]
+    pagination_class = None
+
+    @action(detail=True, methods=["post"])
+    def resolve(self, request, pk=None):
+        from django.utils import timezone
+
+        reset_request = get_object_or_404(
+            AdminPasswordResetRequest, pk=pk, status=AdminPasswordResetRequest.STATUS_PENDING
+        )
+        new_password = request.data.get("new_password")
+        if not new_password:
+            return Response(
+                {"error": "new_password is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        target_user = reset_request.user
+        with transaction.atomic():
+            target_user.set_password(new_password)
+            target_user.is_active = True
+            target_user.failed_login_attempts = 0
+            target_user.locked_until = None
+            target_user.save(
+                update_fields=[
+                    "password",
+                    "is_active",
+                    "failed_login_attempts",
+                    "locked_until",
+                ]
+            )
+            reset_request.status = AdminPasswordResetRequest.STATUS_RESOLVED
+            reset_request.resolved_at = timezone.now()
+            reset_request.resolved_by = request.user
+            reset_request.save(
+                update_fields=["status", "resolved_at", "resolved_by"]
+            )
+            record_audit_event(
+                action="users.admin_password_reset_resolved",
+                user=request.user,
+                request=request,
+                details={
+                    "target_user_id": str(target_user.user_id),
+                    "target_email": target_user.email,
+                },
+            )
+        return Response({"message": "Password reset successfully."})
+
+    @action(detail=False, methods=["get"], url_path="admins")
+    def admins(self, request):
+        """List role='admin' accounts so Super Admin can pick one to reset
+        directly, without needing a pending request first."""
+        accounts = UserAccount.objects.filter(role="admin").order_by("email")
+        return Response(
+            [
+                {
+                    "user_id": str(a.user_id),
+                    "email": a.email,
+                    "first_name": a.first_name,
+                    "last_name": a.last_name,
+                    "is_active": a.is_active,
+                }
+                for a in accounts
+            ]
+        )
+
+    @action(detail=False, methods=["post"], url_path="direct-reset")
+    def direct_reset(self, request):
+        """Reset a school admin's password directly — no pending request
+        needed. Same effect as resolve(), just triggered proactively."""
+        from django.utils import timezone
+
+        user_id = request.data.get("user_id")
+        new_password = request.data.get("new_password")
+        if not user_id or not new_password:
+            return Response(
+                {"error": "user_id and new_password are required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        target_user = get_object_or_404(UserAccount, pk=user_id, role="admin")
+        with transaction.atomic():
+            target_user.set_password(new_password)
+            target_user.is_active = True
+            target_user.failed_login_attempts = 0
+            target_user.locked_until = None
+            target_user.save(
+                update_fields=[
+                    "password",
+                    "is_active",
+                    "failed_login_attempts",
+                    "locked_until",
+                ]
+            )
+            AdminPasswordResetRequest.objects.filter(
+                user=target_user, status=AdminPasswordResetRequest.STATUS_PENDING
+            ).update(
+                status=AdminPasswordResetRequest.STATUS_RESOLVED,
+                resolved_at=timezone.now(),
+                resolved_by=request.user,
+            )
+            record_audit_event(
+                action="users.admin_password_reset_resolved",
+                user=request.user,
+                request=request,
+                details={
+                    "target_user_id": str(target_user.user_id),
+                    "target_email": target_user.email,
+                    "trigger": "direct",
+                },
+            )
+        return Response({"message": "Password reset successfully."})
 
 
 # User Registration View

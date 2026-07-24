@@ -108,7 +108,7 @@ export default function VerifyEmailPage() {
                         <MailCheck className="h-6 w-6 text-indigo-600" /> Verify Email
                     </CardTitle>
                     <CardDescription>
-                        Confirming your SaaS admin account email address.
+                        Confirming your Super Admin account email address.
                     </CardDescription>
                 </CardHeader>
                 <CardContent>

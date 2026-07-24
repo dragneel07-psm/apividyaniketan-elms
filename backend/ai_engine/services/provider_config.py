@@ -155,7 +155,11 @@ def get_ai_provider_config() -> Dict[str, Any]:
         )
         model = db_model or env_model
         enabled = bool(settings_obj.ai_enabled)
-        source = "saas_settings"
+        # Only claim "saas_settings" if the key actually came from the DB —
+        # a GlobalSettings row existing with an empty ai_api_key still falls
+        # back to the .env value, and reporting "saas_settings" in that case
+        # sends anyone debugging a bad key to check the wrong place.
+        source = "saas_settings" if db_key else "environment"
     else:
         api_key = env_key
         provider_name, base_url = resolve_provider_and_base_url(

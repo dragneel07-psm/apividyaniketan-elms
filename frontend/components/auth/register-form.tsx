@@ -90,7 +90,7 @@ export function RegisterForm() {
                             <Sparkles className="w-6 h-6 text-purple-400" />
                         </motion.div>
                         <h1 className="text-3xl font-bold tracking-tight text-white bg-clip-text text-transparent bg-gradient-to-br from-white to-white/70">
-                            SaaS Admin
+                            Super Admin
                         </h1>
                         <p className="text-slate-400 text-sm tracking-wide">
                             Register as a platform administrator

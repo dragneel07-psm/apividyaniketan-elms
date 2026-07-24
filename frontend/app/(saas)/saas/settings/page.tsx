@@ -214,7 +214,7 @@ export default function SystemSettingsPage() {
                                 <CardTitle className="text-xl text-slate-900 dark:text-white">AI Provider Configuration</CardTitle>
                             </div>
                             <CardDescription className="text-slate-500 dark:text-slate-400">
-                                Configure the AI provider once from SaaS Admin and reuse it across all AI features.
+                                Configure the AI provider once from Super Admin and reuse it across all AI features.
                             </CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-6 p-6">

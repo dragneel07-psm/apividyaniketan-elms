@@ -54,7 +54,7 @@ export function SystemConfigDialog({ open, onOpenChange }: SystemConfigDialogPro
                         System Configuration
                     </DialogTitle>
                     <DialogDescription>
-                        Review school-level configuration. Platform-wide settings are managed from the SaaS admin portal.
+                        Review school-level configuration. Platform-wide settings are managed from the Super Admin portal.
                     </DialogDescription>
                 </DialogHeader>
 

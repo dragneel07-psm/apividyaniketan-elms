@@ -53,7 +53,7 @@ export default function RegisterPage() {
                                 Access by Invitation Only
                             </h1>
                             <p className="text-slate-400 text-sm leading-relaxed">
-                                SaaS admin accounts are provisioned by platform operators —
+                                Super Admin accounts are provisioned by platform operators —
                                 self-registration is disabled for security reasons.
                             </p>
                         </div>

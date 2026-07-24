@@ -100,7 +100,7 @@ export function SaasLoginForm() {
         } else {
             router.replace('/saas');
         }
-        toast.success('Welcome back! Signed in to SaaS Admin.');
+        toast.success('Welcome back! Signed in to Super Admin.');
     }
 
     // ── Step 1: email + password ──────────────────────────────────────────

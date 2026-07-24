@@ -78,6 +78,17 @@ class IsAdminOrSaaSAdmin(permissions.BasePermission):
         )
 
 
+class IsSaasAdmin(permissions.BasePermission):
+    """Platform super admin only — used for SaaS Staff Management."""
+
+    def has_permission(self, request, view):
+        return bool(
+            request.user
+            and request.user.is_authenticated
+            and request.user.role == "saas_admin"
+        )
+
+
 class IsSISStaff(permissions.BasePermission):
     """
     Student Information System access: admin, or any staff user whose

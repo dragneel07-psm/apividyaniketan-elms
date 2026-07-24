@@ -17,7 +17,7 @@ from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
-from core.permissions import IsAdminOrStaff
+from core.permissions import IsAdminOrStaff, IsPlatformSettingsAdmin
 
 from .models import AuditLog, ContactMessage, GlobalSettings, SchoolProfile
 from .serializers import AuditLogSerializer, GlobalSettingsSerializer
@@ -318,7 +318,7 @@ class GlobalSettingsViewSet(viewsets.ViewSet):
     The 'create' or 'update' action (POST/PUT) updates that single instance.
     """
 
-    permission_classes = [IsAdminOrStaff]
+    permission_classes = [IsPlatformSettingsAdmin]
 
     @staticmethod
     def _snapshot(settings_obj):
@@ -467,6 +467,122 @@ class GlobalSettingsViewSet(viewsets.ViewSet):
                 "completion_tokens": (
                     getattr(usage, "completion_tokens", 0) if usage else 0
                 ),
+            }
+        )
+
+
+class SaasAIUsageView(APIView):
+    """
+    GET /api/core/saas-ai-usage/
+
+    AI provider config plus token/cost usage summary, aggregated from
+    AIInteractionLog. Single-tenant: there is only one school in this
+    deployment, so this reports usage for the whole platform (= this school).
+    """
+
+    permission_classes = [IsPlatformSettingsAdmin]
+
+    def get(self, request):
+        from datetime import timedelta
+
+        from django.db.models import Count, Sum
+        from django.db.models.functions import TruncDate
+
+        from ai_engine.models import AIInteractionLog
+        from ai_engine.services.provider_config import get_ai_provider_config
+
+        provider_config = get_ai_provider_config()
+        provider = {
+            "name": provider_config["provider_name"],
+            "base_url": provider_config["base_url"],
+            "model": provider_config["model"],
+            "configured": provider_config["configured"],
+            "enabled": provider_config["enabled"],
+            "source": provider_config["source"],
+            "api_key_masked": provider_config["api_key_masked"],
+        }
+
+        qs = AIInteractionLog.objects.all()
+        totals = qs.aggregate(
+            total_tokens=Sum("total_tokens"),
+            total_prompt_tokens=Sum("prompt_tokens"),
+            total_completion_tokens=Sum("completion_tokens"),
+            total_requests=Count("log_id"),
+            cost_estimate=Sum("cost_estimated"),
+        )
+        total_tokens = totals["total_tokens"] or 0
+        total_requests = totals["total_requests"] or 0
+        cost_estimate = float(totals["cost_estimate"] or 0)
+        avg_tokens_per_request = (total_tokens / total_requests) if total_requests else 0
+        avg_cost_per_1k_tokens = (
+            (cost_estimate / total_tokens * 1000) if total_tokens else 0
+        )
+
+        by_feature = (
+            qs.values("feature_used")
+            .annotate(
+                tokens=Sum("total_tokens"),
+                prompt_tokens=Sum("prompt_tokens"),
+                completion_tokens=Sum("completion_tokens"),
+                requests=Count("log_id"),
+                cost_estimate=Sum("cost_estimated"),
+            )
+            .order_by("-tokens")
+        )
+        usage_by_feature = [
+            {
+                "feature": row["feature_used"] or "unknown",
+                "tokens": row["tokens"] or 0,
+                "prompt_tokens": row["prompt_tokens"] or 0,
+                "completion_tokens": row["completion_tokens"] or 0,
+                "requests": row["requests"] or 0,
+                "cost_estimate": float(row["cost_estimate"] or 0),
+                "percentage": (
+                    round((row["tokens"] or 0) / total_tokens * 100, 2)
+                    if total_tokens
+                    else 0
+                ),
+            }
+            for row in by_feature
+        ]
+
+        since = timezone.now().date() - timedelta(days=6)
+        daily_rows = (
+            qs.filter(timestamp__date__gte=since)
+            .annotate(day=TruncDate("timestamp"))
+            .values("day")
+            .annotate(
+                tokens=Sum("total_tokens"),
+                requests=Count("log_id"),
+                cost_estimate=Sum("cost_estimated"),
+            )
+        )
+        daily_by_date = {row["day"]: row for row in daily_rows}
+        daily_usage_last_7_days = []
+        for i in range(6, -1, -1):
+            day = timezone.now().date() - timedelta(days=i)
+            row = daily_by_date.get(day)
+            daily_usage_last_7_days.append(
+                {
+                    "date": str(day),
+                    "tokens": (row["tokens"] or 0) if row else 0,
+                    "requests": (row["requests"] or 0) if row else 0,
+                    "cost_estimate": float(row["cost_estimate"] or 0) if row else 0,
+                }
+            )
+
+        return Response(
+            {
+                "provider": provider,
+                "total_tokens": total_tokens,
+                "total_prompt_tokens": totals["total_prompt_tokens"] or 0,
+                "total_completion_tokens": totals["total_completion_tokens"] or 0,
+                "total_requests": total_requests,
+                "cost_estimate": cost_estimate,
+                "avg_cost_per_1k_tokens": avg_cost_per_1k_tokens,
+                "avg_tokens_per_request": avg_tokens_per_request,
+                "usage_by_feature": usage_by_feature,
+                "daily_usage_last_7_days": daily_usage_last_7_days,
             }
         )
 

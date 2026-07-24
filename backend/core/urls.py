@@ -12,6 +12,7 @@ from .views import (
     JobStatusView,
     MetricsView,
     ReadyzView,
+    SaasAIUsageView,
     SchoolProfileView,
     SystemStatusView,
     TenantCapabilitiesView,
@@ -35,4 +36,5 @@ urlpatterns = [
     path("school-public-info/", SchoolPublicInfoView.as_view(), name="school-public-info"),
     path("capabilities/", TenantCapabilitiesView.as_view(), name="tenant-capabilities"),
     path("school-profile/", SchoolProfileView.as_view(), name="school-profile"),
+    path("saas-ai-usage/", SaasAIUsageView.as_view(), name="saas-ai-usage"),
 ]

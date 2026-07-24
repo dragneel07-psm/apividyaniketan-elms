@@ -22,7 +22,7 @@ class AIInteractionLog(models.Model):
     timestamp = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"{self.tenant.name} - {self.feature_used}"
+        return f"{self.user} - {self.feature_used}"
 
 
 class StudentAIReport(models.Model):

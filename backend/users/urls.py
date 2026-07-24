@@ -5,6 +5,8 @@ from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
 from .views import (
+    AdminPasswordResetRequestCreateView,
+    AdminPasswordResetRequestViewSet,
     AdminPasswordResetView,
     CustomTokenObtainPairView,
     CustomTokenRefreshView,
@@ -13,6 +15,7 @@ from .views import (
     PasswordResetConfirmView,
     PasswordResetView,
     PermissionViewSet,
+    SaasStaffViewSet,
     UserAccountViewSet,
     WebSocketTicketView,
     register_user,
@@ -22,8 +25,23 @@ router = DefaultRouter()
 router.register(r"accounts", UserAccountViewSet)
 router.register(r"groups", GroupViewSet)
 router.register(r"permissions", PermissionViewSet)
+router.register(r"saas-staff", SaasStaffViewSet, basename="saas-staff")
+router.register(
+    r"admin-password-reset-requests",
+    AdminPasswordResetRequestViewSet,
+    basename="admin-password-reset-requests",
+)
 
 urlpatterns = [
+    # Must precede the router include: without this, Django would match
+    # "admin-password-reset-requests/create/" against the router's
+    # "admin-password-reset-requests/<pk>/" detail route (pk="create") and
+    # 405 on POST instead of ever reaching this view.
+    path(
+        "admin-password-reset-requests/create/",
+        AdminPasswordResetRequestCreateView.as_view(),
+        name="admin-password-reset-request-create",
+    ),
     path("", include(router.urls)),
     path("register/", register_user, name="register"),
     path("login/", CustomTokenObtainPairView.as_view(), name="token_obtain_pair"),

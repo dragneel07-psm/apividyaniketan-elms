@@ -81,3 +81,42 @@ class UserAccount(AbstractUser):
                 fields=["is_active"], name="users_tenant_active_idx"
             ),
         ]
+
+
+class AdminPasswordResetRequest(models.Model):
+    """
+    A school admin locked out of their account (e.g. after failed logins)
+    can flag this from the login screen without being authenticated. Super
+    Admin sees pending requests and resets the password from there — there's
+    no other path back in if the admin has no working recovery email.
+    """
+
+    STATUS_PENDING = "pending"
+    STATUS_RESOLVED = "resolved"
+    STATUS_CHOICES = (
+        (STATUS_PENDING, "Pending"),
+        (STATUS_RESOLVED, "Resolved"),
+    )
+
+    request_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(
+        "UserAccount", on_delete=models.CASCADE, related_name="password_reset_requests"
+    )
+    status = models.CharField(
+        max_length=20, choices=STATUS_CHOICES, default=STATUS_PENDING
+    )
+    requested_at = models.DateTimeField(auto_now_add=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+    resolved_by = models.ForeignKey(
+        "UserAccount",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="resolved_password_reset_requests",
+    )
+
+    class Meta:
+        ordering = ["-requested_at"]
+
+    def __str__(self):
+        return f"{self.user.email} ({self.status})"

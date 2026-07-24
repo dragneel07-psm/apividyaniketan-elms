@@ -18,7 +18,6 @@ import {
     Bell,
     BookOpen,
     Bot,
-    Building2,
     Calendar,
     ClipboardList,
     CreditCard,
@@ -104,15 +103,11 @@ const NAV_BY_ROLE: Record<string, PaletteItem[]> = {
     ],
     saas_admin: [
         { label: 'Dashboard', href: '/saas', icon: LayoutDashboard },
-        { label: 'Schools', href: '/saas/schools', icon: Building2, keywords: 'tenants' },
-        { label: 'Plans', href: '/saas/plans', icon: CreditCard, keywords: 'pricing subscriptions' },
-        { label: 'Billing', href: '/saas/billing', icon: CreditCard },
-        { label: 'Growth', href: '/saas/growth', icon: BarChart3 },
-        { label: 'Platform Health', href: '/saas/health', icon: BarChart3, keywords: 'status monitoring' },
-        { label: 'AI Settings', href: '/saas/ai', icon: Bot, keywords: 'provider openai' },
+        { label: 'AI Usage', href: '/saas/ai', icon: Bot, keywords: 'provider openai tokens cost' },
         { label: 'Staff', href: '/saas/staff', icon: Users },
         { label: 'Audit Log', href: '/saas/audit', icon: ClipboardList },
         { label: 'Settings', href: '/saas/settings', icon: Settings },
+        { label: 'Profile & Security', href: '/saas/profile', icon: Users },
     ],
 };
 // Aliases: staff share the admin portal, saas_staff the saas portal

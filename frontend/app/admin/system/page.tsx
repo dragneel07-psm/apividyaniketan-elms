@@ -97,7 +97,7 @@ export default function SystemAdminDashboard() {
     }, []);
 
     const handleMaintenanceToggle = () => {
-        toast.info('Platform maintenance mode is managed from the SaaS admin portal.');
+        toast.info('Platform maintenance mode is managed from the Super Admin portal.');
     };
 
     return (
@@ -213,7 +213,7 @@ export default function SystemAdminDashboard() {
                                 />
                             </div>
                             <p className="text-xs text-muted-foreground">
-                                Feature flags are plan-controlled. Platform maintenance mode is managed only from the SaaS admin portal.
+                                Feature flags are plan-controlled. Platform maintenance mode is managed only from the Super Admin portal.
                             </p>
                         </CardContent>
                     </Card>
@@ -224,13 +224,8 @@ export default function SystemAdminDashboard() {
                         </CardHeader>
                         <CardContent className="space-y-2">
                             <Link href="/admin/system/groups">
-                                <Button variant="outline" className="w-full justify-start mb-2">
-                                    <Shield className="mr-2 h-4 w-4" /> Manage Groups & Permissions
-                                </Button>
-                            </Link>
-                            <Link href="/admin/system/tenants">
                                 <Button variant="outline" className="w-full justify-start">
-                                    <Server className="mr-2 h-4 w-4" /> Tenant Configurations
+                                    <Shield className="mr-2 h-4 w-4" /> Manage Groups & Permissions
                                 </Button>
                             </Link>
                         </CardContent>

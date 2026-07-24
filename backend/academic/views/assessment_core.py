@@ -132,7 +132,12 @@ class AssessmentViewSet(
                 _teacher_assessment_visibility_q(self.request.user)
             ).distinct()
 
-        return queryset
+        # Assessment has no Meta.ordering, and Postgres doesn't guarantee row
+        # order across separate paginated queries without one — fetchAllPages
+        # on the frontend fetches remaining pages in parallel, so an unstable
+        # order let the same row land on two different pages (duplicate React
+        # keys). assessment_id is a stable, always-present tiebreaker.
+        return queryset.order_by("-scheduled_at", "assessment_id")
 
     def perform_create(self, serializer):
         academic_year = (

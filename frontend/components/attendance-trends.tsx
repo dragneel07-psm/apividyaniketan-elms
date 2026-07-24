@@ -18,34 +18,6 @@ interface AttendanceTrendData {
     rate: number;
 }
 
-type ListResponse<T> = T[] | { results?: T[] };
-
-interface AttendanceRecord {
-    student: string;
-    status: string;
-    date: string;
-}
-
-interface StudentRecord {
-    id?: string;
-    student_id?: string;
-}
-
-function asArray<T>(payload: ListResponse<T> | null | undefined): T[] {
-    if (Array.isArray(payload)) return payload;
-    if (payload && Array.isArray(payload.results)) return payload.results;
-    return [];
-}
-
-function toDateKey(value: string): string {
-    const parsed = new Date(value);
-    if (Number.isNaN(parsed.getTime())) return '';
-    const y = parsed.getFullYear();
-    const m = String(parsed.getMonth() + 1).padStart(2, '0');
-    const d = String(parsed.getDate()).padStart(2, '0');
-    return `${y}-${m}-${d}`;
-}
-
 function toDisplayDate(dateKey: string): string {
     const parsed = new Date(`${dateKey}T00:00:00`);
     return parsed.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
@@ -63,46 +35,11 @@ export function AttendanceTrends({ sectionId }: { sectionId?: number }) {
         const loadData = async () => {
             setLoading(true);
             try {
-                const attendancePayload = await academicAPI.getAttendance() as ListResponse<AttendanceRecord>;
-                let records = asArray(attendancePayload);
-
-                if (sectionId) {
-                    const studentsPayload = await academicAPI.getStudents({ section_id: String(sectionId) }) as ListResponse<StudentRecord>;
-                    const sectionStudentIds = new Set(
-                        asArray(studentsPayload)
-                            .map((student) => String(student.id || student.student_id || ''))
-                            .filter(Boolean)
-                    );
-                    records = records.filter((item) => sectionStudentIds.has(String(item.student)));
-                }
-
-                const today = new Date();
-                const dayBuckets: Record<string, { presentLike: number; total: number }> = {};
-
-                for (let i = 14; i >= 0; i -= 1) {
-                    const day = new Date(today);
-                    day.setDate(today.getDate() - i);
-                    const key = toDateKey(day.toISOString());
-                    dayBuckets[key] = { presentLike: 0, total: 0 };
-                }
-
-                records.forEach((record) => {
-                    const key = toDateKey(record.date);
-                    if (!key || !dayBuckets[key]) return;
-                    dayBuckets[key].total += 1;
-                    if (record.status === 'present' || record.status === 'late') {
-                        dayBuckets[key].presentLike += 1;
-                    }
-                });
-
-                const computed = Object.keys(dayBuckets).map((key) => {
-                    const bucket = dayBuckets[key];
-                    const rate = bucket.total > 0 ? Number(((bucket.presentLike / bucket.total) * 100).toFixed(1)) : 0;
-                    return {
-                        date: toDisplayDate(key),
-                        rate,
-                    };
-                });
+                const trend = await academicAPI.getAttendanceTrend({ days: 15, sectionId });
+                const computed = trend.map((row) => ({
+                    date: toDisplayDate(row.date),
+                    rate: row.rate,
+                }));
 
                 const validRates = computed.filter((item) => item.rate > 0).map((item) => item.rate);
                 const avgRate = validRates.length > 0

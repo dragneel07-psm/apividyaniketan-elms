@@ -36,9 +36,9 @@ export default function SaasLayout({
                             <span className="absolute top-1.5 right-1.5 h-2 w-2 bg-red-500 rounded-full"></span>
                         </button>
                         <DashboardProfileMenu
-                            firstName="SaaS"
+                            firstName="Super"
                             lastName="Admin"
-                            roleLabel="SaaS Admin"
+                            roleLabel="Super Admin"
                             settingsHref="/saas/settings"
                             logoutHref="/saas-login"
                             showName={false}

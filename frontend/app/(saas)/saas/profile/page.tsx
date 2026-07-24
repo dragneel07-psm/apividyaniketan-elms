@@ -185,7 +185,7 @@ export default function SaasProfilePage() {
                 </div>
                 <div>
                     <h2 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">Profile & Security</h2>
-                    <p className="text-slate-500 dark:text-slate-400">Manage your SaaS admin account and platform profile.</p>
+                    <p className="text-slate-500 dark:text-slate-400">Manage your Super Admin account and platform profile.</p>
                 </div>
             </motion.div>
 
@@ -194,9 +194,9 @@ export default function SaasProfilePage() {
                     <div className="flex items-center justify-between">
                         <div className="space-y-1">
                             <CardTitle className="flex items-center gap-2"><User className="h-5 w-5 text-indigo-500" /> Account Profile</CardTitle>
-                            <CardDescription>Details for the currently logged-in SaaS admin.</CardDescription>
+                            <CardDescription>Details for the currently logged-in Super Admin.</CardDescription>
                         </div>
-                        <Badge variant="outline" className="uppercase">{'saas_admin'}</Badge>
+                        <Badge variant="outline" className="uppercase">{'Super Admin'}</Badge>
                     </div>
                 </CardHeader>
                 <CardContent className="grid gap-4 md:grid-cols-2">
@@ -264,7 +264,7 @@ export default function SaasProfilePage() {
             <Card className="bg-white dark:bg-[#111114] border-slate-200 dark:border-white/10 shadow-xl dark:shadow-none">
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2"><Shield className="h-5 w-5 text-amber-500" /> Security</CardTitle>
-                    <CardDescription>Change your own SaaS admin password.</CardDescription>
+                    <CardDescription>Change your own Super Admin password.</CardDescription>
                 </CardHeader>
                 <CardContent className="grid gap-4 md:grid-cols-3">
                     <div className="space-y-2">

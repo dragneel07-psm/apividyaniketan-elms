@@ -82,7 +82,7 @@ export default function SettingsPage() {
                 localStorage.setItem('school_admin_language', settings.default_language);
             }
             toast.success('Language preference saved for this browser.');
-            toast.info('Platform-wide settings are managed from the SaaS admin portal.');
+            toast.info('Platform-wide settings are managed from the Super Admin portal.');
         } catch (error) {
             console.error(error);
             toast.error('Failed to save settings');
@@ -173,7 +173,7 @@ export default function SettingsPage() {
                                 </div>
                             </div>
                             <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
-                                School name, tenant provisioning, and platform branding are managed from the SaaS admin portal.
+                                School name, tenant provisioning, and platform branding are managed from the Super Admin portal.
                             </div>
                         </CardContent>
                     </Card>
@@ -203,7 +203,7 @@ export default function SettingsPage() {
                                 <div className="space-y-0.5">
                                     <Label className="text-base text-amber-900">Maintenance Mode</Label>
                                     <p className="text-sm text-amber-700">
-                                        Platform maintenance mode is managed by the SaaS administrator.
+                                        Platform maintenance mode is managed by the Super Admin.
                                     </p>
                                 </div>
                                 <Switch
@@ -230,7 +230,7 @@ export default function SettingsPage() {
                                 School operational dashboards are available from the main admin dashboard.
                             </div>
                             <div>
-                                Global infrastructure settings are available only from the SaaS admin portal.
+                                Global infrastructure settings are available only from the Super Admin portal.
                             </div>
                         </CardContent>
                     </Card>

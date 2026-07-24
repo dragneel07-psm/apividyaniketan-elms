@@ -945,8 +945,6 @@ export interface SaasAIUsageResponse {
     cost_estimate: number;
     avg_cost_per_1k_tokens: number;
     avg_tokens_per_request: number;
-    active_tenants: number;
-    total_tenants: number;
     usage_by_feature: Array<{
         feature: string;
         tokens: number;
@@ -956,28 +954,11 @@ export interface SaasAIUsageResponse {
         cost_estimate: number;
         percentage: number;
     }>;
-    top_tenants: Array<{
-        tenant_id: string;
-        tenant_name: string;
-        tokens: number;
-        prompt_tokens: number;
-        completion_tokens: number;
-        requests: number;
-        cost_estimate: number;
-        avg_tokens_per_request: number;
-        last_activity: string | null;
-    }>;
     daily_usage_last_7_days: Array<{
         date: string;
         tokens: number;
         requests: number;
         cost_estimate: number;
-    }>;
-    tenant_errors: Array<{
-        tenant_id?: string;
-        tenant_name?: string;
-        schema_name?: string;
-        error: string;
     }>;
 }
 
@@ -1121,8 +1102,7 @@ export interface AdmissionFaq extends SiteContentBase {
 
 function contentCrudAPI<T extends { id: number }>(basePath: string) {
     return {
-        list: async (): Promise<T[]> =>
-            normalizeArrayPayload(await apiRequest<T[] | PaginatedResponse<T>>(basePath)),
+        list: async (): Promise<T[]> => fetchAllPages<T>(basePath),
         create: (data: FormData | Partial<T>) => apiRequest<T>(basePath, {
             method: 'POST',
             body: data instanceof FormData ? data : JSON.stringify(data),
@@ -1235,9 +1215,9 @@ export async function fetchCount(endpoint: string): Promise<number> {
     return typeof page?.count === 'number' ? page.count : 0;
 }
 
-async function fetchAllPages<T>(endpoint: string): Promise<T[]> {
+async function fetchAllPages<T>(endpoint: string, options?: ApiRequestOptions): Promise<T[]> {
     const sep = endpoint.includes('?') ? '&' : '?';
-    const firstPage = await apiRequest<T[] | PaginatedResponse<T>>(endpoint);
+    const firstPage = await apiRequest<T[] | PaginatedResponse<T>>(endpoint, options);
     if (Array.isArray(firstPage)) return firstPage;
     if (!firstPage || !Array.isArray(firstPage.results)) return [];
 
@@ -1254,7 +1234,7 @@ async function fetchAllPages<T>(endpoint: string): Promise<T[]> {
     const totalPages = Math.ceil(totalCount / pageSize);
     const remainingPages = await Promise.all(
         Array.from({ length: totalPages - 1 }, (_, i) =>
-            apiRequest<T[] | PaginatedResponse<T>>(`${endpoint}${sep}page=${i + 2}`)
+            apiRequest<T[] | PaginatedResponse<T>>(`${endpoint}${sep}page=${i + 2}`, options)
         )
     );
 
@@ -2080,48 +2060,6 @@ async function apiRequestBlob(
 
 // Core API
 export const coreAPI = {
-    getTenants: async () => {
-        const firstPage = await apiRequest<Tenant[] | PaginatedResponse<Tenant>>('/core/tenants/');
-        if (Array.isArray(firstPage)) return firstPage;
-        if (!firstPage || !Array.isArray(firstPage.results)) return [];
-
-        const all = [...firstPage.results];
-        const totalCount = typeof firstPage.count === 'number' ? firstPage.count : all.length;
-        let page = 2;
-        let hasMore = Boolean(firstPage.next);
-
-        while (hasMore && all.length < totalCount) {
-            const nextPage = await apiRequest<Tenant[] | PaginatedResponse<Tenant>>(`/core/tenants/?page=${page}`);
-            if (Array.isArray(nextPage)) {
-                all.push(...nextPage);
-                break;
-            }
-            const batch = Array.isArray(nextPage?.results) ? nextPage.results : [];
-            if (batch.length === 0) break;
-            all.push(...batch);
-            hasMore = Boolean(nextPage?.next);
-            page += 1;
-        }
-
-        return all;
-    },
-    getTenant: (id: string) => apiRequest<Tenant>(`/core/tenants/${id}/`),
-    createTenant: (data: Partial<Tenant>) => apiRequest<Tenant>('/core/tenants/', {
-        method: 'POST',
-        body: JSON.stringify(data)
-    }),
-    updateTenant: (id: string, data: Partial<Tenant>) => apiRequest<Tenant>(`/core/tenants/${id}/`, {
-        method: 'PATCH',
-        body: JSON.stringify(data)
-    }),
-    uploadTenantLogo: (id: string, formData: FormData) => apiRequest<Tenant>(`/core/tenants/${id}/`, {
-        method: 'PATCH',
-        body: formData
-    }),
-    deleteTenant: (id: string, password: string) => apiRequest<void>(`/core/tenants/${id}/`, {
-        method: 'DELETE',
-        body: JSON.stringify({ password }),
-    }),
     getAuditLogs: async () => {
         const firstPage = await apiRequest<AuditLog[] | PaginatedResponse<AuditLog>>('/core/audit-logs/');
         if (Array.isArray(firstPage)) return firstPage;
@@ -2155,6 +2093,13 @@ let inFlightMeRequest: Promise<User> | null = null;
 let lastMeSnapshot: { value: User; timestamp: number } | null = null;
 
 export const usersAPI = {
+    // Unauthenticated by design — used from the login failure state when a
+    // school admin can't get in. Always resolves with a generic message.
+    requestAdminPasswordReset: (email: string) =>
+        apiRequest<{ message: string }>('/users/admin-password-reset-requests/create/', {
+            method: 'POST',
+            body: JSON.stringify({ email }),
+        }),
     getAccounts: async (tenantId?: string) => {
         const tenantHeaders = tenantId ? { 'x-tenant-id': tenantId } : undefined;
         const firstPage = await apiRequest<User[] | PaginatedResponse<User>>('/users/accounts/', {
@@ -2260,8 +2205,7 @@ export const usersAPI = {
 export const academicAPI = {
     // Academic Years
     getAcademicYears: async () => {
-        const payload = await apiRequest<AcademicYear[] | PaginatedResponse<AcademicYear>>('/academic/years/');
-        return normalizeArrayPayload(payload);
+        return fetchAllPages<AcademicYear>('/academic/years/');
     },
     getCurrentAcademicYear: () => apiRequest<AcademicYear>('/academic/years/current/'),
     getAcademicYear: (id: number) => apiRequest<AcademicYear>(`/academic/years/${id}/`),
@@ -2293,19 +2237,13 @@ export const academicAPI = {
         }),
 
     // Nepal-standard examination and result processing
-    getGradingProfiles: async () => normalizeArrayPayload(
-        await apiRequest<NepalGradingProfile[] | PaginatedResponse<NepalGradingProfile>>('/academic/grading-profiles/')
-    ),
+    getGradingProfiles: async () => fetchAllPages<NepalGradingProfile>('/academic/grading-profiles/'),
     ensureNepal2081Profile: () => apiRequest<NepalGradingProfile>('/academic/grading-profiles/ensure-nepal-2081/', { method: 'POST' }),
-    getExamTerms: async () => normalizeArrayPayload(
-        await apiRequest<ExamTerm[] | PaginatedResponse<ExamTerm>>('/academic/exam-terms/')
-    ),
+    getExamTerms: async () => fetchAllPages<ExamTerm>('/academic/exam-terms/'),
     createExamTerm: (data: Partial<ExamTerm>) => apiRequest<ExamTerm>('/academic/exam-terms/', { method: 'POST', body: JSON.stringify(data) }),
     getExamTermReadiness: (id: string) => apiRequest<{ ready: boolean; subjects: Array<{ id: string; name: string; status: string; papers: number; marks: number }> }>(`/academic/exam-terms/${id}/readiness/`),
     publishExamTerm: (id: string) => apiRequest<{ detail: string; student_count: number }>(`/academic/exam-terms/${id}/publish/`, { method: 'POST' }),
-    getExamSubjects: async (termId?: string) => normalizeArrayPayload(
-        await apiRequest<ExamSubjectConfiguration[] | PaginatedResponse<ExamSubjectConfiguration>>(`/academic/exam-subjects/${termId ? `?term=${encodeURIComponent(termId)}` : ''}`)
-    ),
+    getExamSubjects: async (termId?: string) => fetchAllPages<ExamSubjectConfiguration>(`/academic/exam-subjects/${termId ? `?term=${encodeURIComponent(termId)}` : ''}`),
     createExamSubject: (data: Partial<ExamSubjectConfiguration>) => apiRequest<ExamSubjectConfiguration>('/academic/exam-subjects/', { method: 'POST', body: JSON.stringify(data) }),
     generateAnswerPaperCodes: (id: string) => apiRequest<{ generated: Array<{ paper_id: string; student_id: string; student_name: string; code: string }>; warning: string }>(`/academic/exam-subjects/${id}/generate-codes/`, { method: 'POST' }),
     submitExamMarks: (id: string) => apiRequest<ExamSubjectConfiguration>(`/academic/exam-subjects/${id}/submit-marks/`, { method: 'POST' }),
@@ -2313,15 +2251,12 @@ export const academicAPI = {
     reopenExamMarks: (id: string, reason: string) => apiRequest<ExamSubjectConfiguration>(`/academic/exam-subjects/${id}/reopen/`, { method: 'POST', body: JSON.stringify({ reason }) }),
     enterCodedMarks: (data: { code: string; theory_marks?: number; internal_marks?: number; practical_marks?: number; attendance_status?: string; examiner_remarks?: string; version?: number; reason?: string }) =>
         apiRequest<{ entry: { entry_id: string; version: number }; calculated: { grade: string; grade_point: number; status: string; percentage: number } }>('/academic/answer-papers/enter-marks/', { method: 'POST', body: JSON.stringify(data) }),
-    getTermResults: async () => normalizeArrayPayload(
-        await apiRequest<StudentTermResult[] | PaginatedResponse<StudentTermResult>>('/academic/term-results/')
-    ),
+    getTermResults: async () => fetchAllPages<StudentTermResult>('/academic/term-results/'),
     downloadTermMarksheet: (id: string, number: string) => downloadReport(`/academic/term-results/${id}/marksheet/`, `marksheet-${number}.pdf`),
 
     // Classes
     getClasses: async () => {
-        const payload = await apiRequest<AcademicClass[] | PaginatedResponse<AcademicClass>>('/academic/classes/');
-        return normalizeArrayPayload(payload);
+        return fetchAllPages<AcademicClass>('/academic/classes/');
     },
     getClass: (id: number) => apiRequest<AcademicClass>(`/academic/classes/${id}/`),
     createClass: (data: Partial<AcademicClass>) => apiRequest<AcademicClass>('/academic/classes/', {
@@ -2372,8 +2307,7 @@ export const academicAPI = {
 
     // Assessments
     getAssessments: async () => {
-        const payload = await apiRequest<Assessment[] | PaginatedResponse<Assessment>>('/academic/assessments/');
-        return normalizeArrayPayload(payload);
+        return fetchAllPages<Assessment>('/academic/assessments/');
     },
     getAssessment: (id: string) => apiRequest<Assessment>(`/academic/assessments/${id}/`),
     createAssessment: (data: Partial<Assessment>) => apiRequest<Assessment>('/academic/assessments/', {
@@ -2528,12 +2462,18 @@ export const academicAPI = {
 
     // Attendance
     getAttendance: async () => {
-        const payload = await apiRequest<Attendance[] | PaginatedResponse<Attendance>>('/academic/attendance/');
-        return normalizeArrayPayload(payload);
+        return fetchAllPages<Attendance>('/academic/attendance/');
     },
     getMyAttendance: async () => {
         const payload = await apiRequest<Attendance[] | PaginatedResponse<Attendance>>('/academic/attendance/my_attendance/');
         return normalizeArrayPayload(payload);
+    },
+    getAttendanceTrend: (params?: { days?: number; sectionId?: number }) => {
+        const q = new URLSearchParams();
+        if (params?.days) q.set('days', String(params.days));
+        if (params?.sectionId) q.set('section_id', String(params.sectionId));
+        const qs = q.toString();
+        return apiRequest<Array<{ date: string; rate: number }>>(`/academic/attendance/trend/${qs ? `?${qs}` : ''}`);
     },
     createAttendance: (data: Partial<Attendance>) => apiRequest<Attendance>('/academic/attendance/', {
         method: 'POST',
@@ -2560,8 +2500,7 @@ export const academicAPI = {
         if (params?.entry_type) search.set('entry_type', params.entry_type);
         const query = search.toString();
         const endpoint = `/academic/timetable/${query ? `?${query}` : ''}`;
-        const payload = await apiRequest<Timetable[] | PaginatedResponse<Timetable>>(endpoint);
-        return normalizeArrayPayload(payload);
+        return fetchAllPages<Timetable>(endpoint);
     },
     getMyTimetable: async () => {
         const payload = await apiRequest<Timetable[] | PaginatedResponse<Timetable>>('/academic/timetable/my_timetable/');
@@ -2714,8 +2653,7 @@ export const academicAPI = {
 
         const query = search.toString();
         const endpoint = `/academic/admissions/${query ? `?${query}` : ''}`;
-        const payload = await apiRequest<AdmissionEnquiry[] | PaginatedResponse<AdmissionEnquiry>>(endpoint);
-        return normalizeArrayPayload(payload);
+        return fetchAllPages<AdmissionEnquiry>(endpoint);
     },
     getAdmission: (id: string) => apiRequest<AdmissionEnquiry>(`/academic/admissions/${id}/`),
     createAdmission: (data: Partial<AdmissionEnquiry>) => apiRequest<AdmissionEnquiry>('/academic/admissions/', {
@@ -2754,8 +2692,8 @@ export const academicAPI = {
     // Chapters
     getChapters: async (subjectId?: number) => {
         const query = subjectId ? `?subject=${subjectId}` : '';
-        const payload = await apiRequest<Chapter[] | PaginatedResponse<Chapter>>(`/academic/chapters/${query}`);
-        return normalizeArrayPayload(payload).map((chapter) => ({
+        const chapters = await fetchAllPages<Chapter>(`/academic/chapters/${query}`);
+        return chapters.map((chapter) => ({
             ...chapter,
             lessons: Array.isArray(chapter.lessons) ? chapter.lessons : [],
         }));
@@ -2783,8 +2721,7 @@ export const academicAPI = {
         if (chapterId) params.append('chapter', chapterId.toString());
         if (subjectId) params.append('subject', subjectId.toString());
         const query = params.toString() ? `?${params.toString()}` : '';
-        const payload = await apiRequest<Lesson[] | PaginatedResponse<Lesson>>(`/academic/lessons/${query}`);
-        return normalizeArrayPayload(payload);
+        return fetchAllPages<Lesson>(`/academic/lessons/${query}`);
     },
     getLesson: (id: number) => apiRequest<Lesson>(`/academic/lessons/${id}/`),
     createLesson: (data: Partial<Lesson>) => apiRequest<Lesson>('/academic/lessons/', {
@@ -2824,8 +2761,7 @@ export const academicAPI = {
     // Lesson Materials
     getMaterials: async (lessonId?: number) => {
         const query = lessonId ? `?lesson=${lessonId}` : '';
-        const payload = await apiRequest<LessonMaterial[] | PaginatedResponse<LessonMaterial>>(`/academic/materials/${query}`);
-        return normalizeArrayPayload(payload);
+        return fetchAllPages<LessonMaterial>(`/academic/materials/${query}`);
     },
     createMaterial: (data: FormData) => apiRequest<LessonMaterial>('/academic/materials/', {
         method: 'POST',
@@ -2846,8 +2782,7 @@ export const academicAPI = {
     // Results
     getResults: async (studentId?: string) => {
         const query = studentId ? `?student_id=${studentId}` : '';
-        const payload = await apiRequest<Result[] | PaginatedResponse<Result>>(`/academic/results/${query}`);
-        return normalizeArrayPayload(payload);
+        return fetchAllPages<Result>(`/academic/results/${query}`);
     },
     getResult: (id: string) => apiRequest<Result>(`/academic/results/${id}/`),
     createResult: (data: Partial<Result>) => apiRequest<Result>('/academic/results/', {
@@ -2865,8 +2800,7 @@ export const academicAPI = {
     // Submissions
     getSubmissions: async (assessmentId?: string) => {
         const query = assessmentId ? `?assessment=${assessmentId}` : '';
-        const payload = await apiRequest<Submission[] | PaginatedResponse<Submission>>(`/academic/submissions/${query}`);
-        return normalizeArrayPayload(payload);
+        return fetchAllPages<Submission>(`/academic/submissions/${query}`);
     },
     getSubmission: (id: string) => apiRequest<Submission>(`/academic/submissions/${id}/`),
     createSubmission: (data: Partial<Submission>) => apiRequest<Submission>('/academic/submissions/', {
@@ -2893,12 +2827,10 @@ export const academicAPI = {
 
     // Questions
     getQuestions: async () => {
-        const payload = await apiRequest<Question[] | PaginatedResponse<Question>>('/academic/questions/');
-        return normalizeArrayPayload(payload);
+        return fetchAllPages<Question>('/academic/questions/');
     },
     getQuestionsByAssessment: (assessmentId: string) => {
-        return apiRequest<Question[] | PaginatedResponse<Question>>(`/academic/questions/?assessment=${assessmentId}`)
-            .then((payload) => normalizeArrayPayload(payload));
+        return fetchAllPages<Question>(`/academic/questions/?assessment=${assessmentId}`);
     },
     createQuestion: (data: Partial<Question>) => apiRequest<Question>('/academic/questions/', {
         method: 'POST',
@@ -2939,8 +2871,7 @@ export const academicAPI = {
 
     // Notices
     getNotices: async () => {
-        const payload = await apiRequest<Notice[] | PaginatedResponse<Notice>>('/academic/notices/');
-        return normalizeArrayPayload(payload);
+        return fetchAllPages<Notice>('/academic/notices/');
     },
     getNotice: (id: number) => apiRequest<Notice>(`/academic/notices/${id}/`),
     createNotice: (data: Partial<Notice>) => apiRequest<Notice>('/academic/notices/', {
@@ -2963,8 +2894,7 @@ export const academicAPI = {
 
     // Exams
     getExams: async () => {
-        const payload = await apiRequest<Exam[] | PaginatedResponse<Exam>>('/academic/exams/');
-        return normalizeArrayPayload(payload);
+        return fetchAllPages<Exam>('/academic/exams/');
     },
     getExam: (id: string) => apiRequest<Exam>(`/academic/exams/${id}/`),
     createExam: (data: Partial<Exam>) => apiRequest<Exam>('/academic/exams/', {
@@ -2983,8 +2913,7 @@ export const academicAPI = {
     }),
     getExamSeating: async (studentId?: string) => {
         const query = studentId ? `?student=${studentId}` : '';
-        const payload = await apiRequest<ExamSeating[] | PaginatedResponse<ExamSeating>>(`/academic/exam-seating/${query}`);
-        return normalizeArrayPayload(payload);
+        return fetchAllPages<ExamSeating>(`/academic/exam-seating/${query}`);
     },
 };
 
@@ -3146,8 +3075,7 @@ export const billingAPI = {
 export const libraryAPI = {
     // Books
     getBooks: async () => {
-        const payload = await apiRequest<Book[] | PaginatedResponse<Book>>('/library/books/');
-        return normalizeArrayPayload(payload);
+        return fetchAllPages<Book>('/library/books/');
     },
     getBook: (id: string) => apiRequest<Book>(`/library/books/${id}/`),
     createBook: (data: Partial<Book>) => apiRequest<Book>('/library/books/', {
@@ -3164,8 +3092,7 @@ export const libraryAPI = {
 
     // Book Issues
     getBookIssues: async () => {
-        const payload = await apiRequest<BookIssue[] | PaginatedResponse<BookIssue>>('/library/issues/');
-        return normalizeArrayPayload(payload);
+        return fetchAllPages<BookIssue>('/library/issues/');
     },
     getBookIssue: (id: string) => apiRequest<BookIssue>(`/library/issues/${id}/`),
     issueBook: (data: { book: string; student: string }) => apiRequest<BookIssue>('/library/issues/', {
@@ -3396,10 +3323,9 @@ export const aiAPI = {
 // Notifications API
 export const notificationsAPI = {
     getNotifications: async () => {
-        const payload = await apiRequest<Notification[] | PaginatedResponse<Notification>>('/notifications/notifications/', {
+        return fetchAllPages<Notification>('/notifications/notifications/', {
             skipAuthRedirectOn401: true,
         });
-        return normalizeArrayPayload(payload);
     },
     getUnreadCount: () =>
         apiRequest<{ count: number }>('/notifications/notifications/unread_count/', {
@@ -3418,8 +3344,7 @@ export const notificationsAPI = {
 // Conversations API
 export const conversationsAPI = {
     getConversations: async () => {
-        const payload = await apiRequest<Conversation[] | PaginatedResponse<Conversation>>('/conversations/conversations/');
-        return normalizeArrayPayload(payload);
+        return fetchAllPages<Conversation>('/conversations/conversations/');
     },
     getConversation: (id: string) => apiRequest<Conversation>(`/conversations/conversations/${id}/`),
     markAsRead: (id: string) => apiRequest<{ status: string }>(`/conversations/conversations/${id}/mark_as_read/`, {
@@ -3430,8 +3355,7 @@ export const conversationsAPI = {
         body: JSON.stringify({ user_id: userId })
     }),
     getMessages: async (conversationId: string) => {
-        const payload = await apiRequest<Message[] | PaginatedResponse<Message>>(`/conversations/messages/?conversation=${conversationId}`);
-        return normalizeArrayPayload(payload);
+        return fetchAllPages<Message>(`/conversations/messages/?conversation=${conversationId}`);
     },
     sendMessage: (conversationId: string, content: string) => apiRequest<Message>('/conversations/messages/', {
         method: 'POST',
@@ -3554,96 +3478,38 @@ export const helpers = {
     }
 };
 
+export interface AdminPasswordResetRequestItem {
+    request_id: string;
+    email: string;
+    first_name: string;
+    last_name: string;
+    status: 'pending' | 'resolved';
+    requested_at: string;
+    resolved_at: string | null;
+}
+
+// This app is single-tenant now (see core.mixins.TenantScopedQuerysetMixin) —
+// saasApi only covers what a platform Super Admin needs for that one school:
+// platform settings/AI config, AI usage & cost, the audit log, admin password
+// reset requests, and their own profile. getPublicPlans stays because the
+// public marketing site still shows pricing tiers independent of the
+// (removed) per-tenant billing model.
 export const saasApi = {
-    getTenants: () => coreAPI.getTenants(),
-    getTenant: (id: string) => coreAPI.getTenant(id),
-    createTenant: (data: Partial<Tenant>) => coreAPI.createTenant(data),
-    updateTenant: (id: string, data: Partial<Tenant>) => coreAPI.updateTenant(id, data),
-    deleteTenant: (id: string, password: string) => coreAPI.deleteTenant(id, password),
-    getInvoices: async () => {
-        const firstPage = await apiRequest<Invoice[] | PaginatedResponse<Invoice>>(`${BILLING_SAAS_BASE}/invoices/`);
-        if (Array.isArray(firstPage)) return firstPage;
-        if (!firstPage || !Array.isArray(firstPage.results)) return [];
-
-        const all = [...firstPage.results];
-        const totalCount = typeof firstPage.count === 'number' ? firstPage.count : all.length;
-        let page = 2;
-        let hasMore = Boolean(firstPage.next);
-
-        while (hasMore && all.length < totalCount) {
-            const nextPage = await apiRequest<Invoice[] | PaginatedResponse<Invoice>>(`${BILLING_SAAS_BASE}/invoices/?page=${page}`);
-            if (Array.isArray(nextPage)) {
-                all.push(...nextPage);
-                break;
-            }
-            const batch = Array.isArray(nextPage?.results) ? nextPage.results : [];
-            if (batch.length === 0) break;
-            all.push(...batch);
-            hasMore = Boolean(nextPage?.next);
-            page += 1;
-        }
-
-        return all;
-    },
-    getPlans: async () => {
-        const firstPage = await apiRequest<SubscriptionPlan[] | PaginatedResponse<SubscriptionPlan>>(`${BILLING_SAAS_BASE}/plans/`);
-        if (Array.isArray(firstPage)) return firstPage;
-        if (!firstPage || !Array.isArray(firstPage.results)) return [];
-
-        const all = [...firstPage.results];
-        const totalCount = typeof firstPage.count === 'number' ? firstPage.count : all.length;
-        let page = 2;
-        let hasMore = Boolean(firstPage.next);
-
-        while (hasMore && all.length < totalCount) {
-            const nextPage = await apiRequest<SubscriptionPlan[] | PaginatedResponse<SubscriptionPlan>>(`${BILLING_SAAS_BASE}/plans/?page=${page}`);
-            if (Array.isArray(nextPage)) {
-                all.push(...nextPage);
-                break;
-            }
-            const batch = Array.isArray(nextPage?.results) ? nextPage.results : [];
-            if (batch.length === 0) break;
-            all.push(...batch);
-            hasMore = Boolean(nextPage?.next);
-            page += 1;
-        }
-
-        return all;
-    },
-    getSubscriptions: async () => {
-        const firstPage = await apiRequest<Subscription[] | PaginatedResponse<Subscription>>(`${BILLING_SAAS_BASE}/subscriptions/`);
-        if (Array.isArray(firstPage)) return firstPage;
-        if (!firstPage || !Array.isArray(firstPage.results)) return [];
-
-        const all = [...firstPage.results];
-        const totalCount = typeof firstPage.count === 'number' ? firstPage.count : all.length;
-        let page = 2;
-        let hasMore = Boolean(firstPage.next);
-
-        while (hasMore && all.length < totalCount) {
-            const nextPage = await apiRequest<Subscription[] | PaginatedResponse<Subscription>>(`${BILLING_SAAS_BASE}/subscriptions/?page=${page}`);
-            if (Array.isArray(nextPage)) {
-                all.push(...nextPage);
-                break;
-            }
-            const batch = Array.isArray(nextPage?.results) ? nextPage.results : [];
-            if (batch.length === 0) break;
-            all.push(...batch);
-            hasMore = Boolean(nextPage?.next);
-            page += 1;
-        }
-
-        return all;
-    },
-    createSubscription: (data: Partial<Subscription>) =>
-        apiRequest<Subscription>(`${BILLING_SAAS_BASE}/subscriptions/`, {
+    getPendingPasswordResetRequests: () =>
+        apiRequest<AdminPasswordResetRequestItem[]>('/users/admin-password-reset-requests/'),
+    resolvePasswordResetRequest: (requestId: string, newPassword: string) =>
+        apiRequest<{ message: string }>(`/users/admin-password-reset-requests/${requestId}/resolve/`, {
             method: 'POST',
-            body: JSON.stringify(data),
+            body: JSON.stringify({ new_password: newPassword }),
         }),
-    updateSubscription: (id: string, data: Partial<Subscription>) =>
-        apiRequest<Subscription>(`${BILLING_SAAS_BASE}/subscriptions/${id}/`, {
-            method: 'PATCH',
-            body: JSON.stringify(data),
+    getSchoolAdmins: () =>
+        apiRequest<Array<{ user_id: string; email: string; first_name: string; last_name: string; is_active: boolean }>>(
+            '/users/admin-password-reset-requests/admins/'
+        ),
+    directResetAdminPassword: (userId: string, newPassword: string) =>
+        apiRequest<{ message: string }>('/users/admin-password-reset-requests/direct-reset/', {
+            method: 'POST',
+            body: JSON.stringify({ user_id: userId, new_password: newPassword }),
         }),
     getPublicPlans: async () => {
         const response = await fetch(`${API_BASE_URL}${BILLING_SAAS_BASE}/plans/public/`, {
@@ -3662,51 +3528,6 @@ export const saasApi = {
         if (data && Array.isArray(data.results)) return data.results as SubscriptionPlan[];
         return [];
     },
-    getSubscriptionHistoryByTenant: async (tenantId: string | number) => {
-        const firstPage = await apiRequest<SubscriptionPlanHistory[] | PaginatedResponse<SubscriptionPlanHistory>>(
-            `${BILLING_SAAS_BASE}/subscription-history/?tenant_id=${tenantId}`
-        );
-        if (Array.isArray(firstPage)) return firstPage;
-        if (!firstPage || !Array.isArray(firstPage.results)) return [];
-
-        const all = [...firstPage.results];
-        const totalCount = typeof firstPage.count === 'number' ? firstPage.count : all.length;
-        let page = 2;
-        let hasMore = Boolean(firstPage.next);
-
-        while (hasMore && all.length < totalCount) {
-            const nextPage = await apiRequest<SubscriptionPlanHistory[] | PaginatedResponse<SubscriptionPlanHistory>>(
-                `${BILLING_SAAS_BASE}/subscription-history/?tenant_id=${tenantId}&page=${page}`
-            );
-            if (Array.isArray(nextPage)) {
-                all.push(...nextPage);
-                break;
-            }
-            const batch = Array.isArray(nextPage?.results) ? nextPage.results : [];
-            if (batch.length === 0) break;
-            all.push(...batch);
-            hasMore = Boolean(nextPage?.next);
-            page += 1;
-        }
-
-        return all;
-    },
-    getPlan: (id: string) => apiRequest<SubscriptionPlan>(`${BILLING_SAAS_BASE}/plans/${id}/`),
-    createPlan: (data: Partial<SubscriptionPlan>) =>
-        apiRequest<SubscriptionPlan>(`${BILLING_SAAS_BASE}/plans/`, {
-            method: 'POST',
-            body: JSON.stringify(data),
-        }),
-    seedDefaultPlans: () =>
-        apiRequest<SeedDefaultPlansResponse>(`${BILLING_SAAS_BASE}/plans/seed-defaults/`, {
-            method: 'POST',
-        }),
-    updatePlan: (id: string, data: Partial<SubscriptionPlan>) =>
-        apiRequest<SubscriptionPlan>(`${BILLING_SAAS_BASE}/plans/${id}/`, {
-            method: 'PATCH',
-            body: JSON.stringify(data),
-        }),
-    deletePlan: (id: string) => apiRequest<void>(`${BILLING_SAAS_BASE}/plans/${id}/`, { method: 'DELETE' }),
     getSettings: () => apiRequest<GlobalSettings>('/core/settings/'),
     updateSettings: (data: Partial<GlobalSettings>) =>
         apiRequest<GlobalSettings>('/core/settings/', {
@@ -3729,83 +3550,8 @@ export const saasApi = {
         }),
     getAuditLogs: () => coreAPI.getAuditLogs(),
     getSystemStatus: () => coreAPI.getSystemStatus(),
-    getKPIs: () => apiRequest<{ kpis: any, revenue_trend: any[], tenant_activity: any[] }>('/core/saas-kpi/'),
     getAIUsage: () => apiRequest<SaasAIUsageResponse>('/core/saas-ai-usage/'),
-    getTenantUsers: async (tenantId: string | number) => {
-        const firstPage = await apiRequest<User[] | PaginatedResponse<User>>(`/core/tenants/${tenantId}/users/`);
-        if (Array.isArray(firstPage)) return firstPage;
-        if (!firstPage || !Array.isArray(firstPage.results)) return [];
-
-        const all = [...firstPage.results];
-        const totalCount = typeof firstPage.count === 'number' ? firstPage.count : all.length;
-        let page = 2;
-        let hasMore = Boolean(firstPage.next);
-
-        while (hasMore && all.length < totalCount) {
-            const nextPage = await apiRequest<User[] | PaginatedResponse<User>>(`/core/tenants/${tenantId}/users/?page=${page}`);
-            if (Array.isArray(nextPage)) {
-                all.push(...nextPage);
-                break;
-            }
-            const batch = Array.isArray(nextPage?.results) ? nextPage.results : [];
-            if (batch.length === 0) break;
-            all.push(...batch);
-            hasMore = Boolean(nextPage?.next);
-            page += 1;
-        }
-
-        return all;
-    },
-    createTenantUser: (tenantId: string | number, data: Partial<User> & { password?: string }) =>
-        apiRequest<User>(`/core/tenants/${tenantId}/users/`, {
-            method: 'POST',
-            body: JSON.stringify(data),
-        }),
-    updateTenantUser: (tenantId: string | number, userId: string, data: Partial<User>) =>
-        apiRequest<User>(`/core/tenants/${tenantId}/users/${userId}/`, {
-            method: 'PATCH',
-            body: JSON.stringify(data),
-        }),
-    resetTenantUserPassword: (tenantId: string | number, userId: string, newPassword: string) =>
-        apiRequest<{ message: string }>(`/core/tenants/${tenantId}/users/${userId}/reset-password/`, {
-            method: 'POST',
-            body: JSON.stringify({ new_password: newPassword }),
-        }),
-    resetAdminPassword: (
-        tenantId: string | number,
-        newPassword: string,
-        options?: { adminUserId?: string; adminEmail?: string }
-    ) =>
-        apiRequest<{ message: string; admin_user_id?: string; admin_email?: string }>('/core/reset-admin-password/', {
-            method: 'POST',
-            body: JSON.stringify({
-                tenant_id: tenantId,
-                new_password: newPassword,
-                admin_user_id: options?.adminUserId,
-                admin_email: options?.adminEmail,
-            })
-        }),
     helpers: helpers,
-
-    // Growth & Health Analytics
-    getGrowthAnalytics: () =>
-        apiRequest<{
-            summary: { total_tenants: number; total_revenue: number; active_subscriptions: number; trial_subscriptions: number };
-            monthly_signups: Array<{ month: string; label: string; count: number }>;
-            plan_distribution: Array<{ plan: string; count: number }>;
-            status_breakdown: Array<{ status: string; count: number }>;
-            revenue_by_plan: Array<{ plan: string; total: number }>;
-            billing_cycles: Array<{ cycle: string; count: number }>;
-        }>(`${BILLING_SAAS_BASE}/analytics/growth/`),
-
-    getHealthMonitor: () =>
-        apiRequest<{
-            total_alerts: number;
-            expiring_trials: Array<{ tenant_id: string; tenant_name: string; plan: string; end_date: string; days_left: number }>;
-            past_due: Array<{ tenant_id: string; tenant_name: string; plan: string; end_date: string | null }>;
-            failed_payments: Array<{ invoice_id: string; tenant_name: string; amount: number; issued_date: string }>;
-            suspended_tenants: Array<{ tenant_id: string; tenant_name: string; subdomain: string }>;
-        }>(`${BILLING_SAAS_BASE}/analytics/health/`),
 };
 
 export type SaasStaffRole = '' | 'support' | 'billing' | 'schools_manager' | 'reports';
@@ -4001,16 +3747,13 @@ export const api = {
     },
     gamification: {
         getBadges: async () => {
-            const payload = await apiRequest<Badge[] | PaginatedResponse<Badge>>('/gamification/available-badges/');
-            return normalizeArrayPayload(payload);
+            return fetchAllPages<Badge>('/gamification/available-badges/');
         },
         getMyBadges: async () => {
-            const payload = await apiRequest<StudentBadge[] | PaginatedResponse<StudentBadge>>('/gamification/student-badges/');
-            return normalizeArrayPayload(payload);
+            return fetchAllPages<StudentBadge>('/gamification/student-badges/');
         },
         getStudentBadges: async () => {
-            const payload = await apiRequest<StudentBadge[] | PaginatedResponse<StudentBadge>>('/gamification/student-badges/');
-            return normalizeArrayPayload(payload);
+            return fetchAllPages<StudentBadge>('/gamification/student-badges/');
         },
         getLeaderboard: async (scope: 'class' | 'school' = 'class') => {
             return apiRequest<{ scope: string; total_participants: number; my_rank: number | null; entries: any[] }>(`/gamification/leaderboard/?scope=${scope}`);
@@ -4642,11 +4385,7 @@ export const communicationAPI = {
         }),
 
     // Notification templates
-    getTemplates: async () => normalizeArrayPayload(
-        await apiRequest<NotificationTemplate[] | PaginatedResponse<NotificationTemplate>>(
-            '/notifications/templates/'
-        )
-    ),
+    getTemplates: async () => fetchAllPages<NotificationTemplate>('/notifications/templates/'),
     createTemplate: (data: Partial<NotificationTemplate>) =>
         apiRequest<NotificationTemplate>('/notifications/templates/', { method: 'POST', body: JSON.stringify(data) }),
     updateTemplate: (id: number, data: Partial<NotificationTemplate>) =>
@@ -4712,8 +4451,7 @@ export const hostelAPI = {
 
     // Blocks
     getBlocks: async () => {
-        const payload = await apiRequest<HostelBlock[] | PaginatedResponse<HostelBlock>>('/hostel/blocks/');
-        return normalizeArrayPayload(payload);
+        return fetchAllPages<HostelBlock>('/hostel/blocks/');
     },
     createBlock: (data: Partial<HostelBlock>) =>
         apiRequest<HostelBlock>('/hostel/blocks/', { method: 'POST', body: JSON.stringify(data) }),
@@ -4726,8 +4464,7 @@ export const hostelAPI = {
         const q = params ? '?' + new URLSearchParams(
             Object.entries(params).filter(([, v]) => v !== undefined).map(([k, v]) => [k, String(v)])
         ).toString() : '';
-        const payload = await apiRequest<HostelRoom[] | PaginatedResponse<HostelRoom>>(`/hostel/rooms/${q}`);
-        return normalizeArrayPayload(payload);
+        return fetchAllPages<HostelRoom>(`/hostel/rooms/${q}`);
     },
     createRoom: (data: Partial<HostelRoom>) =>
         apiRequest<HostelRoom>('/hostel/rooms/', { method: 'POST', body: JSON.stringify(data) }),
@@ -4740,8 +4477,7 @@ export const hostelAPI = {
         const q = params ? '?' + new URLSearchParams(
             Object.entries(params).filter(([, v]) => v !== undefined).map(([k, v]) => [k, String(v)])
         ).toString() : '';
-        const payload = await apiRequest<HostelAllotment[] | PaginatedResponse<HostelAllotment>>(`/hostel/allotments/${q}`);
-        return normalizeArrayPayload(payload);
+        return fetchAllPages<HostelAllotment>(`/hostel/allotments/${q}`);
     },
     createAllotment: (data: Partial<HostelAllotment>) =>
         apiRequest<HostelAllotment>('/hostel/allotments/', { method: 'POST', body: JSON.stringify(data) }),
@@ -4798,8 +4534,7 @@ export const transportAPI = {
 
     // Routes
     getRoutes: async () => {
-        const payload = await apiRequest<TransportRoute[] | PaginatedResponse<TransportRoute>>('/transport/routes/');
-        return normalizeArrayPayload(payload);
+        return fetchAllPages<TransportRoute>('/transport/routes/');
     },
     createRoute: (data: Partial<TransportRoute>) =>
         apiRequest<TransportRoute>('/transport/routes/', { method: 'POST', body: JSON.stringify(data) }),
@@ -4809,8 +4544,7 @@ export const transportAPI = {
 
     // Vehicles
     getVehicles: async () => {
-        const payload = await apiRequest<TransportVehicle[] | PaginatedResponse<TransportVehicle>>('/transport/vehicles/');
-        return normalizeArrayPayload(payload);
+        return fetchAllPages<TransportVehicle>('/transport/vehicles/');
     },
     createVehicle: (data: Partial<TransportVehicle>) =>
         apiRequest<TransportVehicle>('/transport/vehicles/', { method: 'POST', body: JSON.stringify(data) }),
@@ -4823,8 +4557,7 @@ export const transportAPI = {
         const q = params ? '?' + new URLSearchParams(
             Object.entries(params).filter(([, v]) => v !== undefined).map(([k, v]) => [k, String(v)])
         ).toString() : '';
-        const payload = await apiRequest<TransportAssignment[] | PaginatedResponse<TransportAssignment>>(`/transport/assignments/${q}`);
-        return normalizeArrayPayload(payload);
+        return fetchAllPages<TransportAssignment>(`/transport/assignments/${q}`);
     },
     createAssignment: (data: Partial<TransportAssignment>) =>
         apiRequest<TransportAssignment>('/transport/assignments/', { method: 'POST', body: JSON.stringify(data) }),
@@ -4859,7 +4592,7 @@ export const studentLeaveAPI = {
         const q = params ? '?' + new URLSearchParams(
             Object.entries(params).filter(([, v]) => v !== undefined) as [string, string][]
         ).toString() : '';
-        return apiRequest<StudentLeave[]>(`/academic/student-leaves/${q}`);
+        return fetchAllPages<StudentLeave>(`/academic/student-leaves/${q}`);
     },
     getPendingLeaves: () => apiRequest<StudentLeave[]>('/academic/student-leaves/pending/'),
     applyLeave: (data: { student: string; leave_type: string; start_date: string; end_date: string; reason: string; supporting_document_url?: string }) =>
@@ -5105,8 +4838,7 @@ export interface LedgerStatement {
 
 export const ledgerAPI = {
     getAccounts: async () => {
-        const payload = await apiRequest<LedgerAccount[] | PaginatedResponse<LedgerAccount>>('/billing/school/ledger-accounts/');
-        return normalizeArrayPayload(payload);
+        return fetchAllPages<LedgerAccount>('/billing/school/ledger-accounts/');
     },
     createAccount: (data: Partial<LedgerAccount>) =>
         apiRequest<LedgerAccount>('/billing/school/ledger-accounts/', { method: 'POST', body: JSON.stringify(data) }),

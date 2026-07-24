@@ -79,8 +79,8 @@ class StudentLeaveViewSet(viewsets.ModelViewSet):
             "student__user", "student__academic_class", "applied_by", "reviewed_by"
         )
         if role in ("admin", "staff", "principal"):
-            return qs.all()
-        if role == "teacher":
+            pass
+        elif role == "teacher":
             # Teachers see leaves for students in classes they teach a
             # subject in or are homeroom-assigned to — same taught-subject
             # ∪ assigned-classes scope StudentViewSet/SubjectViewSet use.
@@ -96,18 +96,30 @@ class StudentLeaveViewSet(viewsets.ModelViewSet):
             assigned_class_ids = teacher.assigned_classes.values_list("id", flat=True)
             class_ids = set(taught_class_ids) | set(assigned_class_ids)
             students = Student.objects.filter(academic_class_id__in=class_ids)
-            return qs.filter(student__in=students)
-        if role == "parent":
+            qs = qs.filter(student__in=students)
+        elif role == "parent":
             # Parents see their children's leaves
             parent = getattr(user, "parent_profile", None)
-            if parent:
-                return qs.filter(student__in=parent.students.all())
-            return qs.none()
-        # Student sees own leaves
-        student = getattr(user, "student_profile", None)
-        if student:
-            return qs.filter(student=student)
-        return qs.none()
+            if not parent:
+                return qs.none()
+            qs = qs.filter(student__in=parent.students.all())
+        else:
+            # Student sees own leaves
+            student = getattr(user, "student_profile", None)
+            if not student:
+                return qs.none()
+            qs = qs.filter(student=student)
+
+        # Narrow further by the optional query params the frontend sends —
+        # e.g. a parent with multiple children requests leaves one child at
+        # a time via ?student=<id>, and admin/teacher views filter by status.
+        student_id = self.request.query_params.get("student")
+        if student_id:
+            qs = qs.filter(student_id=student_id)
+        status_param = self.request.query_params.get("status")
+        if status_param:
+            qs = qs.filter(status=status_param)
+        return qs
 
     def perform_create(self, serializer):
         serializer.save(applied_by=self.request.user)

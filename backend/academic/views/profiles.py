@@ -1175,7 +1175,7 @@ class ParentViewSet(viewsets.ReadOnlyModelViewSet):
                 "result_id": str(r.result_id),
                 "assessment_title": r.assessment.title,
                 "subject": r.assessment.subject.name if r.assessment.subject else None,
-                "assessment_type": r.assessment.assessment_type,
+                "assessment_type": r.assessment.type,
                 "score": r.score,
                 "total_marks": r.assessment.total_marks,
                 "percentage": (
@@ -1270,9 +1270,13 @@ class ParentTeacherMeetingViewSet(viewsets.ModelViewSet):
             student_name = serializers.SerializerMethodField()
             teacher_name = serializers.SerializerMethodField()
             # Explicit querysets so FK validation works regardless of custom managers.
+            # required=False: parent-role requests never supply this — perform_create
+            # fills it in from the requesting user after validation. Only admin/staff
+            # supply it explicitly (see perform_create).
             parent = serializers.PrimaryKeyRelatedField(
                 queryset=_Parent.objects.all(),
                 pk_field=serializers.UUIDField(format="hex_verbose"),
+                required=False,
             )
             student = serializers.PrimaryKeyRelatedField(
                 queryset=_Student.objects.all(),

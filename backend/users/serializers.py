@@ -17,7 +17,7 @@ from rest_framework_simplejwt.tokens import RefreshToken as _RefreshToken
 
 from core.utils.audit import record_audit_event
 
-from .models import UserAccount
+from .models import AdminPasswordResetRequest, UserAccount
 from .token_policy import role_token_lifetimes
 
 
@@ -351,6 +351,64 @@ class UserManagementSerializer(serializers.ModelSerializer):
 from django.contrib.auth.tokens import default_token_generator
 from django.utils.encoding import force_str
 from django.utils.http import urlsafe_base64_decode
+
+
+class SaasStaffSerializer(serializers.ModelSerializer):
+    """Create/manage role='saas_staff' platform staff accounts."""
+
+    password = serializers.CharField(write_only=True, required=False)
+
+    class Meta:
+        model = UserAccount
+        fields = [
+            "user_id",
+            "email",
+            "first_name",
+            "last_name",
+            "password",
+            "saas_staff_role",
+            "is_active",
+            "date_joined",
+            "last_login",
+        ]
+        read_only_fields = ["user_id", "date_joined", "last_login"]
+
+    def create(self, validated_data):
+        password = validated_data.pop("password", None)
+        validated_data["role"] = "saas_staff"
+        validated_data.setdefault("username", validated_data["email"])
+        user = UserAccount(**validated_data)
+        if password:
+            user.set_password(password)
+        else:
+            user.set_unusable_password()
+        user.save()
+        return user
+
+    def update(self, instance, validated_data):
+        password = validated_data.pop("password", None)
+        if password:
+            instance.set_password(password)
+        return super().update(instance, validated_data)
+
+
+class AdminPasswordResetRequestSerializer(serializers.ModelSerializer):
+    email = serializers.EmailField(source="user.email", read_only=True)
+    first_name = serializers.CharField(source="user.first_name", read_only=True)
+    last_name = serializers.CharField(source="user.last_name", read_only=True)
+
+    class Meta:
+        model = AdminPasswordResetRequest
+        fields = [
+            "request_id",
+            "email",
+            "first_name",
+            "last_name",
+            "status",
+            "requested_at",
+            "resolved_at",
+        ]
+        read_only_fields = fields
 
 
 class PasswordResetSerializer(serializers.Serializer):

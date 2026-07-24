@@ -9,6 +9,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { authService } from '@/services/auth';
+import { usersAPI } from '@/lib/api';
 import type { LoginCredentials } from '@/types/auth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -31,6 +32,9 @@ export function LoginForm({ role, title, subtitle }: LoginFormProps) {
     const searchParams = useSearchParams();
     const redirectPath = searchParams.get('redirect');
     const [isLoading, setIsLoading] = useState(false);
+    const [loginFailed, setLoginFailed] = useState(false);
+    const [isRequestingReset, setIsRequestingReset] = useState(false);
+    const [resetRequested, setResetRequested] = useState(false);
     const { tenantName, tenantSchema, isTenantContext, isLoading: isTenantLoading, tenantExists } = useTenantIdentity();
 
     const schema = z.object({
@@ -66,7 +70,7 @@ export function LoginForm({ role, title, subtitle }: LoginFormProps) {
                 admin: 'Admin Portal',
                 teacher: 'Teacher Portal',
                 student: 'Student Portal',
-                saas_admin: 'SaaS Admin Portal',
+                saas_admin: 'Super Admin Portal',
             };
 
             const allowedRolesByPortal: Record<NonNullable<LoginFormProps['role']>, string[]> = {
@@ -126,6 +130,28 @@ export function LoginForm({ role, title, subtitle }: LoginFormProps) {
                     : 'Login failed. Please try again.');
             toast.error(msg);
             setIsLoading(false);
+            if (role === 'admin') {
+                setLoginFailed(true);
+                setResetRequested(false);
+            }
+        }
+    };
+
+    const handleNotifySuperAdmin = async () => {
+        const email = getValues('email');
+        if (!email) {
+            toast.error('Enter your email above first.');
+            return;
+        }
+        setIsRequestingReset(true);
+        try {
+            await usersAPI.requestAdminPasswordReset(email);
+            setResetRequested(true);
+            toast.success('Request sent. The Super Admin will reset your password shortly.');
+        } catch {
+            toast.error('Could not send the request. Please try again.');
+        } finally {
+            setIsRequestingReset(false);
         }
     };
 
@@ -277,6 +303,25 @@ export function LoginForm({ role, title, subtitle }: LoginFormProps) {
                                 </span>
                             )}
                         </Button>
+
+                        {role === 'admin' && loginFailed && (
+                            <div className="text-center pt-1">
+                                {resetRequested ? (
+                                    <p className="text-xs text-emerald-400">
+                                        Request sent — the Super Admin will reset your password shortly.
+                                    </p>
+                                ) : (
+                                    <button
+                                        type="button"
+                                        onClick={handleNotifySuperAdmin}
+                                        disabled={isRequestingReset}
+                                        className="text-xs text-slate-400 hover:text-white transition-colors underline underline-offset-4 disabled:opacity-50"
+                                    >
+                                        {isRequestingReset ? 'Sending...' : "Can't log in? Notify Super Admin"}
+                                    </button>
+                                )}
+                            </div>
+                        )}
                     </form>
                 </div>
 

@@ -1,6 +1,8 @@
 # Copyright (c) 2024-2026 Pramod Singh Manyal. All rights reserved.
 # Unauthorized copying, modification, or distribution of this file,
 # via any medium, is strictly prohibited. Proprietary and confidential.
+from datetime import date, timedelta
+
 from django.db import models
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
@@ -128,6 +130,50 @@ class AttendanceViewSet(TenantScopedQuerysetMixin, viewsets.ModelViewSet):
         subject = serializer.validated_data.get("subject", instance.subject)
         self._ensure_teacher_can_modify(student, subject)
         serializer.save()
+
+    @action(detail=False, methods=["get"])
+    def trend(self, request):
+        """
+        Daily attendance-rate trend, role-scoped (same queryset as the list
+        endpoint) and optionally filtered to a section. Aggregated in the DB
+        so this always returns exactly `days` rows regardless of how many
+        attendance records exist, instead of fetching every record (only
+        page 1 of which the old frontend code actually read) and bucketing
+        it in JS.
+        """
+        days = int(request.query_params.get("days", 15))
+        section_id = request.query_params.get("section_id")
+        since = date.today() - timedelta(days=days - 1)
+
+        queryset = self.get_queryset().filter(date__gte=since)
+        if section_id:
+            queryset = queryset.filter(student__section_id=section_id)
+
+        daily = {
+            row["date"]: row
+            for row in queryset.values("date").annotate(
+                present_like=models.Count(
+                    "attendance_id",
+                    filter=models.Q(status__in=["present", "late"]),
+                ),
+                total=models.Count("attendance_id"),
+            )
+        }
+
+        trend = []
+        for i in range(days - 1, -1, -1):
+            day = date.today() - timedelta(days=i)
+            row = daily.get(day)
+            total = row["total"] if row else 0
+            present_like = row["present_like"] if row else 0
+            trend.append(
+                {
+                    "date": str(day),
+                    "rate": round(present_like / total * 100, 1) if total else 0,
+                }
+            )
+
+        return Response(trend)
 
     @action(detail=False, methods=["get"])
     def my_attendance(self, request):

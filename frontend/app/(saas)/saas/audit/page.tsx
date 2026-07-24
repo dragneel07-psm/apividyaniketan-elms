@@ -96,7 +96,7 @@ export default function SaasAuditPage() {
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
                     <h2 className="text-3xl font-bold tracking-tight">Audit Log</h2>
-                    <p className="text-slate-500 mt-1">Live system activity feed for SaaS administration.</p>
+                    <p className="text-slate-500 mt-1">Live system activity feed for Super Admin activity.</p>
                 </div>
                 <Button variant="outline" onClick={() => loadAuditLogs(true)} disabled={isLoading || isRefreshing}>
                     <RefreshCcw className={`mr-2 h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />

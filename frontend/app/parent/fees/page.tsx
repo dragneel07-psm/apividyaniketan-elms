@@ -210,7 +210,7 @@ export default function ParentFeesPage() {
                                                     <p className="text-sm font-bold text-slate-800">{fee.fee_type || fee.description || 'Fee'}</p>
                                                     {fee.due_date && (
                                                         <p className="text-xs text-slate-400">
-                                                            {t('parent.fees.due')}: {formatDate(fee.due_date, locale)}
+                                                            {t('parent.fees.due')}: {formatDate(new Date(fee.due_date), locale)}
                                                         </p>
                                                     )}
                                                 </div>
@@ -253,7 +253,7 @@ export default function ParentFeesPage() {
                                                 <p className="text-sm font-bold text-slate-800">{p.payment_method || p.method || t('parent.fees.paymentFallback')}</p>
                                                 {p.payment_date || p.date ? (
                                                     <p className="text-xs text-slate-400">
-                                                        {formatDate(p.payment_date || p.date, locale)}
+                                                        {formatDate(new Date(p.payment_date || p.date), locale)}
                                                     </p>
                                                 ) : null}
                                                 {p.receipt_number && <p className="text-xs text-slate-400 font-mono">{t('parent.fees.receipt')}: {p.receipt_number}</p>}

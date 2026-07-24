@@ -8,15 +8,10 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
     LayoutDashboard,
-    School,
-    CreditCard,
-    Receipt,
     BrainCircuit,
     Settings,
     ShieldCheck,
     LogOut,
-    TrendingUp,
-    HeartPulse,
     ClipboardList,
     Users,
 } from 'lucide-react';
@@ -41,41 +36,6 @@ export function SaasSidebar() {
             icon: LayoutDashboard,
             href: '/saas',
             color: 'text-sky-500',
-            superAdminOnly: false,
-        },
-        {
-            label: 'Schools',
-            icon: School,
-            href: '/saas/schools',
-            color: 'text-violet-500',
-            superAdminOnly: false,
-        },
-        {
-            label: 'Growth Analytics',
-            icon: TrendingUp,
-            href: '/saas/growth',
-            color: 'text-indigo-500',
-            superAdminOnly: false,
-        },
-        {
-            label: 'Health Monitor',
-            icon: HeartPulse,
-            href: '/saas/health',
-            color: 'text-red-500',
-            superAdminOnly: false,
-        },
-        {
-            label: 'Subscription Plans',
-            icon: CreditCard,
-            href: '/saas/plans',
-            color: 'text-pink-700',
-            superAdminOnly: false,
-        },
-        {
-            label: 'Billing & Revenue',
-            icon: Receipt,
-            href: '/saas/billing',
-            color: 'text-orange-700',
             superAdminOnly: false,
         },
         {
@@ -125,7 +85,7 @@ export function SaasSidebar() {
                         </div>
                     </div>
                     <div>
-                        <h1 className="text-xl font-bold leading-tight">SaaS Portal</h1>
+                        <h1 className="text-xl font-bold leading-tight">Super Admin Portal</h1>
                         <p className="text-xs text-slate-400 leading-tight">
                             {isSuperAdmin ? 'Super Admin' : 'Staff'}
                         </p>
