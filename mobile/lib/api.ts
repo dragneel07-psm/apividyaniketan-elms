@@ -635,8 +635,11 @@ export const authAPI = {
             body: JSON.stringify(primaryPayload),
         });
 
-        if (!response.ok) {
-            // Compatibility fallback for backends that still expect username
+        if (response.status === 400) {
+            // Compatibility fallback for backends that still expect username.
+            // Only retry on a plain bad request — a real auth rejection (401/403/429)
+            // already has a definitive answer and would just burn a second failed
+            // attempt against the account's lockout counter.
             response = await fetch(`${API_BASE_URL}/users/login/`, {
                 method: 'POST',
                 headers,
@@ -646,7 +649,7 @@ export const authAPI = {
 
         if (!response.ok) {
             const err = await response.json().catch(() => ({} as Record<string, string>));
-            throw new Error(err.detail || 'Login failed. Check credentials.');
+            throw new Error(err.detail || err.message || 'Login failed. Check credentials.');
         }
 
         const data = (await response.json()) as Partial<LoginResponse>;

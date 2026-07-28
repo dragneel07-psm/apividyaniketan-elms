@@ -1,2 +1,3 @@
 web: bash scripts/railway-start-web.sh
 worker: celery -A config.celery:app worker --loglevel=info --concurrency=2
+beat: bash scripts/railway-start-beat.sh
