@@ -106,11 +106,18 @@ log "Using APP_DIR=${APP_DIR}, PY_BIN=${PY_BIN}, SERVER=${SERVER_BIN} (workers=$
 log "Startup tasks: RUN_STARTUP_MIGRATIONS=${RUN_STARTUP_MIGRATIONS}, RUN_STARTUP_INIT_PROD=${RUN_STARTUP_INIT_PROD}"
 
 if [ "${RUN_STARTUP_MIGRATIONS}" = "true" ]; then
-  # --shared already migrates the public schema; no need to run --schema=public again.
-  log "Running shared migrations"
-  "${PY_BIN}" manage.py migrate_schemas --shared --noinput --verbosity="${MIGRATION_VERBOSITY}"
-  log "Running tenant migrations"
-  "${PY_BIN}" manage.py migrate_schemas --tenant --noinput --verbosity="${MIGRATION_VERBOSITY}"
+  if "${PY_BIN}" manage.py help migrate_schemas >/dev/null 2>&1; then
+    # django-tenants is installed — schema-per-tenant migrations.
+    # --shared already migrates the public schema; no need to run --schema=public again.
+    log "Running shared migrations"
+    "${PY_BIN}" manage.py migrate_schemas --shared --noinput --verbosity="${MIGRATION_VERBOSITY}"
+    log "Running tenant migrations"
+    "${PY_BIN}" manage.py migrate_schemas --tenant --noinput --verbosity="${MIGRATION_VERBOSITY}"
+  else
+    # Single-schema deployment — plain Django migrations.
+    log "Running migrations"
+    "${PY_BIN}" manage.py migrate --noinput --verbosity="${MIGRATION_VERBOSITY}"
+  fi
 else
   log "Skipping migrations (RUN_STARTUP_MIGRATIONS=${RUN_STARTUP_MIGRATIONS})"
 fi
