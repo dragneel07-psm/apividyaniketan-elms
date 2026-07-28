@@ -28,6 +28,11 @@ RUN pip install --upgrade pip setuptools wheel
 
 # Install python dependencies as wheels
 COPY requirements.txt .
+# Build the Channels/ASGI stack in its own step, isolated from the bulk
+# requirements install — the combined 100+ package wheel build has been
+# observed to silently drop these on some builders.
+RUN pip wheel --no-cache-dir --no-deps --wheel-dir /app/wheels \
+    daphne==4.1.2 channels==4.2.0 channels-redis==4.2.0 pyotp==2.9.0
 RUN pip wheel --no-cache-dir --no-deps --wheel-dir /app/wheels -r requirements.txt
 
 # ─────────────────────────────────────────────────────────────
