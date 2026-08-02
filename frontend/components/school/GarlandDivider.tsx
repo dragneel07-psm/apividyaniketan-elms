@@ -1,25 +1,35 @@
 // Copyright (c) 2024-2026 Pramod Singh Manyal. All rights reserved.
 // Unauthorized copying, modification, or distribution of this file,
 // via any medium, is strictly prohibited. Proprietary and confidential.
+import { useId } from 'react';
 import { cn } from '@/lib/utils';
 
 /**
- * Signature scalloped divider referencing marigold (sayapatri) garlands
- * used to welcome guests — marks key section transitions only, not
- * decoration repeated everywhere.
+ * Signature motif referencing the sayapatri (marigold) garlands used across
+ * Nepal to welcome and honor guests — a strand of overlapping marigold
+ * heads threaded on a string. Marks key thresholds only (page open, page
+ * close), never repeated as generic decoration.
  */
 export function GarlandDivider({ className, flip = false }: { className?: string; flip?: boolean }) {
+    const uid = `garland-${useId().replace(/:/g, '')}`;
     return (
         <svg
-            viewBox="0 0 240 20"
-            preserveAspectRatio="none"
+            viewBox="0 0 64 28"
+            preserveAspectRatio="xMidYMid slice"
             aria-hidden="true"
-            className={cn('h-4 w-full text-school-marigold', flip && 'rotate-180', className)}
+            className={cn('h-7 w-full', flip && 'rotate-180', className)}
         >
-            <path
-                d="M0 0 Q10 20 20 0 Q30 20 40 0 Q50 20 60 0 Q70 20 80 0 Q90 20 100 0 Q110 20 120 0 Q130 20 140 0 Q150 20 160 0 Q170 20 180 0 Q190 20 200 0 Q210 20 220 0 Q230 20 240 0"
-                fill="currentColor"
-            />
+            <defs>
+                <pattern id={uid} width="16" height="28" patternUnits="userSpaceOnUse">
+                    <line x1="8" y1="0" x2="8" y2="10" stroke="currentColor" strokeOpacity="0.35" strokeWidth="0.6" />
+                    <g transform="translate(8 15)">
+                        <circle r="6.4" className="fill-school-marigold" />
+                        <circle r="6.4" cx="6" className="fill-school-terracotta" fillOpacity="0.85" />
+                        <circle r="3.4" className="fill-school-marigold-dark" fillOpacity="0.9" />
+                    </g>
+                </pattern>
+            </defs>
+            <rect width="64" height="28" fill={`url(#${uid})`} />
         </svg>
     );
 }

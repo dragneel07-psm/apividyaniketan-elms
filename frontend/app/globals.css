@@ -150,6 +150,29 @@
   --font-public-sans: var(--font-public-sans);
 }
 
+/* Subtle grain overlay for the school site's solid-color bands (stats, CTA)
+   so they read as textured surfaces rather than flat AI-gradient blocks. */
+.bg-school-grain {
+  position: relative;
+  isolation: isolate;
+}
+
+.bg-school-grain::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.05;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+.bg-school-grain > * {
+  position: relative;
+  z-index: 1;
+}
+
 /* Devanagari font override for Nepali locale */
 html[lang="ne"] body {
   font-family: var(--font-devanagari), system-ui, sans-serif;
