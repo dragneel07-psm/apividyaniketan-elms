@@ -185,6 +185,7 @@ frontend/out/
 
 # Expo artifacts (accidentally generated outside /mobile)
 backend/.expo/
+frontend/.expo/
 
 # Playwright reports inside tests/
 tests/playwright-report/
