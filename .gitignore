@@ -198,3 +198,8 @@ graphify-out/
 
 # Microsoft Office lock/owner temp files
 ~$*
+
+# AI agent skills (installed locally via `npx skills add`)
+/.agents/
+/.claude/skills/
+/skills-lock.json
