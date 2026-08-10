@@ -71,6 +71,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY --from=builder /app/wheels /wheels
 COPY --from=builder /app/requirements.txt .
 RUN pip install --no-cache /wheels/*
+# Observed 2026-08-10: Railway's build served a stale requirements.txt into
+# the wheel-build stage (resolved Django==5.2.9/idna==3.11 against a repo
+# pinned to 5.2.15/3.15, and dropped imagekitio entirely) despite the
+# committed file and the wheel-build RUN step itself both being correct —
+# the staleness was upstream of anything a Dockerfile-level cache-bust can
+# reach. Pin this one critical, easy-to-silently-lose package directly so
+# ImageKit uploads can't regress to this failure mode again unnoticed.
+RUN pip install --no-cache-dir imagekitio==5.8.0
 
 # Copy project files
 COPY . .
