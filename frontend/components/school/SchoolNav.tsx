@@ -22,7 +22,7 @@ const NAV_LINKS = [
     { href: '/school/contact', label: 'Contact' },
 ];
 
-export function SchoolNav({ schoolName }: { schoolName: string }) {
+export function SchoolNav({ schoolName, schoolLogo }: { schoolName: string; schoolLogo?: string | null }) {
     const pathname = usePathname();
     const router = useRouter();
     const [searchOpen, setSearchOpen] = useState(false);
@@ -42,9 +42,18 @@ export function SchoolNav({ schoolName }: { schoolName: string }) {
                     href="/school"
                     className="flex shrink-0 items-center gap-2 font-fraunces text-lg font-semibold text-school-forest focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-school-marigold rounded"
                 >
-                    <span className="flex h-9 w-9 items-center justify-center rounded-full bg-school-forest text-sm font-bold text-school-cream">
-                        {schoolName.charAt(0)}
-                    </span>
+                    {schoolLogo ? (
+                        // eslint-disable-next-line @next/next/no-img-element -- remote ImageKit URL, avatar-sized
+                        <img
+                            src={schoolLogo}
+                            alt={`${schoolName} logo`}
+                            className="h-9 w-9 shrink-0 rounded-full object-cover"
+                        />
+                    ) : (
+                        <span className="flex h-9 w-9 items-center justify-center rounded-full bg-school-forest text-sm font-bold text-school-cream">
+                            {schoolName.charAt(0)}
+                        </span>
+                    )}
                     <span className="hidden sm:inline">{schoolName}</span>
                 </Link>
 

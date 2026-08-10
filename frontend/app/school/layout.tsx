@@ -43,7 +43,7 @@ export default async function SchoolLayout({ children }: { children: React.React
                 Skip to main content
             </a>
             <AnnouncementBar />
-            <SchoolNav schoolName={school.name} />
+            <SchoolNav schoolName={school.name} schoolLogo={school.logo} />
             <main id="main-content">{children}</main>
             <SchoolFooter school={school} />
         </div>
