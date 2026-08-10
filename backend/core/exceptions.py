@@ -3,11 +3,14 @@
 # via any medium, is strictly prohibited. Proprietary and confidential.
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import exception_handler
+
+logger = logging.getLogger(__name__)
 
 
 def _stringify_message(data: Any) -> str:
@@ -77,6 +80,16 @@ def api_exception_handler(exc: Exception, context: dict) -> Response:
     trace_id = getattr(request, "request_id", None)
 
     if response is None:
+        # DRF's own exception_handler only recognizes APIException subclasses;
+        # anything else (an unexpected server-side bug) lands here and would
+        # otherwise vanish into a generic response with no server-side trace
+        # of what actually happened. Log it with the full traceback so it's
+        # findable (via trace_id) in logs/Sentry instead of a dead end.
+        logger.exception(
+            "Unhandled exception in API view",
+            exc_info=exc,
+            extra={"trace_id": trace_id, "path": getattr(request, "path", None)},
+        )
         return Response(
             {
                 "code": "internal_error",
