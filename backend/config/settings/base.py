@@ -271,10 +271,35 @@ USE_TZ = True
 
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
-STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
+
+# ImageKit (media storage/CDN) — https://imagekit.io/dashboard/developer/api-keys
+# Public key is only needed if a future flow issues client-side upload auth
+# params; today all uploads proxy through Django via core.storage.ImageKitStorage.
+IMAGEKIT_PUBLIC_KEY = os.environ.get("IMAGEKIT_PUBLIC_KEY", "").strip()
+IMAGEKIT_PRIVATE_KEY = os.environ.get("IMAGEKIT_PRIVATE_KEY", "").strip()
+IMAGEKIT_URL_ENDPOINT = os.environ.get("IMAGEKIT_URL_ENDPOINT", "").strip().rstrip("/")
+IMAGEKIT_ENABLED = bool(IMAGEKIT_PRIVATE_KEY and IMAGEKIT_URL_ENDPOINT)
+# Namespaces this app's uploads inside a shared ImageKit account.
+IMAGEKIT_ROOT_FOLDER = os.environ.get("IMAGEKIT_ROOT_FOLDER", "vidyaniketan").strip("/ ")
+
+# STORAGES (Django 5.1+ canonical setting, replaces STATICFILES_STORAGE /
+# DEFAULT_FILE_STORAGE). Media uploads go to ImageKit's CDN when credentials
+# are configured; local dev/tests without credentials fall back to disk.
+STORAGES = {
+    "default": {
+        "BACKEND": (
+            "core.storage.ImageKitStorage"
+            if IMAGEKIT_ENABLED
+            else "django.core.files.storage.FileSystemStorage"
+        ),
+    },
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    },
+}
 
 # Upload hardening — enforced by core.upload_validation validators on every
 # user-supplied FileField/ImageField and direct request.FILES handler.

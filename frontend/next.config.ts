@@ -69,6 +69,14 @@ const nextConfig: NextConfig = {
     imageSizes: [16, 32, 48, 64, 96],
     dangerouslyAllowSVG: true,
     contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
+    // Allows next/image to serve ImageKit-hosted media (school logo,
+    // notices, lesson materials, site content images, project attachments).
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'ik.imagekit.io',
+      },
+    ],
   },
 
   // Compress responses
