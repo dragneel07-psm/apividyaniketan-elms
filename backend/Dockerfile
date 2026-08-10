@@ -33,7 +33,15 @@ COPY requirements.txt .
 # observed to silently drop these on some builders.
 RUN pip wheel --no-cache-dir --no-deps --wheel-dir /app/wheels \
     daphne==4.1.2 channels==4.2.0 channels-redis==4.2.0 pyotp==2.9.0
-RUN pip wheel --no-cache-dir --no-deps --wheel-dir /app/wheels -r requirements.txt
+# Cache-bust marker for the wheel-build step below. Observed 2026-08-10:
+# Railway's remote BuildKit cache served this layer as a hit from a build
+# that predated a new requirements.txt dependency (imagekitio), silently
+# shipping an image missing the package despite the source file changing.
+# Bump this value if that happens again — ARGs referenced inside a RUN are
+# part of its cache key, so any change forces a real re-run.
+ARG WHEELS_CACHE_BUST=2026-08-10a
+RUN echo "wheels cache bust: ${WHEELS_CACHE_BUST}" && \
+    pip wheel --no-cache-dir --no-deps --wheel-dir /app/wheels -r requirements.txt
 
 # ─────────────────────────────────────────────────────────────
 # Stage 2: Run application
