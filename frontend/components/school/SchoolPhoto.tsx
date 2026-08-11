@@ -1,4 +1,5 @@
 import { cn } from '@/lib/utils';
+import { ORGANIC_BLOB_BORDER_RADIUS } from './organic-blob';
 
 // Plain <img>, not next/image: these URLs come straight from
 // SchoolPublicInfoView (request.build_absolute_uri), which resolves to the
@@ -23,7 +24,7 @@ export function SchoolPhoto({
     return (
         <div
             className={cn('relative overflow-hidden bg-school-cream', aspect, className)}
-            style={{ borderRadius: '58% 42% 61% 39% / 45% 39% 61% 55%' }}
+            style={{ borderRadius: ORGANIC_BLOB_BORDER_RADIUS }}
         >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img

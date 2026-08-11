@@ -66,6 +66,10 @@ export default async function SchoolHomePage() {
         .filter((item) => item.image_url)
         .slice(0, GALLERY_LAYOUT.length)
         .map((item, index) => ({ ...item, ...GALLERY_LAYOUT[index] }));
+    // Backfill any slots a partial gallery (1-3 photos) leaves empty, so the
+    // mosaic never renders with visible gaps — only fully empty galleries
+    // fall back to the single wide "coming soon" placeholder below.
+    const missingGallerySlots = GALLERY_LAYOUT.slice(galleryPreview.length);
     const latestNotices = notices.slice(0, 3);
     const upcomingEvents = events.slice(0, 3);
 
@@ -386,8 +390,17 @@ export default async function SchoolHomePage() {
                                 className={item.span}
                             />
                         ))}
-                        {galleryPreview.length === 0 && (
+                        {galleryPreview.length === 0 ? (
                             <PlaceholderPhoto caption="Gallery photos coming soon" className="col-span-2 md:col-span-3" />
+                        ) : (
+                            missingGallerySlots.map((slot, index) => (
+                                <PlaceholderPhoto
+                                    key={`gallery-placeholder-${index}`}
+                                    caption="More photos coming soon"
+                                    aspect={slot.aspect}
+                                    className={slot.span}
+                                />
+                            ))
                         )}
                     </div>
                 </div>

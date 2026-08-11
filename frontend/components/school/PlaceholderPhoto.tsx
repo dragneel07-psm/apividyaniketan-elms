@@ -3,6 +3,7 @@
 // via any medium, is strictly prohibited. Proprietary and confidential.
 import { ImageIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { ORGANIC_BLOB_BORDER_RADIUS } from './organic-blob';
 
 /**
  * Signature placeholder-photo treatment used everywhere a real photo of
@@ -29,9 +30,7 @@ export function PlaceholderPhoto({
                 aspect,
                 className,
             )}
-            style={{
-                borderRadius: '58% 42% 61% 39% / 45% 39% 61% 55%',
-            }}
+            style={{ borderRadius: ORGANIC_BLOB_BORDER_RADIUS }}
         >
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-6 text-center text-school-cream/90">
                 <ImageIcon className="h-8 w-8 opacity-70" aria-hidden="true" />
