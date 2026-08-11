@@ -15,11 +15,13 @@ import {
     Users,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { SchoolPhoto } from '@/components/school/SchoolPhoto';
 import { PlaceholderPhoto } from '@/components/school/PlaceholderPhoto';
 import { SectionHeading } from '@/components/school/SectionHeading';
 import { GarlandDivider } from '@/components/school/GarlandDivider';
 import { Reveal } from '@/components/school/Reveal';
 import {
+    getGalleryItems,
     getPrograms,
     getPublicEvents,
     getPublicNotices,
@@ -44,21 +46,26 @@ const QUICK_LINKS = [
     { href: '/school/contact', label: 'Contact', icon: Users },
 ];
 
-const GALLERY_PREVIEW = [
-    { caption: 'Grade 3 classroom', aspect: 'aspect-[3/4]', span: 'row-span-2' },
-    { caption: 'Annual sports day', aspect: 'aspect-square', span: '' },
-    { caption: 'Cultural program', aspect: 'aspect-square', span: '' },
-    { caption: 'Science lab', aspect: 'aspect-[4/3]', span: 'col-span-2 md:col-span-1' },
+const GALLERY_LAYOUT = [
+    { aspect: 'aspect-[3/4]', span: 'row-span-2' },
+    { aspect: 'aspect-square', span: '' },
+    { aspect: 'aspect-square', span: '' },
+    { aspect: 'aspect-[4/3]', span: 'col-span-2 md:col-span-1' },
 ];
 
 export default async function SchoolHomePage() {
-    const [school, notices, events, programs, testimonials] = await Promise.all([
+    const [school, notices, events, programs, testimonials, galleryItems] = await Promise.all([
         getSchoolInfo(),
         getPublicNotices(),
         getPublicEvents(),
         getPrograms(),
         getTestimonials(),
+        getGalleryItems(),
     ]);
+    const galleryPreview = galleryItems
+        .filter((item) => item.image_url)
+        .slice(0, GALLERY_LAYOUT.length)
+        .map((item, index) => ({ ...item, ...GALLERY_LAYOUT[index] }));
     const latestNotices = notices.slice(0, 3);
     const upcomingEvents = events.slice(0, 3);
 
@@ -117,10 +124,19 @@ export default async function SchoolHomePage() {
                             className="absolute -inset-4 -z-10 hidden rounded-[2.5rem] border border-school-terracotta/25 sm:block"
                             aria-hidden="true"
                         />
-                        <PlaceholderPhoto
-                            caption="Students and teachers in the courtyard, morning assembly"
-                            aspect="aspect-[5/4]"
-                        />
+                        {school.hero_image ? (
+                            <SchoolPhoto
+                                src={school.hero_image}
+                                alt="Students and teachers in the courtyard, morning assembly"
+                                aspect="aspect-[5/4]"
+                                priority
+                            />
+                        ) : (
+                            <PlaceholderPhoto
+                                caption="Students and teachers in the courtyard, morning assembly"
+                                aspect="aspect-[5/4]"
+                            />
+                        )}
                         {yearsServing && (
                             <div className="absolute -bottom-6 -left-4 flex h-24 w-24 flex-col items-center justify-center rounded-full bg-school-marigold text-center shadow-lg shadow-school-marigold/30 sm:h-28 sm:w-28">
                                 <span className="font-fraunces text-2xl font-semibold text-school-ink sm:text-3xl">{yearsServing}</span>
@@ -159,7 +175,14 @@ export default async function SchoolHomePage() {
             <Reveal>
                 <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
                     <div className="grid gap-10 lg:grid-cols-[1fr_1.4fr] lg:items-center lg:gap-16">
-                        <PlaceholderPhoto caption={`Principal ${school.principal_name || '(name pending)'}, welcoming families`} />
+                        {school.principal_photo ? (
+                            <SchoolPhoto
+                                src={school.principal_photo}
+                                alt={`Principal ${school.principal_name || '(name pending)'}, welcoming families`}
+                            />
+                        ) : (
+                            <PlaceholderPhoto caption={`Principal ${school.principal_name || '(name pending)'}, welcoming families`} />
+                        )}
                         <div className="relative">
                             <span
                                 aria-hidden="true"
@@ -354,14 +377,18 @@ export default async function SchoolHomePage() {
                         </Link>
                     </div>
                     <div className="mt-8 grid grid-cols-2 gap-4 md:grid-cols-3">
-                        {GALLERY_PREVIEW.map((item) => (
-                            <PlaceholderPhoto
-                                key={item.caption}
-                                caption={item.caption}
+                        {galleryPreview.map((item) => (
+                            <SchoolPhoto
+                                key={item.id}
+                                src={item.image_url!}
+                                alt={item.caption}
                                 aspect={item.aspect}
                                 className={item.span}
                             />
                         ))}
+                        {galleryPreview.length === 0 && (
+                            <PlaceholderPhoto caption="Gallery photos coming soon" className="col-span-2 md:col-span-3" />
+                        )}
                     </div>
                 </div>
             </section>

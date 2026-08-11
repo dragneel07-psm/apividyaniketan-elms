@@ -13,6 +13,14 @@ def school_logo_upload_to(instance, filename):
     return scoped_upload_path("school_logo", filename)
 
 
+def school_hero_upload_to(instance, filename):
+    return scoped_upload_path("school_hero", filename)
+
+
+def school_principal_photo_upload_to(instance, filename):
+    return scoped_upload_path("school_principal", filename)
+
+
 class SchoolProfile(TimeStampedModel):
     """
     Singleton — this app now serves exactly one school. Use
@@ -31,6 +39,20 @@ class SchoolProfile(TimeStampedModel):
         blank=True,
         null=True,
         validators=image_upload_validators(),
+    )
+    hero_image = models.ImageField(
+        upload_to=school_hero_upload_to,
+        blank=True,
+        null=True,
+        validators=image_upload_validators(),
+        help_text="Public homepage hero photo (students/campus, courtyard-style shot).",
+    )
+    principal_photo = models.ImageField(
+        upload_to=school_principal_photo_upload_to,
+        blank=True,
+        null=True,
+        validators=image_upload_validators(),
+        help_text="Photo shown beside the principal's welcome message on the public site.",
     )
 
     # Tax & billing identity (Nepali school context — IRD-aligned receipts)

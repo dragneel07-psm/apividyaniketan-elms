@@ -1204,6 +1204,8 @@ export interface SchoolProfile {
     accountant_name: string;
     bill_prefix: string;
     logo: string;
+    hero_image: string;
+    principal_photo: string;
 }
 
 // For "how many X are there" UI (KPI cards, badges) — reads DRF's `count`
@@ -3728,6 +3730,22 @@ export const api = {
         uploadLogo: (file: File) => {
             const formData = new FormData();
             formData.append('logo', file);
+            return apiRequest<SchoolProfile>('/core/school-profile/', {
+                method: 'PATCH',
+                body: formData,
+            });
+        },
+        uploadHeroImage: (file: File) => {
+            const formData = new FormData();
+            formData.append('hero_image', file);
+            return apiRequest<SchoolProfile>('/core/school-profile/', {
+                method: 'PATCH',
+                body: formData,
+            });
+        },
+        uploadPrincipalPhoto: (file: File) => {
+            const formData = new FormData();
+            formData.append('principal_photo', file);
             return apiRequest<SchoolProfile>('/core/school-profile/', {
                 method: 'PATCH',
                 body: formData,

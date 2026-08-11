@@ -11,7 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { api, SchoolProfile } from '@/lib/api';
 import { toast } from 'sonner';
-import { Loader2, Upload, Building2, FileText, Receipt as ReceiptIcon, Users } from 'lucide-react';
+import { Loader2, Upload, Building2, FileText, Receipt as ReceiptIcon, Users, Image as ImageIcon } from 'lucide-react';
 
 const empty: SchoolProfile = {
     name: '',
@@ -30,6 +30,8 @@ const empty: SchoolProfile = {
     accountant_name: '',
     bill_prefix: 'BL',
     logo: '',
+    hero_image: '',
+    principal_photo: '',
 };
 
 export default function SchoolProfilePage() {
@@ -37,7 +39,11 @@ export default function SchoolProfilePage() {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [logoUploading, setLogoUploading] = useState(false);
+    const [heroUploading, setHeroUploading] = useState(false);
+    const [principalPhotoUploading, setPrincipalPhotoUploading] = useState(false);
     const fileRef = useRef<HTMLInputElement>(null);
+    const heroFileRef = useRef<HTMLInputElement>(null);
+    const principalPhotoFileRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
         api.schoolProfile.get()
@@ -91,6 +97,38 @@ export default function SchoolProfilePage() {
         } finally {
             setLogoUploading(false);
             if (fileRef.current) fileRef.current.value = '';
+        }
+    };
+
+    const handleHeroImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        setHeroUploading(true);
+        try {
+            const updated = await api.schoolProfile.uploadHeroImage(file);
+            setProfile({ ...empty, ...updated });
+            toast.success('Hero image uploaded');
+        } catch {
+            toast.error('Failed to upload hero image');
+        } finally {
+            setHeroUploading(false);
+            if (heroFileRef.current) heroFileRef.current.value = '';
+        }
+    };
+
+    const handlePrincipalPhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        setPrincipalPhotoUploading(true);
+        try {
+            const updated = await api.schoolProfile.uploadPrincipalPhoto(file);
+            setProfile({ ...empty, ...updated });
+            toast.success('Principal photo uploaded');
+        } catch {
+            toast.error('Failed to upload principal photo');
+        } finally {
+            setPrincipalPhotoUploading(false);
+            if (principalPhotoFileRef.current) principalPhotoFileRef.current.value = '';
         }
     };
 
@@ -164,6 +202,60 @@ export default function SchoolProfilePage() {
                         <Field label="Phone" value={profile.contact_phone} onChange={(v) => update('contact_phone', v)} />
                         <Field label="Email" type="email" value={profile.contact_email} onChange={(v) => update('contact_email', v)} />
                         <Field label="Website" type="url" value={profile.website} onChange={(v) => update('website', v)} />
+                    </div>
+                </CardContent>
+            </Card>
+
+            {/* Public website photos */}
+            <Card>
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-base">
+                        <ImageIcon className="h-4 w-4 text-indigo-600" /> Public Website Photos
+                    </CardTitle>
+                    <CardDescription>
+                        Shown on the public homepage (/school) — the hero banner and the photo beside the
+                        principal&apos;s welcome message.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                    <div className="flex items-start gap-4">
+                        <div className="h-20 w-28 rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-center overflow-hidden">
+                            {profile.hero_image ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img src={profile.hero_image} alt="hero" className="h-full w-full object-cover" />
+                            ) : (
+                                <span className="text-xs text-slate-400">No photo</span>
+                            )}
+                        </div>
+                        <div className="space-y-2">
+                            <Label className="text-xs uppercase tracking-wider text-slate-500">Hero Photo</Label>
+                            <input ref={heroFileRef} type="file" accept="image/*" hidden onChange={handleHeroImageUpload} />
+                            <Button variant="outline" size="sm" onClick={() => heroFileRef.current?.click()} disabled={heroUploading}>
+                                {heroUploading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />}
+                                Upload
+                            </Button>
+                            <p className="text-xs text-slate-400">Landscape, e.g. campus or courtyard.</p>
+                        </div>
+                    </div>
+
+                    <div className="flex items-start gap-4">
+                        <div className="h-20 w-28 rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-center overflow-hidden">
+                            {profile.principal_photo ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img src={profile.principal_photo} alt="principal" className="h-full w-full object-cover" />
+                            ) : (
+                                <span className="text-xs text-slate-400">No photo</span>
+                            )}
+                        </div>
+                        <div className="space-y-2">
+                            <Label className="text-xs uppercase tracking-wider text-slate-500">Principal Welcome Photo</Label>
+                            <input ref={principalPhotoFileRef} type="file" accept="image/*" hidden onChange={handlePrincipalPhotoUpload} />
+                            <Button variant="outline" size="sm" onClick={() => principalPhotoFileRef.current?.click()} disabled={principalPhotoUploading}>
+                                {principalPhotoUploading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />}
+                                Upload
+                            </Button>
+                            <p className="text-xs text-slate-400">Shown next to the principal&apos;s message.</p>
+                        </div>
                     </div>
                 </CardContent>
             </Card>

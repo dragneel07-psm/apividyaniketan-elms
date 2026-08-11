@@ -28,6 +28,8 @@ export interface SchoolPublicInfo {
     principal_name: string;
     current_academic_year: string;
     logo: string | null;
+    hero_image: string | null;
+    principal_photo: string | null;
     student_count: number;
     teacher_count: number;
 }
@@ -43,6 +45,8 @@ const FALLBACK: SchoolPublicInfo = {
     principal_name: '',
     current_academic_year: '',
     logo: null,
+    hero_image: null,
+    principal_photo: null,
     student_count: 0,
     teacher_count: 0,
 };

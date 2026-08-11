@@ -42,8 +42,8 @@ class SchoolPublicInfoView(APIView):
     """GET /api/core/school-public-info/ — public projection of the school
     profile for the marketing site (About/Contact/Home stats). No auth
     required; only exposes fields already meant to be public-facing
-    (name/address/contact/logo), plus real, non-sensitive aggregate counts —
-    never fabricated."""
+    (name/address/contact/logo/hero_image/principal_photo), plus real,
+    non-sensitive aggregate counts — never fabricated."""
 
     permission_classes = [permissions.AllowAny]
     throttle_classes = [SchoolPublicInfoRateThrottle]
@@ -53,12 +53,13 @@ class SchoolPublicInfoView(APIView):
 
         from academic.models import Student, Teacher
 
-        logo_url = None
-        if school.logo:
+        def _absolute_url(image_field):
+            if not image_field:
+                return None
             try:
-                logo_url = request.build_absolute_uri(school.logo.url)
+                return request.build_absolute_uri(image_field.url)
             except ValueError:
-                logo_url = None
+                return None
 
         return Response(
             {
@@ -71,7 +72,9 @@ class SchoolPublicInfoView(APIView):
                 "established_year": school.established_year,
                 "principal_name": school.principal_name or "",
                 "current_academic_year": school.current_academic_year,
-                "logo": logo_url,
+                "logo": _absolute_url(school.logo),
+                "hero_image": _absolute_url(school.hero_image),
+                "principal_photo": _absolute_url(school.principal_photo),
                 "student_count": Student.objects.count(),
                 "teacher_count": Teacher.objects.count(),
             }
@@ -246,7 +249,12 @@ class SchoolProfileView(APIView):
         "bill_prefix",
     }
 
-    READABLE_FIELDS = EDITABLE_FIELDS | {"id", "logo"}
+    # Image fields handled via multipart upload rather than plain JSON —
+    # each gets its own request.FILES key, validated explicitly since direct
+    # FILES assignment bypasses serializer validation.
+    IMAGE_FIELDS = {"logo", "hero_image", "principal_photo"}
+
+    READABLE_FIELDS = EDITABLE_FIELDS | {"id"} | IMAGE_FIELDS
 
     def _is_admin(self, request) -> bool:
         role = (getattr(request.user, "role", "") or "").lower()
@@ -257,11 +265,13 @@ class SchoolProfileView(APIView):
 
     def get(self, request):
         school = SchoolProfile.get_solo()
-        data = {f: getattr(school, f, "") for f in self.READABLE_FIELDS - {"logo"}}
-        try:
-            data["logo"] = school.logo.url if school.logo else ""
-        except Exception:
-            data["logo"] = ""
+        data = {f: getattr(school, f, "") for f in self.READABLE_FIELDS - self.IMAGE_FIELDS}
+        for field in self.IMAGE_FIELDS:
+            try:
+                file_obj = getattr(school, field)
+                data[field] = file_obj.url if file_obj else ""
+            except Exception:
+                data[field] = ""
         return Response(data)
 
     def patch(self, request):
@@ -276,20 +286,22 @@ class SchoolProfileView(APIView):
         for key, value in updates.items():
             setattr(school, key, value)
 
-        # Logo via multipart upload (separate field name). Direct FILES
-        # assignment bypasses serializer validation, so validate explicitly.
-        if "logo" in request.FILES:
-            from django.core.exceptions import ValidationError as DjangoValidationError
+        from django.core.exceptions import ValidationError as DjangoValidationError
 
-            from core.upload_validation import validate_image_upload
+        from core.upload_validation import validate_image_upload
 
+        uploaded_fields = []
+        for field in self.IMAGE_FIELDS:
+            if field not in request.FILES:
+                continue
             try:
-                validate_image_upload(request.FILES["logo"])
+                validate_image_upload(request.FILES[field])
             except DjangoValidationError as exc:
                 return Response(
-                    {"logo": exc.messages}, status=status.HTTP_400_BAD_REQUEST
+                    {field: exc.messages}, status=status.HTTP_400_BAD_REQUEST
                 )
-            school.logo = request.FILES["logo"]
+            setattr(school, field, request.FILES[field])
+            uploaded_fields.append(field)
 
         school.save()
 
@@ -299,7 +311,7 @@ class SchoolProfileView(APIView):
             request=request,
             details={
                 "fields": sorted(updates.keys()),
-                "logo_uploaded": "logo" in request.FILES,
+                "images_uploaded": sorted(uploaded_fields),
             },
         )
         return self.get(request)
