@@ -18,7 +18,7 @@ jobs:
       contents: read
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
       with:
         # Full history: leaked credentials in old commits are still live
         # credentials until rotated.
@@ -35,7 +35,7 @@ jobs:
     if: github.event_name == 'schedule'
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
 
     - name: Set up Python
       uses: actions/setup-python@v5
@@ -59,7 +59,7 @@ jobs:
     if: github.event_name == 'schedule'
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
 
     - name: Setup Node.js
       uses: actions/setup-node@v4
