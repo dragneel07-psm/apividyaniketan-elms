@@ -1,0 +1,4 @@
+interface:
+  display_name: "Nepal School ERP"
+  short_description: "Engineer compliant school ERP workflows"
+  default_prompt: "Use $nepal-school-erp to design and implement a tenant-safe school ERP workflow in this project."

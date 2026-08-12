@@ -1530,6 +1530,11 @@ export interface Payment {
     recorded_by?: string;
     recorded_by_name?: string;
     remarks?: string;
+    // Ledger linkage / void workflow — set by the backend, never sent by the client.
+    status?: 'completed' | 'void';
+    journal_entry?: string | null;
+    voided_at?: string | null;
+    void_reason?: string;
 }
 
 export interface Expense {
@@ -1538,11 +1543,17 @@ export interface Expense {
     title: string;
     amount: number;
     category: 'salary' | 'maintenance' | 'utilities' | 'supplies' | 'events' | 'transport' | 'other';
+    payment_method?: 'cash' | 'bank_transfer' | 'cheque';
     date: string;
     description?: string;
     recorded_by?: string;
     recorded_by_name?: string;
     created_at: string;
+    // Ledger linkage / void workflow — set by the backend, never sent by the client.
+    status?: 'completed' | 'void';
+    journal_entry?: string | null;
+    voided_at?: string | null;
+    void_reason?: string;
 }
 
 export interface FinanceDashboard {
@@ -3006,6 +3017,13 @@ export const billingAPI = {
         method: 'POST',
         body: JSON.stringify(data)
     }),
+    // Receipts post to the general ledger and are immutable once completed —
+    // this is the only correction path (reverses the fee-receipt journal
+    // entry and restores the student's outstanding balance).
+    voidPayment: (id: string, reason: string) => apiRequest<Payment>(`${BILLING_SCHOOL_BASE}/payments/${id}/void/`, {
+        method: 'POST',
+        body: JSON.stringify({ reason })
+    }),
 
     getExpenses: () => fetchAllPages<Expense>(`${BILLING_SCHOOL_BASE}/expenses/`),
 
@@ -3053,6 +3071,14 @@ export const billingAPI = {
     }),
     deleteExpense: (id: string) => apiRequest<void>(`${BILLING_SCHOOL_BASE}/expenses/${id}/`, {
         method: 'DELETE'
+    }),
+    // Completed expenses are posted to the general ledger and immutable —
+    // deleteExpense/updateExpense now 403 once posted. voidExpense is the
+    // correction path: it reverses the journal entry via an equal-and-
+    // opposite entry instead of editing/deleting the original.
+    voidExpense: (id: string, reason: string) => apiRequest<Expense>(`${BILLING_SCHOOL_BASE}/expenses/${id}/void/`, {
+        method: 'POST',
+        body: JSON.stringify({ reason })
     }),
 
     getFinanceDashboard: (startDate?: string, endDate?: string) => {

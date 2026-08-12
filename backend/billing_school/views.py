@@ -2,6 +2,7 @@
 # Unauthorized copying, modification, or distribution of this file,
 # via any medium, is strictly prohibited. Proprietary and confidential.
 from datetime import date, timedelta
+from decimal import Decimal
 
 from django.db import transaction
 from django.db.models import Count, Q, Sum
@@ -11,6 +12,7 @@ from django.utils.decorators import method_decorator
 from django.views.decorators.cache import cache_page
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
@@ -23,6 +25,8 @@ from billing.serializers import (
     StudentFeeSerializer,
 )
 from billing.shared_views import BillingIdempotencyMixin, BillingSchemaGuardMixin
+from billing_school.services import expense_ledger, fee_ledger
+from billing_school.services.posting import PostingError
 from core.mixins import TenantScopedQuerysetMixin
 from core.reports import generate_pdf_response
 from core.utils.audit import record_audit_event
@@ -195,7 +199,19 @@ class StudentFeeViewSet(
         )
 
     def perform_create(self, serializer):
-        item = serializer.save()
+        # Assessment must post in the same DB transaction as the StudentFee
+        # write: if posting fails (e.g. chart of accounts not seeded), the
+        # fee record must not silently exist unassessed.
+        with transaction.atomic():
+            item = serializer.save()
+            try:
+                fee_ledger.post_fee_assessment(
+                    item, user=self.request.user, request=self.request
+                )
+            except PostingError as exc:
+                raise ValidationError(
+                    {"detail": f"Could not post fee assessment: {exc}"}
+                )
         record_audit_event(
             action="billing.student_fee_created",
             user=self.request.user,
@@ -676,9 +692,7 @@ class StudentFeeViewSet(
                 from academic.models import Student
 
                 fee_structure = FeeStructure.objects.get(fee_id=fee_structure_id)
-                students = Student.objects.filter(
-                    academic_class_id=academic_class_id
-                )
+                students = Student.objects.filter(academic_class_id=academic_class_id)
 
                 if not students.exists():
                     return Response(
@@ -768,30 +782,43 @@ class PaymentViewSet(
     def perform_create(self, serializer):
         from billing.bill_numbering import allocate_bill_number
 
-        bill_number = allocate_bill_number()
+        # Receipt creation, the StudentFee subledger update, and the
+        # fee-receipt journal posting all happen in one DB transaction: a
+        # payment must never exist without either its ledger entry or its
+        # receivable being cleared.
+        with transaction.atomic():
+            bill_number = allocate_bill_number()
 
-        payment = serializer.save(
-            recorded_by=self.request.user,
-            bill_number=bill_number,
-        )
-        fee_before = None
-        if payment.student_fee:
-            fee_before = {
-                "student_fee_id": str(payment.student_fee.student_fee_id),
-                "amount_paid": str(payment.student_fee.amount_paid),
-                "status": payment.student_fee.status,
-            }
+            payment = serializer.save(
+                recorded_by=self.request.user,
+                bill_number=bill_number,
+            )
+            fee_before = None
+            if payment.student_fee:
+                locked_fee = StudentFee.objects.select_for_update().get(
+                    pk=payment.student_fee_id
+                )
+                fee_before = {
+                    "student_fee_id": str(locked_fee.student_fee_id),
+                    "amount_paid": str(locked_fee.amount_paid),
+                    "status": locked_fee.status,
+                }
+                locked_fee.amount_paid += payment.amount
+                if locked_fee.amount_paid >= locked_fee.amount_due:
+                    locked_fee.status = "paid"
+                elif locked_fee.amount_paid > 0:
+                    locked_fee.status = "partial"
+                locked_fee.save()
+                payment.student_fee = locked_fee
 
-        if payment.student_fee:
-            student_fee = payment.student_fee
-            student_fee.amount_paid += payment.amount
-
-            if student_fee.amount_paid >= student_fee.amount_due:
-                student_fee.status = "paid"
-            elif student_fee.amount_paid > 0:
-                student_fee.status = "partial"
-
-            student_fee.save()
+            try:
+                journal_entry = fee_ledger.post_fee_receipt(
+                    payment, user=self.request.user, request=self.request
+                )
+            except PostingError as exc:
+                raise ValidationError({"detail": f"Could not post fee receipt: {exc}"})
+            payment.journal_entry = journal_entry
+            payment.save(update_fields=["journal_entry"])
 
         record_audit_event(
             action="billing.payment_created",
@@ -806,6 +833,7 @@ class PaymentViewSet(
                 "amount": str(payment.amount),
                 "method": payment.method,
                 "transaction_id": payment.transaction_id,
+                "journal_entry_id": str(journal_entry.entry_id),
                 "student_fee_before": fee_before,
                 "student_fee_after": (
                     {
@@ -820,7 +848,17 @@ class PaymentViewSet(
         )
 
     def perform_update(self, serializer):
-        before = serializer.instance
+        # P0: completed receipts are immutable once posted to the ledger.
+        # Corrections go through the `void` action (reversal), never a
+        # field edit — otherwise the journal entry silently desyncs from
+        # the operational record it's supposed to represent.
+        instance = serializer.instance
+        if instance.status == Payment.STATUS_COMPLETED and instance.journal_entry_id:
+            raise PermissionDenied(
+                "This payment is posted to the ledger and cannot be edited. "
+                "Use the void action to reverse it, then record a new receipt."
+            )
+        before = instance
         before_snapshot = {
             "amount": str(before.amount),
             "method": before.method,
@@ -849,6 +887,12 @@ class PaymentViewSet(
         )
 
     def perform_destroy(self, instance):
+        # P0: no hard-delete of completed/posted receipts — use void.
+        if instance.status == Payment.STATUS_COMPLETED and instance.journal_entry_id:
+            raise PermissionDenied(
+                "This payment is posted to the ledger and cannot be deleted. "
+                "Use the void action instead."
+            )
         payload = {
             "payment_id": str(instance.payment_id),
             "student_id": str(instance.student_id),
@@ -866,6 +910,79 @@ class PaymentViewSet(
             request=self.request,
             details=payload,
         )
+
+    @action(detail=True, methods=["post"])
+    def void(self, request, pk=None):
+        """Void a completed payment: reverses its fee-receipt journal entry
+        and restores the linked StudentFee's outstanding balance.
+
+        This is the refund/correction path for receipts (P0 item 3 & 4) —
+        edits and deletes are blocked once a payment is posted. Whether the
+        cash side of a refund should instead post straight against income
+        (bypassing the receivable) is a school-accounting-policy decision
+        that needs accountant sign-off; today void always restores the
+        receivable, which is the correct treatment for "this receipt was
+        wrong / the fee is unpaid again."
+        """
+        payment = self.get_object()
+        reason = (request.data.get("reason") or "").strip()
+        if not reason:
+            return Response({"detail": "A void reason is required."}, status=400)
+        if payment.status == Payment.STATUS_VOID:
+            return Response({"detail": "This payment is already void."}, status=400)
+
+        with transaction.atomic():
+            locked_payment = Payment.objects.select_for_update().get(pk=payment.pk)
+            if locked_payment.status == Payment.STATUS_VOID:
+                return Response({"detail": "This payment is already void."}, status=400)
+
+            fee_before = None
+            if locked_payment.student_fee_id:
+                locked_fee = StudentFee.objects.select_for_update().get(
+                    pk=locked_payment.student_fee_id
+                )
+                fee_before = {
+                    "amount_paid": str(locked_fee.amount_paid),
+                    "status": locked_fee.status,
+                }
+                locked_fee.amount_paid = max(
+                    Decimal("0"), locked_fee.amount_paid - locked_payment.amount
+                )
+                if locked_fee.amount_paid <= 0:
+                    locked_fee.status = "pending"
+                elif locked_fee.amount_paid < locked_fee.amount_due:
+                    locked_fee.status = "partial"
+                else:
+                    locked_fee.status = "paid"
+                locked_fee.save()
+
+            try:
+                fee_ledger.void_fee_receipt(
+                    locked_payment, user=request.user, reason=reason, request=request
+                )
+            except PostingError as exc:
+                return Response({"detail": str(exc)}, status=400)
+
+            locked_payment.status = Payment.STATUS_VOID
+            locked_payment.voided_at = timezone.now()
+            locked_payment.voided_by = request.user
+            locked_payment.void_reason = reason
+            locked_payment.save(
+                update_fields=["status", "voided_at", "voided_by", "void_reason"]
+            )
+
+        record_audit_event(
+            action="billing.payment_voided",
+            user=request.user,
+            request=request,
+            details={
+                "payment_id": str(locked_payment.payment_id),
+                "amount": str(locked_payment.amount),
+                "reason": reason,
+                "student_fee_before": fee_before,
+            },
+        )
+        return Response(PaymentSerializer(locked_payment).data)
 
     @action(detail=True, methods=["get"])
     def generate_receipt(self, request, pk=None):
@@ -1048,9 +1165,19 @@ class ExpenseViewSet(
         )
 
     def perform_create(self, serializer):
-        expense = serializer.save(
-            recorded_by=self.request.user,
-        )
+        with transaction.atomic():
+            expense = serializer.save(
+                recorded_by=self.request.user,
+            )
+            try:
+                journal_entry = expense_ledger.post_expense_payment(
+                    expense, user=self.request.user, request=self.request
+                )
+            except PostingError as exc:
+                raise ValidationError({"detail": f"Could not post expense: {exc}"})
+            expense.journal_entry = journal_entry
+            expense.save(update_fields=["journal_entry"])
+
         record_audit_event(
             action="billing.expense_created",
             user=self.request.user,
@@ -1061,11 +1188,19 @@ class ExpenseViewSet(
                 "amount": str(expense.amount),
                 "category": expense.category,
                 "date": expense.date,
+                "journal_entry_id": str(journal_entry.entry_id),
             },
         )
 
     def perform_update(self, serializer):
-        before = serializer.instance
+        # P0: completed/posted expenses are immutable — correct via void.
+        instance = serializer.instance
+        if instance.status == Expense.STATUS_COMPLETED and instance.journal_entry_id:
+            raise PermissionDenied(
+                "This expense is posted to the ledger and cannot be edited. "
+                "Use the void action to reverse it, then log a new expense."
+            )
+        before = instance
         before_snapshot = {
             "title": before.title,
             "amount": str(before.amount),
@@ -1092,6 +1227,12 @@ class ExpenseViewSet(
         )
 
     def perform_destroy(self, instance):
+        # P0: no hard-delete of completed/posted expenses — use void.
+        if instance.status == Expense.STATUS_COMPLETED and instance.journal_entry_id:
+            raise PermissionDenied(
+                "This expense is posted to the ledger and cannot be deleted. "
+                "Use the void action instead."
+            )
         payload = {
             "expense_id": str(instance.expense_id),
             "title": instance.title,
@@ -1106,6 +1247,48 @@ class ExpenseViewSet(
             request=self.request,
             details=payload,
         )
+
+    @action(detail=True, methods=["post"])
+    def void(self, request, pk=None):
+        """Void a completed expense: reverses its expense journal entry."""
+        expense = self.get_object()
+        reason = (request.data.get("reason") or "").strip()
+        if not reason:
+            return Response({"detail": "A void reason is required."}, status=400)
+        if expense.status == Expense.STATUS_VOID:
+            return Response({"detail": "This expense is already void."}, status=400)
+
+        with transaction.atomic():
+            locked_expense = Expense.objects.select_for_update().get(pk=expense.pk)
+            if locked_expense.status == Expense.STATUS_VOID:
+                return Response({"detail": "This expense is already void."}, status=400)
+
+            try:
+                expense_ledger.void_expense_payment(
+                    locked_expense, user=request.user, reason=reason, request=request
+                )
+            except PostingError as exc:
+                return Response({"detail": str(exc)}, status=400)
+
+            locked_expense.status = Expense.STATUS_VOID
+            locked_expense.voided_at = timezone.now()
+            locked_expense.voided_by = request.user
+            locked_expense.void_reason = reason
+            locked_expense.save(
+                update_fields=["status", "voided_at", "voided_by", "void_reason"]
+            )
+
+        record_audit_event(
+            action="billing.expense_voided",
+            user=request.user,
+            request=request,
+            details={
+                "expense_id": str(locked_expense.expense_id),
+                "amount": str(locked_expense.amount),
+                "reason": reason,
+            },
+        )
+        return Response(ExpenseSerializer(locked_expense).data)
 
 
 class FinanceDashboardViewSet(BillingSchemaGuardMixin, viewsets.ViewSet):
