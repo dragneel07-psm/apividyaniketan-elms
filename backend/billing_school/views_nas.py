@@ -17,12 +17,11 @@ Provides:
 """
 
 import logging
-import re as _re
 from datetime import date
 from decimal import Decimal
 
 from django.db import transaction
-from django.db.models import Count, Max, Q, Sum
+from django.db.models import Count, Q, Sum
 from django.db.models.deletion import ProtectedError
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
@@ -42,6 +41,12 @@ from billing_school.models_nas import (
     TDSEntry,
 )
 from billing_school.payment_gateways import ConnectIPSGateway
+from billing_school.services.posting import (
+    PostingError,
+    PostingLine,
+    post_journal_entry,
+    void_journal_entry,
+)
 from billing_school.utils_bs_calendar import (
     BS_MONTH_NAMES_EN,
     ad_to_bs,
@@ -89,6 +94,11 @@ def _je_data(je: JournalEntry) -> dict:
         "is_posted": je.is_posted,
         "narration": je.narration,
         "created_by": je.created_by.get_full_name() if je.created_by else "",
+        "source_type": je.source_type,
+        "source_id": je.source_id,
+        "is_void": je.is_void,
+        "reverses": str(je.reverses_id) if je.reverses_id else None,
+        "void_reason": je.void_reason,
         "lines": [
             {
                 "line_id": str(ln.line_id),
@@ -137,10 +147,10 @@ class ChartOfAccountViewSet(viewsets.ViewSet):
             description=data.get("description", ""),
         )
         record_audit_event(
-            "billing.coa_created",
-            request.user,
-            request,
-            {"account_code": obj.account_code},
+            action="billing.coa_created",
+            user=request.user,
+            request=request,
+            details={"account_code": obj.account_code},
         )
         return Response(_coa_data(obj), status=201)
 
@@ -265,9 +275,7 @@ def _seed_default_coa(tenant=None) -> int:
         ("5700", "Audit & Legal Fee", "expenditure", "admin_expense", True),
         ("5900", "Other Expenditure", "expenditure", "other_expense", True),
     ]
-    existing = set(
-        ChartOfAccount.objects.values_list("account_code", flat=True)
-    )
+    existing = set(ChartOfAccount.objects.values_list("account_code", flat=True))
     created = 0
     for code, name, atype, stype, is_sys in defaults:
         if code not in existing:
@@ -331,74 +339,48 @@ class JournalEntryViewSet(viewsets.ViewSet):
         return Response(_je_data(je))
 
     def create(self, request):
+        """Create a manual journal entry.
+
+        Routed through the shared posting service (billing_school.services.
+        posting) so manual entries share the same voucher-numbering lock,
+        balance check, and per-line debit-XOR-credit / non-zero validation
+        as every automated posting — no separate, drifting implementation.
+        """
         data = request.data
         lines_data = data.get("lines", [])
-        if len(lines_data) < 2:
-            return Response(
-                {"error": "At least two journal lines required."}, status=400
-            )
 
-        from django.core.exceptions import ValidationError as DjangoValidationError
+        posting_lines = []
+        for ln in lines_data:
+            try:
+                account = ChartOfAccount.objects.get(pk=ln["account_id"])
+            except ChartOfAccount.DoesNotExist:
+                return Response(
+                    {"error": f"Account {ln.get('account_id')} not found."}, status=400
+                )
+            posting_lines.append(
+                PostingLine(
+                    account_code=account.account_code,
+                    debit=Decimal(str(ln.get("debit", "0"))),
+                    credit=Decimal(str(ln.get("credit", "0"))),
+                    narration=ln.get("narration", ""),
+                )
+            )
 
         try:
-            with transaction.atomic():
-                # C1: serialize voucher number generation — lock existing entries to get
-                # the true maximum, then increment.  select_for_update() prevents any
-                # concurrent transaction from inserting until this one commits.
-                max_num = JournalEntry.objects.select_for_update().aggregate(
-                    m=Max("entry_number")
-                )["m"]
-                seq = 1
-                if max_num:
-                    m_obj = _re.search(r"-(\d+)$", max_num)
-                    if m_obj:
-                        seq = int(m_obj.group(1)) + 1
-
-                y, _, _ = ad_to_bs(date.fromisoformat(data["date_ad"]))
-                entry_number = f"JV-{y}-{seq:05d}"
-
-                je = JournalEntry.objects.create(
-                    entry_number=entry_number,
-                    date_ad=data["date_ad"],
-                    description=data["description"],
-                    entry_type=data.get("entry_type", "manual"),
-                    reference=data.get("reference", ""),
-                    narration=data.get("narration", ""),
-                    created_by=request.user,
-                )
-
-                for ln in lines_data:
-                    try:
-                        account = ChartOfAccount.objects.get(pk=ln["account_id"])
-                    except ChartOfAccount.DoesNotExist:
-                        raise ValueError(f"Account {ln['account_id']} not found.")
-                    # C2: call full_clean() so debit/credit validation in JournalLine.clean()
-                    # is enforced before saving (Django does NOT call clean() automatically).
-                    line = JournalLine(
-                        entry=je,
-                        account=account,
-                        debit=Decimal(str(ln.get("debit", "0"))),
-                        credit=Decimal(str(ln.get("credit", "0"))),
-                        narration=ln.get("narration", ""),
-                    )
-                    line.full_clean()
-                    line.save()
-        except ValueError as exc:
-            return Response({"error": str(exc)}, status=400)
-        except DjangoValidationError as exc:
-            msgs = (
-                exc.message_dict
-                if hasattr(exc, "message_dict")
-                else {"__all__": exc.messages}
+            je = post_journal_entry(
+                entry_type=data.get("entry_type", "manual"),
+                date_ad=data["date_ad"],
+                description=data.get("description", ""),
+                lines=posting_lines,
+                created_by=request.user,
+                reference=data.get("reference", ""),
+                narration=data.get("narration", ""),
+                request=request,
+                audit_action="billing.journal_entry_created",
             )
-            return Response({"error": msgs}, status=400)
+        except (PostingError, KeyError, ValueError) as exc:
+            return Response({"error": str(exc)}, status=400)
 
-        record_audit_event(
-            "billing.journal_entry_created",
-            request.user,
-            request,
-            {"entry_id": str(je.entry_id), "entry_number": je.entry_number},
-        )
         return Response(_je_data(je), status=201)
 
     @action(detail=True, methods=["post"])
@@ -415,85 +397,46 @@ class JournalEntryViewSet(viewsets.ViewSet):
         except Exception as exc:
             return Response({"error": str(exc)}, status=400)
         record_audit_event(
-            "billing.journal_entry_posted",
-            request.user,
-            request,
-            {"entry_id": str(je.entry_id)},
+            action="billing.journal_entry_posted",
+            user=request.user,
+            request=request,
+            details={"entry_id": str(je.entry_id)},
         )
         return Response({"status": "posted", "entry_id": str(je.entry_id)})
 
     @action(detail=True, methods=["post"])
     def reverse(self, request, pk=None):
-        """H1: Create a reversal journal entry (equal-and-opposite lines).
+        """Create a reversal journal entry (equal-and-opposite lines).
 
         NAS compliance: corrections must be made via reversal, not deletion.
-        The original entry stays posted and immutable; a new 'reversal' entry
-        is created with all debit/credit amounts swapped.
+        The original entry stays posted and immutable; a new entry is
+        created with all debit/credit amounts swapped, and the original is
+        flagged is_void=True and linked to the reversal via `reverses`.
         """
-        from django.core.exceptions import ValidationError as DjangoValidationError
-
         try:
             original = JournalEntry.objects.get(pk=pk)
         except JournalEntry.DoesNotExist:
             return Response({"error": "Not found."}, status=404)
-        if not original.is_posted:
-            return Response(
-                {"error": "Only posted entries can be reversed."}, status=400
-            )
 
         reversal_date = request.data.get("date_ad") or str(date.today())
-        reversal_desc = (
-            request.data.get("description") or f"Reversal of {original.entry_number}"
+        reason = (
+            request.data.get("reason")
+            or request.data.get("description")
+            or f"Manual reversal of {original.entry_number}"
         )
-
-        from django.core.exceptions import ValidationError as DjangoValidationError
 
         try:
-            with transaction.atomic():
-                max_num = JournalEntry.objects.select_for_update().aggregate(
-                    m=Max("entry_number")
-                )["m"]
-                seq = 1
-                if max_num:
-                    m_obj = _re.search(r"-(\d+)$", max_num)
-                    if m_obj:
-                        seq = int(m_obj.group(1)) + 1
-
-                y, _, _ = ad_to_bs(date.fromisoformat(reversal_date))
-                rev = JournalEntry.objects.create(
-                    entry_number=f"JV-{y}-{seq:05d}",
-                    date_ad=reversal_date,
-                    description=reversal_desc,
-                    entry_type="manual",
-                    reference=original.entry_number,
-                    narration=f"Auto-reversal of {original.entry_number}",
-                    created_by=request.user,
-                )
-                for orig_line in original.lines.all():
-                    line = JournalLine(
-                        entry=rev,
-                        account=orig_line.account,
-                        debit=orig_line.credit,  # swap
-                        credit=orig_line.debit,  # swap
-                        narration=f"Reversal: {orig_line.narration}",
-                    )
-                    line.full_clean()
-                    line.save()
-                rev.post()
-        except DjangoValidationError as exc:
-            msgs = (
-                exc.message_dict
-                if hasattr(exc, "message_dict")
-                else {"__all__": exc.messages}
+            rev = void_journal_entry(
+                original,
+                user=request.user,
+                reason=reason,
+                date_ad=reversal_date,
+                request=request,
+                audit_action="billing.journal_entry_reversed",
             )
-            return Response({"error": msgs}, status=400)
+        except PostingError as exc:
+            return Response({"error": str(exc)}, status=400)
 
-        record_audit_event(
-            "billing.journal_entry_reversed",
-            request.user,
-            request,
-            {"original_id": str(original.entry_id), "reversal_id": str(rev.entry_id)},
-        )
         return Response(_je_data(rev), status=201)
 
 
@@ -614,10 +557,10 @@ class TDSEntryViewSet(viewsets.ViewSet):
             recorded_by=request.user,
         )
         record_audit_event(
-            "billing.tds_entry_created",
-            request.user,
-            request,
-            {"tds_id": str(obj.tds_id), "vendor": obj.vendor_name},
+            action="billing.tds_entry_created",
+            user=request.user,
+            request=request,
+            details={"tds_id": str(obj.tds_id), "vendor": obj.vendor_name},
         )
         return Response(
             {
@@ -680,16 +623,63 @@ class TDSEntryViewSet(viewsets.ViewSet):
             obj = TDSEntry.objects.get(pk=pk)
         except TDSEntry.DoesNotExist:
             return Response({"error": "Not found."}, status=404)
-        obj.is_deposited = True
-        obj.deposit_date = request.data.get("deposit_date") or date.today()
-        obj.deposit_ref = request.data.get("deposit_ref", "")
-        obj.save()
+        if obj.is_deposited:
+            return Response(
+                {"error": "This TDS entry is already marked deposited."}, status=400
+            )
+
+        deposit_date = request.data.get("deposit_date") or date.today()
+        deposit_ref = request.data.get("deposit_ref", "")
+
+        with transaction.atomic():
+            obj = TDSEntry.objects.select_for_update().get(pk=pk)
+            if obj.is_deposited:
+                return Response(
+                    {"error": "This TDS entry is already marked deposited."}, status=400
+                )
+            obj.is_deposited = True
+            obj.deposit_date = deposit_date
+            obj.deposit_ref = deposit_ref
+            obj.save()
+
+            # Dr TDS Payable to IRD (2020) / Cr Bank (1020) — settling the
+            # withholding liability. Idempotent: a retry with the same
+            # tds_id/entry_type resolves to the same posted entry.
+            try:
+                je = post_journal_entry(
+                    entry_type="tds_deposit",
+                    date_ad=deposit_date,
+                    description=f"TDS deposit to IRD: {obj.vendor_name}",
+                    lines=[
+                        PostingLine(
+                            account_code="2020",
+                            debit=obj.tds_amount,
+                            narration=f"TDS deposited ({deposit_ref})"
+                            if deposit_ref
+                            else "TDS deposited",
+                        ),
+                        PostingLine(
+                            account_code="1020", credit=obj.tds_amount, narration="Bank"
+                        ),
+                    ],
+                    created_by=request.user,
+                    source_type="billing_school.TDSEntry",
+                    source_id=str(obj.tds_id),
+                    reference=deposit_ref,
+                    request=request,
+                    audit_action="billing.tds_deposit_posted",
+                )
+            except PostingError as exc:
+                return Response({"error": str(exc)}, status=400)
+            obj.journal_entry = je
+            obj.save(update_fields=["journal_entry"])
+
         # L4: audit log — TDS deposit to IRD is a compliance-sensitive write
         record_audit_event(
-            "billing.tds_marked_deposited",
-            request.user,
-            request,
-            {
+            action="billing.tds_marked_deposited",
+            user=request.user,
+            request=request,
+            details={
                 "tds_id": str(obj.tds_id),
                 "deposit_date": str(obj.deposit_date),
                 "deposit_ref": obj.deposit_ref,
@@ -744,10 +734,10 @@ class InventoryItemViewSet(viewsets.ViewSet):
             condition=d.get("condition", "good"),
         )
         record_audit_event(
-            "billing.inventory_created",
-            request.user,
-            request,
-            {"item_id": str(obj.item_id), "name": obj.name},
+            action="billing.inventory_created",
+            user=request.user,
+            request=request,
+            details={"item_id": str(obj.item_id), "name": obj.name},
         )
         return Response(self._serialize(obj), status=201)
 
@@ -1112,9 +1102,9 @@ class NASFinancialStatementsView(APIView):
         msf_paid = float(msf_qs.aggregate(s=Sum("msf_amount"))["s"] or 0)
 
         tds_deposited = float(
-            TDSEntry.objects.filter(
-                is_deposited=True, fiscal_year=fy
-            ).aggregate(s=Sum("tds_amount"))["s"]
+            TDSEntry.objects.filter(is_deposited=True, fiscal_year=fy).aggregate(
+                s=Sum("tds_amount")
+            )["s"]
             or 0
         )
 
@@ -1172,15 +1162,13 @@ class NASFinancialStatementsView(APIView):
         entries tagged to the fund's linked ChartOfAccount, and derives the
         surplus/deficit for the fiscal year from I&E journal lines.
         """
-        funds = FundAccount.objects.filter(
-            is_active=True
-        ).select_related("linked_account")
+        funds = FundAccount.objects.filter(is_active=True).select_related(
+            "linked_account"
+        )
         restricted = [f for f in funds if f.fund_type == "restricted"]
         unrestricted = [f for f in funds if f.fund_type == "unrestricted"]
 
-        je_qs_fy = JournalEntry.objects.filter(
-            is_posted=True, fiscal_year=fy
-        )
+        je_qs_fy = JournalEntry.objects.filter(is_posted=True, fiscal_year=fy)
 
         # Surplus / deficit for the year from I&E journal lines
         ie_agg = JournalLine.objects.filter(
@@ -1387,7 +1375,7 @@ class ConnectIPSCallbackView(APIView):
 
         # Auto-post MSF
         msf_data = calculate_msf(Decimal(str(amount_npr)), "connectips")
-        MerchantServiceFee.objects.get_or_create(
+        msf_obj, msf_created = MerchantServiceFee.objects.get_or_create(
             payment=payment,
             defaults={
                 "gateway": "connectips",
@@ -1397,4 +1385,38 @@ class ConnectIPSCallbackView(APIView):
                 "net_amount": msf_data["net_amount"],
             },
         )
+        if msf_created and msf_data["msf_amount"] > 0:
+            # Dr Bank Charge/MSF expense (5430) / Cr Bank clearing (1020):
+            # the gateway settles net-of-fee, so the fee is a cost against
+            # the same clearing account the gross receipt was booked to.
+            try:
+                msf_je = post_journal_entry(
+                    entry_type="gateway_msf",
+                    date_ad=payment.payment_date.date(),
+                    description=f"ConnectIPS MSF on {payment.bill_number or str(payment.payment_id)[:8]}",
+                    lines=[
+                        PostingLine(
+                            account_code="5430",
+                            debit=msf_data["msf_amount"],
+                            narration="ConnectIPS merchant service fee",
+                        ),
+                        PostingLine(
+                            account_code="1020",
+                            credit=msf_data["msf_amount"],
+                            narration="Gateway settlement fee",
+                        ),
+                    ],
+                    created_by=request.user if request.user.is_authenticated else None,
+                    source_type="billing_school.MerchantServiceFee",
+                    source_id=str(msf_obj.msf_id),
+                    request=request,
+                    audit_action="billing.gateway_msf_posted",
+                )
+                msf_obj.journal_entry = msf_je
+                msf_obj.save(update_fields=["journal_entry"])
+            except PostingError:
+                logger.exception(
+                    "Failed to post gateway-MSF journal entry for payment %s",
+                    payment.payment_id,
+                )
         return Response({"status": "success", "payment_id": str(payment.pk)})

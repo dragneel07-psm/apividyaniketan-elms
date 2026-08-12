@@ -14,6 +14,8 @@ from rest_framework.views import APIView
 
 from billing.models_school import Payment, StudentFee
 from billing_school.payment_gateways import EsewaGateway, KhaltiGateway
+from billing_school.services import fee_ledger
+from billing_school.services.posting import PostingError
 
 logger = logging.getLogger(__name__)
 
@@ -86,6 +88,23 @@ def _record_payment(fee, amount, method, gateway_ref, request):
         else:
             locked_fee.status = "partial"
         locked_fee.save(update_fields=["amount_paid", "status", "updated_at"])
+
+        # `method` here is the gateway slug (esewa/khalti/connectips), not one
+        # of Payment.METHOD_CHOICES — pass it through as `gateway` so the
+        # receipt posts to the right wallet/clearing account (P0: every
+        # completed payment must post to the canonical ledger).
+        try:
+            journal_entry = fee_ledger.post_fee_receipt(
+                payment, user=recorded_by, request=request, gateway=method
+            )
+            payment.journal_entry = journal_entry
+            payment.save(update_fields=["journal_entry"])
+        except PostingError:
+            logger.exception(
+                "Failed to post fee-receipt journal entry for gateway payment %s",
+                payment.payment_id,
+            )
+            raise
         return payment
 
 

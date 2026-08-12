@@ -16,7 +16,7 @@ import { billingAPI, Expense } from '@/lib/api';
 import { formatRs } from '@/lib/finance';
 import { useToast } from '@/hooks/use-toast';
 import {
-    Plus, Trash2, Loader2, Search, Receipt,
+    Plus, Trash2, Loader2, Search, Receipt, Undo2,
 } from 'lucide-react';
 
 const EXPENSE_CATEGORIES = [
@@ -27,6 +27,12 @@ const EXPENSE_CATEGORIES = [
     { value: 'events', label: 'Events' },
     { value: 'transport', label: 'Transport' },
     { value: 'other', label: 'Other' },
+];
+
+const PAYMENT_METHODS = [
+    { value: 'cash', label: 'Cash' },
+    { value: 'bank_transfer', label: 'Bank Transfer' },
+    { value: 'cheque', label: 'Cheque' },
 ];
 
 const CAT_COLOR: Record<string, string> = {
@@ -40,7 +46,7 @@ const CAT_COLOR: Record<string, string> = {
 };
 
 const BLANK_FORM = {
-    title: '', amount: '', category: 'other', date: '', description: '',
+    title: '', amount: '', category: 'other', payment_method: 'cash', date: '', description: '',
 };
 
 export function ExpenseManager() {
@@ -53,6 +59,8 @@ export function ExpenseManager() {
     const [form, setForm] = useState({ ...BLANK_FORM });
     const [submitting, setSubmitting] = useState(false);
     const [deleteId, setDeleteId] = useState<string | null>(null);
+    const [voidTarget, setVoidTarget] = useState<Expense | null>(null);
+    const [voidReason, setVoidReason] = useState('');
     const { toast } = useToast();
 
     const load = async () => {
@@ -66,12 +74,20 @@ export function ExpenseManager() {
 
     useEffect(() => { load(); }, []);
 
+    // Once an expense is posted to the general ledger (has a journal_entry),
+    // it's immutable — edit/delete are blocked server-side too. Legacy rows
+    // recorded before this ledger-posting phase (no journal_entry yet) can
+    // still be edited/deleted directly until the reconcile_ledger backfill runs.
+    const isPosted = (exp: Expense) => !!exp.journal_entry;
+    const isVoid = (exp: Expense) => exp.status === 'void';
+
     const openEdit = (exp: Expense) => {
         setEditExpense(exp);
         setForm({
             title: exp.title,
             amount: String(exp.amount),
             category: exp.category,
+            payment_method: exp.payment_method ?? 'cash',
             date: exp.date,
             description: exp.description ?? '',
         });
@@ -85,7 +101,7 @@ export function ExpenseManager() {
         return matchSearch && matchCat;
     });
 
-    const totalFiltered = filtered.reduce((s, e) => s + Number(e.amount), 0);
+    const totalFiltered = filtered.filter(e => !isVoid(e)).reduce((s, e) => s + Number(e.amount), 0);
 
     const handleSave = async (evt: React.FormEvent) => {
         evt.preventDefault();
@@ -97,7 +113,7 @@ export function ExpenseManager() {
                 toast({ title: 'Expense updated.' });
             } else {
                 await billingAPI.createExpense(payload);
-                toast({ title: 'Expense recorded.' });
+                toast({ title: 'Expense recorded and posted to the ledger.' });
             }
             setFormOpen(false);
             setEditExpense(null);
@@ -115,6 +131,19 @@ export function ExpenseManager() {
             setDeleteId(null);
             await load();
         } catch { toast({ title: 'Error', variant: 'destructive' }); }
+        finally { setSubmitting(false); }
+    };
+
+    const handleVoid = async () => {
+        if (!voidTarget || !voidReason.trim()) return;
+        setSubmitting(true);
+        try {
+            await billingAPI.voidExpense(voidTarget.expense_id, voidReason.trim());
+            toast({ title: 'Expense voided.', description: 'The ledger entry has been reversed.' });
+            setVoidTarget(null);
+            setVoidReason('');
+            await load();
+        } catch { toast({ title: 'Error', description: 'Failed to void expense.', variant: 'destructive' }); }
         finally { setSubmitting(false); }
     };
 
@@ -174,12 +203,21 @@ export function ExpenseManager() {
                                             className="rounded-xl border-slate-200 text-sm" required />
                                     </div>
                                 </div>
-                                <div className="space-y-1.5">
-                                    <label className="text-xs font-bold text-slate-600 uppercase tracking-wide">Category</label>
-                                    <select value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}
-                                        className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white">
-                                        {EXPENSE_CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
-                                    </select>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div className="space-y-1.5">
+                                        <label className="text-xs font-bold text-slate-600 uppercase tracking-wide">Category</label>
+                                        <select value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}
+                                            className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white">
+                                            {EXPENSE_CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+                                        </select>
+                                    </div>
+                                    <div className="space-y-1.5">
+                                        <label className="text-xs font-bold text-slate-600 uppercase tracking-wide">Paid via</label>
+                                        <select value={form.payment_method} onChange={e => setForm(f => ({ ...f, payment_method: e.target.value }))}
+                                            className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white">
+                                            {PAYMENT_METHODS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+                                        </select>
+                                    </div>
                                 </div>
                                 <div className="space-y-1.5">
                                     <label className="text-xs font-bold text-slate-600 uppercase tracking-wide">Description (optional)</label>
@@ -210,43 +248,56 @@ export function ExpenseManager() {
             ) : (
                 <div className="space-y-2">
                     {filtered.map(exp => (
-                        <Card key={exp.expense_id} className="border-slate-200 shadow-sm">
+                        <Card key={exp.expense_id} className={`border-slate-200 shadow-sm ${isVoid(exp) ? 'opacity-60' : ''}`}>
                             <CardContent className="p-4">
                                 <div className="flex items-center gap-4">
                                     <div className="flex-1 min-w-0">
                                         <div className="flex items-center gap-2 flex-wrap">
-                                            <span className="font-bold text-slate-900 text-sm">{exp.title}</span>
+                                            <span className={`font-bold text-sm ${isVoid(exp) ? 'text-slate-400 line-through' : 'text-slate-900'}`}>{exp.title}</span>
                                             <Badge className={`text-[10px] font-bold px-2 py-0.5 ${CAT_COLOR[exp.category] ?? 'bg-slate-100 text-slate-600'}`}>
                                                 {EXPENSE_CATEGORIES.find(c => c.value === exp.category)?.label ?? exp.category}
                                             </Badge>
+                                            {isVoid(exp) && (
+                                                <Badge className="text-[10px] font-bold px-2 py-0.5 bg-red-100 text-red-700">Voided</Badge>
+                                            )}
                                         </div>
                                         <p className="text-xs text-slate-400 mt-0.5">
                                             {exp.date}
                                             {exp.recorded_by_name && ` · ${exp.recorded_by_name}`}
                                             {exp.description && ` · ${exp.description}`}
+                                            {isVoid(exp) && exp.void_reason && ` · Void reason: ${exp.void_reason}`}
                                         </p>
                                     </div>
                                     <div className="flex items-center gap-3 flex-shrink-0">
-                                        <span className="text-base font-black text-orange-700">{formatRs(exp.amount)}</span>
-                                        <Button size="sm" variant="outline" onClick={() => openEdit(exp)}
-                                            className="h-8 px-2 rounded-lg text-xs border-slate-200">Edit</Button>
-                                        <Dialog open={deleteId === exp.expense_id} onOpenChange={o => setDeleteId(o ? exp.expense_id : null)}>
-                                            <DialogTrigger asChild>
-                                                <Button size="sm" variant="outline" className="h-8 w-8 p-0 rounded-lg border-red-200 text-red-500 hover:bg-red-50">
-                                                    <Trash2 className="h-3.5 w-3.5" />
-                                                </Button>
-                                            </DialogTrigger>
-                                            <DialogContent className="sm:max-w-[340px]">
-                                                <DialogHeader><DialogTitle>Delete Expense</DialogTitle></DialogHeader>
-                                                <div className="space-y-4 pt-2">
-                                                    <p className="text-sm text-slate-600">Delete <strong>{exp.title}</strong> ({formatRs(exp.amount)})? This cannot be undone.</p>
-                                                    <Button onClick={() => handleDelete(exp.expense_id)} disabled={submitting}
-                                                        className="w-full bg-red-600 hover:bg-red-700 text-white rounded-xl font-bold">
-                                                        {submitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null} Delete
-                                                    </Button>
-                                                </div>
-                                            </DialogContent>
-                                        </Dialog>
+                                        <span className={`text-base font-black ${isVoid(exp) ? 'text-slate-400 line-through' : 'text-orange-700'}`}>{formatRs(exp.amount)}</span>
+                                        {isVoid(exp) ? null : isPosted(exp) ? (
+                                            <Button size="sm" variant="outline" onClick={() => { setVoidTarget(exp); setVoidReason(''); }}
+                                                className="h-8 px-2 rounded-lg text-xs border-amber-200 text-amber-700 hover:bg-amber-50 gap-1">
+                                                <Undo2 className="h-3.5 w-3.5" /> Void
+                                            </Button>
+                                        ) : (
+                                            <>
+                                                <Button size="sm" variant="outline" onClick={() => openEdit(exp)}
+                                                    className="h-8 px-2 rounded-lg text-xs border-slate-200">Edit</Button>
+                                                <Dialog open={deleteId === exp.expense_id} onOpenChange={o => setDeleteId(o ? exp.expense_id : null)}>
+                                                    <DialogTrigger asChild>
+                                                        <Button size="sm" variant="outline" className="h-8 w-8 p-0 rounded-lg border-red-200 text-red-500 hover:bg-red-50">
+                                                            <Trash2 className="h-3.5 w-3.5" />
+                                                        </Button>
+                                                    </DialogTrigger>
+                                                    <DialogContent className="sm:max-w-[340px]">
+                                                        <DialogHeader><DialogTitle>Delete Expense</DialogTitle></DialogHeader>
+                                                        <div className="space-y-4 pt-2">
+                                                            <p className="text-sm text-slate-600">Delete <strong>{exp.title}</strong> ({formatRs(exp.amount)})? This cannot be undone.</p>
+                                                            <Button onClick={() => handleDelete(exp.expense_id)} disabled={submitting}
+                                                                className="w-full bg-red-600 hover:bg-red-700 text-white rounded-xl font-bold">
+                                                                {submitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null} Delete
+                                                            </Button>
+                                                        </div>
+                                                    </DialogContent>
+                                                </Dialog>
+                                            </>
+                                        )}
                                     </div>
                                 </div>
                             </CardContent>
@@ -254,6 +305,27 @@ export function ExpenseManager() {
                     ))}
                 </div>
             )}
+
+            <Dialog open={!!voidTarget} onOpenChange={o => { if (!o) { setVoidTarget(null); setVoidReason(''); } }}>
+                <DialogContent className="sm:max-w-[400px]">
+                    <DialogHeader><DialogTitle>Void Expense</DialogTitle></DialogHeader>
+                    <div className="space-y-4 pt-2">
+                        <p className="text-sm text-slate-600">
+                            This posts a reversing entry against <strong>{voidTarget?.title}</strong> ({voidTarget ? formatRs(voidTarget.amount) : ''}).
+                            The original ledger entry stays untouched for audit — this cannot be undone.
+                        </p>
+                        <div className="space-y-1.5">
+                            <label className="text-xs font-bold text-slate-600 uppercase tracking-wide">Reason (required)</label>
+                            <Textarea value={voidReason} onChange={e => setVoidReason(e.target.value)}
+                                rows={2} placeholder="e.g. Recorded in the wrong category" className="rounded-xl border-slate-200 text-sm resize-none" />
+                        </div>
+                        <Button onClick={handleVoid} disabled={submitting || !voidReason.trim()}
+                            className="w-full bg-amber-600 hover:bg-amber-700 text-white rounded-xl font-bold">
+                            {submitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null} Void Expense
+                        </Button>
+                    </div>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

@@ -109,7 +109,18 @@ class PaymentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Payment
         fields = "__all__"
-        read_only_fields = ["recorded_by", "payment_date"]
+        read_only_fields = [
+            "recorded_by",
+            "payment_date",
+            # Ledger/void state is only ever set by PaymentViewSet's posting
+            # and void workflows (billing_school.services.fee_ledger),
+            # never directly by a client.
+            "status",
+            "journal_entry",
+            "voided_at",
+            "voided_by",
+            "void_reason",
+        ]
 
     def validate(self, attrs):
         instance = getattr(self, "instance", None)
@@ -162,9 +173,18 @@ class ExpenseSerializer(serializers.ModelSerializer):
     class Meta:
         model = Expense
         fields = "__all__"
-        read_only_fields = ["recorded_by"]
+        read_only_fields = [
+            "recorded_by",
+            "status",
+            "journal_entry",
+            "voided_at",
+            "voided_by",
+            "void_reason",
+        ]
 
     def validate_amount(self, value):
         if value <= 0:
-            raise serializers.ValidationError("Expense amount must be greater than zero.")
+            raise serializers.ValidationError(
+                "Expense amount must be greater than zero."
+            )
         return value

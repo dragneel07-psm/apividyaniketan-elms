@@ -122,7 +122,9 @@ class ChartOfAccount(models.Model):
 
 class JournalEntry(models.Model):
     ENTRY_TYPES = [
+        ("fee_assessment", "Fee Assessment"),
         ("fee_receipt", "Fee Receipt"),
+        ("scholarship_discount", "Scholarship / Discount Adjustment"),
         ("expense", "Expense Payment"),
         ("gateway_msf", "Gateway MSF Auto-post"),
         ("tds_deduction", "TDS Deduction"),
@@ -169,11 +171,56 @@ class JournalEntry(models.Model):
     )
     created_at = models.DateTimeField(auto_now_add=True)
 
+    # ── Source linkage & idempotency (P0: canonical-ledger posting) ────────
+    # `source_type` is a dotted "app_label.ModelName" identifying the source
+    # document (e.g. "billing.Payment"); `source_id` is str(pk) of that row.
+    # Together they let every posting trace back to exactly one business
+    # event. Reversal entries are NOT source-linked themselves — they link
+    # back to the entry they reverse via `reverses` instead.
+    source_type = models.CharField(max_length=60, blank=True, default="")
+    source_id = models.CharField(max_length=64, blank=True, default="")
+    idempotency_key = models.CharField(
+        max_length=160,
+        blank=True,
+        default="",
+        help_text=(
+            "Unique retry-safe key for automated postings. Defaults to "
+            "'<source_type>:<source_id>:<entry_type>' when a source is given; "
+            "left blank for manual journal entries (no auto-dedup)."
+        ),
+    )
+
+    # ── Void / reversal linkage ─────────────────────────────────────────
+    reverses = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="reversed_by_entries",
+        db_constraint=False,
+        help_text="Set on a reversal entry, pointing back to the entry it reverses.",
+    )
+    is_void = models.BooleanField(
+        default=False,
+        help_text="True on the ORIGINAL entry once a reversal has been posted against it.",
+    )
+    voided_at = models.DateTimeField(null=True, blank=True)
+    voided_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="journal_entries_voided",
+        db_constraint=False,
+    )
+    void_reason = models.TextField(blank=True, default="")
+
     class Meta:
         ordering = ["-date_ad", "-created_at"]
         indexes = [
             models.Index(fields=["date_ad"], name="je_tenant_date_idx"),
             models.Index(fields=["entry_type"], name="je_tenant_type_idx"),
+            models.Index(fields=["source_type", "source_id"], name="je_source_idx"),
         ]
         constraints = [
             # Prevent duplicate voucher numbers per tenant (L6 + C1 guard)
@@ -181,6 +228,13 @@ class JournalEntry(models.Model):
                 fields=["entry_number"],
                 condition=~models.Q(entry_number=""),
                 name="je_tenant_entry_number_uniq",
+            ),
+            # A retry with the same idempotency key must always resolve to
+            # the same JournalEntry row, never create a second one.
+            models.UniqueConstraint(
+                fields=["idempotency_key"],
+                condition=~models.Q(idempotency_key=""),
+                name="je_idempotency_key_uniq",
             ),
         ]
 

@@ -201,6 +201,13 @@ graphify-out/
 ~$*
 
 # AI agent skills (installed locally via `npx skills add`)
-/.agents/
+# Keep local/third-party installs ignored, but version the two project-owned skills.
+/.agents/*
+!/.agents/skills/
+/.agents/skills/*
+!/.agents/skills/nepal-school-accounting/
+!/.agents/skills/nepal-school-accounting/**
+!/.agents/skills/nepal-school-erp/
+!/.agents/skills/nepal-school-erp/**
 /.claude/skills/
 /skills-lock.json

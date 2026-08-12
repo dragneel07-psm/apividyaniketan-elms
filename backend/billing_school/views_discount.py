@@ -3,6 +3,7 @@
 # via any medium, is strictly prohibited. Proprietary and confidential.
 import logging
 
+from django.db import transaction
 from rest_framework import serializers as drf_serializers
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
@@ -10,6 +11,8 @@ from rest_framework.response import Response
 
 from billing.models_school import FeeDiscount, StudentFee
 from billing.permissions import IsSchoolFinanceManager
+from billing_school.services import fee_ledger
+from billing_school.services.posting import PostingError
 
 logger = logging.getLogger(__name__)
 
@@ -73,24 +76,38 @@ class FeeDiscountViewSet(viewsets.ModelViewSet):
         discount = self.get_object()
         if not discount.is_active:
             return Response({"error": "This discount is inactive."}, status=400)
-        try:
-            fee = StudentFee.objects.get(pk=student_fee_id)
-        except StudentFee.DoesNotExist:
-            return Response({"error": "StudentFee not found."}, status=404)
 
-        # Restore any prior discount before calculating the replacement. This
-        # makes applying the same template idempotent and avoids compounding
-        # discounts every time the button is clicked.
-        base_amount = fee.amount_due + fee.discount_amount
-        disc_amount = discount.compute_discount(base_amount)
-        fee.discount = discount
-        fee.discount_amount = disc_amount
-        fee.amount_due = max(0, base_amount - disc_amount)
-        if fee.amount_paid >= fee.amount_due:
-            fee.status = "paid"
-        elif fee.amount_paid > 0:
-            fee.status = "partial"
-        fee.save()
+        with transaction.atomic():
+            try:
+                fee = StudentFee.objects.select_for_update().get(pk=student_fee_id)
+            except StudentFee.DoesNotExist:
+                return Response({"error": "StudentFee not found."}, status=404)
+
+            # Restore any prior discount before calculating the replacement. This
+            # makes applying the same template idempotent and avoids compounding
+            # discounts every time the button is clicked.
+            prior_discount_amount = fee.discount_amount
+            base_amount = fee.amount_due + fee.discount_amount
+            disc_amount = discount.compute_discount(base_amount)
+            fee.discount = discount
+            fee.discount_amount = disc_amount
+            fee.amount_due = max(0, base_amount - disc_amount)
+            if fee.amount_paid >= fee.amount_due:
+                fee.status = "paid"
+            elif fee.amount_paid > 0:
+                fee.status = "partial"
+            fee.save()
+
+            delta = disc_amount - prior_discount_amount
+            try:
+                fee_ledger.post_discount_adjustment(
+                    fee, delta_amount=delta, user=request.user, request=request
+                )
+            except PostingError as exc:
+                return Response(
+                    {"error": f"Could not post discount adjustment: {exc}"}, status=400
+                )
+
         return Response(
             {
                 "fee_id": str(fee.pk),

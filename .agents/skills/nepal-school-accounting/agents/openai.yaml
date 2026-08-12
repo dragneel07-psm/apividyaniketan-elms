@@ -1,0 +1,4 @@
+interface:
+  display_name: "Nepal School Accounting"
+  short_description: "Build audit-ready Nepal school finance"
+  default_prompt: "Use $nepal-school-accounting to review and improve the accounting workflow in this project."

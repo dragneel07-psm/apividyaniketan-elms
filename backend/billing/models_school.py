@@ -311,6 +311,36 @@ class Payment(models.Model):
     )
     remarks = models.TextField(blank=True, null=True)
 
+    # ── General-ledger linkage & void workflow (P0) ─────────────────────
+    STATUS_COMPLETED = "completed"
+    STATUS_VOID = "void"
+    STATUS_CHOICES = (
+        (STATUS_COMPLETED, "Completed"),
+        (STATUS_VOID, "Void"),
+    )
+    status = models.CharField(
+        max_length=12, choices=STATUS_CHOICES, default=STATUS_COMPLETED
+    )
+    journal_entry = models.ForeignKey(
+        "billing_school.JournalEntry",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="fee_receipts",
+        db_constraint=False,
+        help_text="Posted fee-receipt journal entry backing this payment.",
+    )
+    voided_at = models.DateTimeField(null=True, blank=True)
+    voided_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="payments_voided",
+        db_constraint=False,
+    )
+    void_reason = models.TextField(blank=True, default="")
+
     class Meta:
         indexes = [
             models.Index(fields=["payment_date"], name="bill_pay_date_idx"),
@@ -356,6 +386,18 @@ class Expense(models.Model):
         max_length=20, choices=CATEGORY_CHOICES, default="other"
     )
 
+    # How the expense was paid — needed to post to the correct cash/bank
+    # control account. Mirrors Payment.METHOD_CHOICES minus card/online,
+    # which don't apply to outgoing school expenses today.
+    PAYMENT_METHOD_CHOICES = (
+        ("cash", "Cash"),
+        ("bank_transfer", "Bank Transfer"),
+        ("cheque", "Cheque"),
+    )
+    payment_method = models.CharField(
+        max_length=20, choices=PAYMENT_METHOD_CHOICES, default="cash"
+    )
+
     date = models.DateField()
     description = models.TextField(blank=True, null=True)
 
@@ -367,6 +409,36 @@ class Expense(models.Model):
         db_constraint=False,
     )
     created_at = models.DateTimeField(auto_now_add=True)
+
+    # ── General-ledger linkage & void workflow (P0) ─────────────────────
+    STATUS_COMPLETED = "completed"
+    STATUS_VOID = "void"
+    STATUS_CHOICES = (
+        (STATUS_COMPLETED, "Completed"),
+        (STATUS_VOID, "Void"),
+    )
+    status = models.CharField(
+        max_length=12, choices=STATUS_CHOICES, default=STATUS_COMPLETED
+    )
+    journal_entry = models.ForeignKey(
+        "billing_school.JournalEntry",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="expense_payments",
+        db_constraint=False,
+        help_text="Posted expense journal entry backing this expense.",
+    )
+    voided_at = models.DateTimeField(null=True, blank=True)
+    voided_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="expenses_voided",
+        db_constraint=False,
+    )
+    void_reason = models.TextField(blank=True, default="")
 
     class Meta:
         indexes = [
